@@ -191,6 +191,30 @@ class Alignment:
 
         return consensus
 
+    def sequences_bound_by_probe(self, prb_seq, prb_start, mismatches):
+        """Determine the sequences to which a probe hybridizes.
+
+        Args:
+            prb_seq: seequence of the probe
+            prb_start: start position of the probe in the alignment
+            mismatches: threshold on number of mismatches for determining whether
+                a probe would hybridize to a target sequence
+
+        Returns:
+            collection of indices of sequences to which the probe will
+            hybridize
+        """
+        assert prb_start + len(prb_seq) <= self.seq_length
+
+        aln_for_probe = self.extract_range(prb_start, prb_start + len(prb_seq))
+        seq_rows = aln_for_probe.make_list_of_seqs()
+
+        binding_seqs = []
+        for seq_idx, seq in enumerate(seq_rows):
+            if probe.probe_binds(prb_seq, seq, mismatches):
+                binding_seqs += [seq_idx]
+        return binding_seqs
+
     @staticmethod
     def from_list_of_seqs(seqs):
         """Construct a Alignment from aligned list of sequences.

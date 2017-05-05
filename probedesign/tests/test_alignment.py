@@ -113,3 +113,9 @@ class TestAlignment(unittest.TestCase):
         with self.assertRaises(alignment.CannotConstructProbeError):
             # Should fail when alignment has an indel
             self.c.construct_probe(0, 4, [0,1], 0)
+
+    def test_sequences_bound_by_probe(self):
+        self.assertEqual(self.a.sequences_bound_by_probe('ATCG', 0, 0),
+                         [0,1,2,3])
+        self.assertEqual(self.a.sequences_bound_by_probe('ATCG', 0, 1),
+                         [0,1,2,3,4])

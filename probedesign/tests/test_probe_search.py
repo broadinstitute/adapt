@@ -111,13 +111,13 @@ class TestProbeSearch(unittest.TestCase):
 
     def test_find_optimal_probe_in_window_at_end_boundary(self):
         self.assertEqual(self.d._find_optimal_probe_in_window(0, set([0,1,2])),
-                         ('TACGG', set([0,1,2])))
+                         ('TACGG', set([0,1,2]), 3))
         self.assertEqual(self.e._find_optimal_probe_in_window(0, set([0,1,2])),
-                         ('TACGG', set([0,1,2])))
+                         ('TACGG', set([0,1,2]), 3))
 
     def test_find_optimal_probe_in_window(self):
         self.assertEqual(self.f._find_optimal_probe_in_window(0, set([0,1,2])),
-                         (None, set()))
+                         (None, set(), None))
 
     def test_find_probes_that_cover_in_window(self):
         self.assertEqual(self.c._find_probes_that_cover_in_window(1),

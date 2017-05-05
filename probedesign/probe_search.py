@@ -47,6 +47,11 @@ class ProbeSearcher:
         # and are repeated very often, memoize the output
         self._memoized_probes = defaultdict(dict)
 
+        # Save the positions of selected probes in the alignment so these can
+        # be easily revisited. In case a probe sequence appears in multiple
+        # places, store a set of positions
+        self._selected_probe_positions = defaultdict(set)
+
     def _construct_probe_memoized(self, start, seqs_to_consider):
         """Make a memoized call to alignment.Alignment.construct_probe().
 
@@ -99,10 +104,11 @@ class ProbeSearcher:
                 a probe
 
         Returns:
-            tuple (x, y) where:
+            tuple (x, y, z) where:
                 x is the sequence of the selected probe
                 y is a collection of indices of sequences (a subset of
                     seqs_to_consider) to which probe x will hybridize
+                z is the starting position of x in the alignment
         """
         assert start >= 0
         assert start + self.window_size <= self.aln.seq_length
@@ -118,17 +124,17 @@ class ProbeSearcher:
             if p is None:
                 # There is no suitable probe at pos
                 if max_probe_cover is None:
-                    max_probe_cover = (None, set())
+                    max_probe_cover = (None, set(), None)
             else:
                 prb, covered_seqs = p
                 covered_seqs = set(covered_seqs)
                 if max_probe_cover is None:
-                    max_probe_cover = (prb, covered_seqs)
+                    max_probe_cover = (prb, covered_seqs, pos)
                 else:
                     if len(covered_seqs) > len(max_probe_cover[1]):
                         # prb covers the most sequences of all probes so far in
                         # this window
-                        max_probe_cover = (prb, covered_seqs)
+                        max_probe_cover = (prb, covered_seqs, pos)
         return max_probe_cover
 
     def _find_probes_that_cover_in_window(self, start):
@@ -217,8 +223,8 @@ class ProbeSearcher:
         while num_left_to_cover > 0:
             # Find the probe that hybridizes to the most sequences, among
             # those that are not in the cover
-            prb, prb_covered_seqs = self._find_optimal_probe_in_window(start,
-                universe)
+            prb, prb_covered_seqs, prb_pos = self._find_optimal_probe_in_window(
+                start, universe)
 
             if prb is None or len(prb_covered_seqs) == 0:
                 # No suitable probes could be constructed within the window
@@ -232,15 +238,23 @@ class ProbeSearcher:
             universe.difference_update(prb_covered_seqs)
             num_left_to_cover = max(0, len(universe) - num_that_can_be_uncovered)
 
+            # Save the position of this probe in case the probe needs to be
+            # revisited
+            self._selected_probe_positions[prb].add(prb_pos)
+
         return probes_in_cover
 
-    def find_probes_that_cover(self):
-        """Find the smallest collection of probes that cover sequences, across
-        all windows.
+    def _find_sets_of_probes_that_cover(self):
+        """Find all of the smallest collections of probes that cover sequences,
+        across all windows.
 
         This runs a sliding window across the aligned sequences and, in each
         window, calculates the smallest number of probes needed in the window
         to cover the sequences by calling self._find_probes_that_cover_in_window().
+
+        Because there can be ties (i.e., different collections of probes such
+        that each collection has the same number of probes), this outputs a set
+        of sets of probes.
 
         Returns:
             set of sets x_i, such that each x_i holds a unique collection of
@@ -283,6 +297,75 @@ class ProbeSearcher:
             self._cleanup_memoized_probes(start)
 
         return min_probes_in_cover
+
+    def find_probes_that_cover(self):
+        """Find the smallest collection of probes that cover sequences, across
+        all windows.
+
+        This breaks possible ties in the output of
+        self._find_sets_of_probes_that_cover(). In that case, there can be
+        multiple (or many) collections of probes such that each collection is
+        minimal and has the same number of probes. It breaks ties by trying to
+        maximize the redundancy of the probes -- in particular, by trying
+        to select one collection of probes in which genomes are covered
+        by multiple probes and/or in which many of the probes cover multiple
+        genomes. For example, part of this is to make it less likely to
+        select probes that only cover one genome (or a small number).
+
+        Because this is loosely defined, we use a crude heuristic to select
+        a single collection of probes. For each collection of probes, we sum
+        the number of sequences that are covered by each probe. Then, we
+        select the collection of probes that has the greatest sum. Since the
+        number of probes in each collection is the same, this is equivalent
+        to picking the collection whose probes, on average, cover the
+        greatest number of sequences.
+
+        This heuristic may result in ties as well; these are broken
+        arbitrarily.
+
+        Returns:
+            collection of probes that achieves the desired coverage
+        """
+        prb_collections_for_cover = self._find_sets_of_probes_that_cover()
+
+        logger.info(("There are %d probe collections that are tied; breaking "
+                     "ties") % len(prb_collections_for_cover))
+
+        max_prb_collection = None
+        max_prb_collection_sum = 0
+        max_prb_collection_num = 0
+        for prb_collection in prb_collections_for_cover:
+            sum_of_seqs_bound = 0
+            for prb_seq in prb_collection:
+                seqs_bound = set()
+                for pos in self._selected_probe_positions[prb_seq]:
+                    seqs_bound.update(self.aln.sequences_bound_by_probe(prb_seq,
+                        pos, self.mismatches))
+                sum_of_seqs_bound += len(seqs_bound)
+
+            if max_prb_collection is None:
+                # Store: the probe collection, the sum for the collection, and
+                # the number of probe collections that have this particular sum
+                max_prb_collection = prb_collection
+                max_prb_collection_sum = sum_of_seqs_bound
+                max_prb_collection_num = 1
+            elif sum_of_seqs_bound == max_prb_collection_sum:
+                # Increment the number of probe collections that have this
+                # particular sum
+                max_prb_collection_num += 1
+            elif sum_of_seqs_bound > max_prb_collection_sum:
+                max_prb_collection = prb_collection
+                max_prb_collection_sum = sum_of_seqs_bound
+                max_prb_collection_num = 1
+
+        if max_prb_collection_num > 1:
+            logger.warning(("There are %d collections of probes that are still "
+                            "tied after trying to break the tie based on the "
+                            "sum of the number of sequences to which the "
+                            "probes hybridize; breaking the tie arbitrarily") %
+                           max_prb_collection_num)
+
+        return max_prb_collection
 
 
 class CannotAchieveDesiredCoverageError(Exception):

@@ -24,8 +24,9 @@ def main(args):
                                     args.window_size, args.cover_frac)
     probes = ps.find_probes_that_cover()
 
-    print(probes)
-    print(len(probes))
+    print("The %d probes are:" % len(probes))
+    for prb_seq in probes:
+        print("  %s" % prb_seq)
 
 
 if __name__ == "__main__":
