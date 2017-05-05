@@ -24,7 +24,10 @@ def main(args):
                                     args.window_size, args.cover_frac)
     probes = ps.find_probes_that_cover()
 
-    print("The %d probes are:" % len(probes))
+    if len(probes) == 1:
+        print("The 1 probe is:")
+    else:
+        print("The %d probes are:" % len(probes))
     for prb_seq in probes:
         print("  %s" % prb_seq)
 
