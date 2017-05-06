@@ -1,4 +1,4 @@
-"""Functions for working with probes.
+"""Functions for working with guides.
 """
 
 import logging
@@ -48,20 +48,20 @@ def seq_mismatches(seq_a, seq_b):
                    not (FASTA_CODES[seq_a[i]] & FASTA_CODES[seq_b[i]])))
 
 
-def probe_binds(probe_seq, target_seq, mismatches=0):
-    """Determine whether a probe binds to a target sequence.
+def guide_binds(guide_seq, target_seq, mismatches=0):
+    """Determine whether a guide binds to a target sequence.
 
-    This tolerates ambiguity and decides whether a probe binds based on
+    This tolerates ambiguity and decides whether a guide binds based on
     whether its number of mismatches with the target sequence is within
     a threshold.
 
     Args:
-        probe_seq: str of a probe sequence
-        target_seq: str of a target sequence, same length as probe_seq
+        guide_seq: str of a guide sequence
+        target_seq: str of a target sequence, same length as guide_seq
         mismatches: int giving threshold on number of mismatches for binding
 
     Returns:
-        True iff the number of mismatches between probe_seq and target_seq
+        True iff the number of mismatches between guide_seq and target_seq
         is <= mismatches
     """
-    return seq_mismatches(probe_seq, target_seq) <= mismatches
+    return seq_mismatches(guide_seq, target_seq) <= mismatches

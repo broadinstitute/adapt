@@ -6,7 +6,7 @@ import logging
 import tempfile
 import unittest
 
-from probedesign.utils import seq_io
+from dxguidedesign.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

@@ -1,19 +1,19 @@
-"""Setup script for the probedesign distribution using Distutils.
+"""Setup script for the dxguidedesign distribution using Distutils.
 """
 
 from setuptools import find_packages
 from setuptools import setup
 
-import probedesign
+import dxguidedesign
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-setup(name='probedesign',
-      description='Tools to design probes for diagnostics',
+setup(name='dxguidedesign',
+      description='Tools to design guides for diagnostics',
       author='Hayden Metsky',
       author_email='hayden@mit.edu',
       packages=find_packages(),
       scripts=[
-        'bin/design_probes.py'
+        'bin/design_guides.py'
       ])
