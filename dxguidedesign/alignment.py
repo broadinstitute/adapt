@@ -153,7 +153,7 @@ class Alignment:
 
         At each position, the consensus is the most common allele even if it is
         not the majority; the consensus will not be an ambiguity code (except N
-        if all bases are N). Ties are broken arbitrarily.
+        if all bases are N). Ties are broken arbitrarily but deterministically.
 
         This ignores 'N' bases at each position, determining the consensus from
         the other (non-'N') bases. An 'N' will only be output in the consensus
@@ -183,7 +183,8 @@ class Alignment:
                         counts[c] += 1.0 / len(guide.FASTA_CODES[b])
                 else:
                     raise ValueError("Unknown base call %s" % b)
-            max_base = max(counts, key=counts.get)
+            counts_sorted = sorted(list(counts.items()))
+            max_base = max(counts_sorted, key=lambda x: x[1])[0]
             if counts[max_base] == 0:
                 consensus += 'N'
             else:
