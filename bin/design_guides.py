@@ -19,22 +19,17 @@ def main(args):
     seqs = seq_io.read_fasta(args.in_fasta)
     aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
 
-    # Find the optimal set of guides
+    # Find an optimal set of guides for each window in the genome,
+    # and write them to a file
     gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
                                     args.window_size, args.cover_frac)
-    guides = gs.find_guides_that_cover()
-
-    if len(guides) == 1:
-        print("The 1 guide is:")
-    else:
-        print("The %d guides are:" % len(guides))
-    for prb_seq in guides:
-        print("  %s" % prb_seq)
+    gs.find_guides_that_cover(args.out_tsv, sort=args.sort_out)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('in_fasta', help="Path to input fasta")
+    parser.add_argument('out_tsv', help="Path to output TSV")
     parser.add_argument('-l', '--guide_length', type=int, default=28,
                         help="Length of guide to construct")
     parser.add_argument('-m', '--mismatches', type=int, default=0,
@@ -53,6 +48,10 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--cover_frac', type=check_cover_frac, default=1.0,
                         help=("The fraction of sequences that must be covered "
                               "by the selected guides"))
+    parser.add_argument('--sort', dest='sort_out', action='store_true',
+                        help=("If set, sort output TSV by number of guides "
+                              "(ascending) then by score (descending); "
+                              "default is to sort by window position"))
     parser.add_argument("--debug",
                         dest="log_level",
                         action="store_const",

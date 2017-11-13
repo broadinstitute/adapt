@@ -244,33 +244,80 @@ class GuideSearcher:
 
         return guides_in_cover
 
-    def _find_sets_of_guides_that_cover(self):
-        """Find all of the smallest collections of guides that cover sequences,
-        across all windows.
+    def _score_collection_of_guides(self, guides):
+        """Calculate a score representing how redundant guides are in covering
+        target genomes.
+
+        Many windows may have minimal guide designs that have the same
+        number of guides, and it can be difficult to pick between these.
+        For a set of guides S, this calculates a score that represents
+        the redundancy of S so that more redundant ("better") sets of
+        guides receive a higher score. The objective is to assign a higher
+        score to sets of guides that cover genomes with multiple guides
+        and/or in which many of the guides cover multiple genomes. A lower
+        score should go to sets of guides in which guides only cover
+        one genome (or a small number).
+
+        Because this is loosely defined, we use a crude heuristic to
+        calculate this score. For a set of guides S, the score is the
+        average fraction of sequences that are covered by guides in S
+        (i.e., the sum of the fraction of sequences covered by each guide
+        divided by the size of S). The score is a value in [0, 1].
+
+        The score is meant to be compared across sets of guides that
+        are the same size (i.e., have the same number of guides). It
+        is not necessarily useful for comparing across sets of guides
+        that differ in size.
+
+        Args:
+            guides: collection of str representing guide sequences
+
+        Returns:
+            score of guides, as defined above
+        """
+        sum_of_frac_of_seqs_bound = 0
+        for gd_seq in guides:
+            seqs_bound = set()
+            for pos in self._selected_guide_positions[gd_seq]:
+                seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
+                    pos, self.mismatches))
+            frac_bound = len(seqs_bound) / float(self.aln.num_sequences)
+            sum_of_frac_of_seqs_bound += frac_bound
+        score = sum_of_frac_of_seqs_bound / float(len(guides))
+        return score
+
+    def _find_guides_that_cover_for_each_window(self):
+        """Find the smallest collection of guides that cover sequences
+        in each window.
 
         This runs a sliding window across the aligned sequences and, in each
         window, calculates the smallest number of guides needed in the window
         to cover the sequences by calling self._find_guides_that_cover_in_window().
 
-        Because there can be ties (i.e., different collections of guides such
-        that each collection has the same number of guides), this outputs a set
-        of sets of guides.
+        This returns guides for each window, along with summary information
+        about the guides in the window.
+
+        This does not return guides for windows where it cannot achieve
+        the desired coverage in the window (e.g., due to indels or ambiguity).
 
         Returns:
-            set of sets x_i, such that each x_i holds a unique collection of
-            guides that achieve the desired coverage and is minimal (the
-            length of each x_i is the same)
+            list of elements x_i in which each x_i corresponds to a window;
+            x_i is a tuple consisting of the following values, in order:
+              1) start position of the window
+              2) number of guides designed for the window (i.e., length of
+                 the set in (4))
+              3) score corresponding to the guides in the window, which can
+                 be used to break ties across windows that have the same
+                 number of minimal guides (higher is better)
+              4) set of guides that achieve the desired coverage and is
+                 minimal for the window
         """
         min_guides_in_cover = set()
         min_guides_in_cover_count = None
+        guides = []
         for start in range(0, self.aln.seq_length - self.window_size + 1):
-            if start == 0:
-                logger.info(("Starting search for guides within window "
-                             "starting at 0"))
-            elif min_guides_in_cover_count is not None:
-                logger.info(("Searching within window starting at %d, current "
-                             "minimum guides needed is %d") % (start,
-                            min_guides_in_cover_count))
+            logger.info(("Searching for guides within window starting "
+                         "at %d") % start)
 
             try:
                 guides_in_cover = self._find_guides_that_cover_in_window(start)
@@ -282,90 +329,84 @@ class GuideSearcher:
                     "achieve the desired coverage") % start)
                 continue
 
-            if min_guides_in_cover_count is None:
-                min_guides_in_cover.add(frozenset(guides_in_cover))
-                min_guides_in_cover_count = len(guides_in_cover)
-            elif len(guides_in_cover) == min_guides_in_cover_count:
-                min_guides_in_cover.add(frozenset(guides_in_cover))
-            elif len(guides_in_cover) < min_guides_in_cover_count:
-                min_guides_in_cover = set()
-                min_guides_in_cover.add(frozenset(guides_in_cover))
-                min_guides_in_cover_count = len(guides_in_cover)
+            num_guides = len(guides_in_cover)
+            score = self._score_collection_of_guides(guides_in_cover)
+            guides += [ [start, num_guides, score, guides_in_cover] ]
 
             # We no longer need to memoize results for guides that start at
             # this position
             self._cleanup_memoized_guides(start)
 
-        return min_guides_in_cover
+        return guides
 
-    def find_guides_that_cover(self):
+    def find_guides_that_cover(self, out_fn, sort=False, print_analysis=True):
         """Find the smallest collection of guides that cover sequences, across
         all windows.
 
-        This breaks possible ties in the output of
-        self._find_sets_of_guides_that_cover(). In that case, there can be
-        multiple (or many) collections of guides such that each collection is
-        minimal and has the same number of guides. It breaks ties by trying to
-        maximize the redundancy of the guides -- in particular, by trying
-        to select one collection of guides in which genomes are covered
-        by multiple guides and/or in which many of the guides cover multiple
-        genomes. For example, part of this is to make it less likely to
-        select guides that only cover one genome (or a small number).
+        This writes a table of the guides to a file, in which each row
+        corresponds to a window in the genome. It also optionally prints
+        an analysis to stdout.
 
-        Because this is loosely defined, we use a crude heuristic to select
-        a single collection of guides. For each collection of guides, we sum
-        the number of sequences that are covered by each guide. Then, we
-        select the collection of guides that has the greatest sum. Since the
-        number of guides in each collection is the same, this is equivalent
-        to picking the collection whose guides, on average, cover the
-        greatest number of sequences.
-
-        This heuristic may result in ties as well; these are broken
-        arbitrarily.
-
-        Returns:
-            collection of guides that achieves the desired coverage
+        Args:
+            out_fn: output TSV file to write guide sequences by window
+            sort: if set, sort output TSV by number of guides (ascending)
+                then by score (descending); when not set, default is to
+                sort by window position
+            print_analysis: print to stdout the best window(s) -- i.e.,
+                the one(s) with the smallest number of guides and highest
+                score
         """
-        gd_collections_for_cover = self._find_sets_of_guides_that_cover()
+        guide_collections = self._find_guides_that_cover_for_each_window()
 
-        logger.info(("There are %d guide collections that are tied; breaking "
-                     "ties") % len(gd_collections_for_cover))
+        if sort:
+            # Sort by number of guides ascending (x[1]), then by
+            # score of guides descending (-x[2])
+            guide_collections.sort(key=lambda x: (x[1], -x[2]))
 
-        max_gd_collection = None
-        max_gd_collection_sum = 0
-        max_gd_collection_num = 0
-        for gd_collection in gd_collections_for_cover:
-            sum_of_seqs_bound = 0
-            for gd_seq in gd_collection:
-                seqs_bound = set()
-                for pos in self._selected_guide_positions[gd_seq]:
-                    seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
-                        pos, self.mismatches))
-                sum_of_seqs_bound += len(seqs_bound)
+        with open(out_fn, 'w') as outf:
+            # Write a header
+            outf.write('\t'.join(['window-start', 'window-end',
+                'count', 'score', 'guide-sequences']) + '\n')
 
-            if max_gd_collection is None:
-                # Store: the guide collection, the sum for the collection, and
-                # the number of guide collections that have this particular sum
-                max_gd_collection = gd_collection
-                max_gd_collection_sum = sum_of_seqs_bound
-                max_gd_collection_num = 1
-            elif sum_of_seqs_bound == max_gd_collection_sum:
-                # Increment the number of guide collections that have this
-                # particular sum
-                max_gd_collection_num += 1
-            elif sum_of_seqs_bound > max_gd_collection_sum:
-                max_gd_collection = gd_collection
-                max_gd_collection_sum = sum_of_seqs_bound
-                max_gd_collection_num = 1
+            for guides_in_window in guide_collections:
+                start, count, score, guide_seqs = guides_in_window
+                end = start + self.window_size
+                guide_seqs_str = ' '.join(sorted(list(guide_seqs)))
+                line = [start, end, count, score, guide_seqs_str]
 
-        if max_gd_collection_num > 1:
-            logger.warning(("There are %d collections of guides that are still "
-                            "tied after trying to break the tie based on the "
-                            "sum of the number of sequences to which the "
-                            "guides hybridize; breaking the tie arbitrarily") %
-                           max_gd_collection_num)
+                outf.write('\t'.join([str(x) for x in line]) + '\n')
 
-        return max_gd_collection
+        if print_analysis:
+            min_count = min(x[1] for x in guide_collections)
+            num_with_min_count = sum(1 for x in guide_collections
+                if x[1] == min_count)
+            max_score_for_count = max(x[2] for x in guide_collections
+                if x[1] == min_count)
+            num_with_max_score = sum(1 for x in guide_collections if
+                x[1] == min_count and x[2] == max_score_for_count)
+
+            min_count_str = (str(min_count) + " guide" + 
+                             ("s" if min_count > 1 else ""))
+
+            stat_display = [
+                ("Number of windows scanned", len(guide_collections)),
+                ("Minimum number of guides required in a window", min_count),
+                ("Number of windows with " + min_count_str,
+                    num_with_min_count),
+                ("Maximum score across windows with " + min_count_str,
+                    max_score_for_count),
+                ("Number of windows with " + min_count_str + " and this score",
+                    num_with_max_score)
+            ]
+
+            # Print the above statistics, with padding on the left
+            # so that the statistic names are right-justified in a
+            # column and the values line up, left-justified, in a column
+            max_stat_name_len = max(len(name) for name, val in stat_display)
+            for name, val in stat_display:
+                pad_spaces = max_stat_name_len - len(name)
+                name_padded = " "*pad_spaces + name + ":"
+                print(name_padded, str(val))
 
 
 class CannotAchieveDesiredCoverageError(Exception):
