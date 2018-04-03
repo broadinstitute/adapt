@@ -385,7 +385,7 @@ class GuideSearcher:
             num_with_max_score = sum(1 for x in guide_collections if
                 x[1] == min_count and x[2] == max_score_for_count)
 
-            min_count_str = (str(min_count) + " guide" + 
+            min_count_str = (str(min_count) + " guide" +
                              ("s" if min_count > 1 else ""))
 
             stat_display = [
@@ -398,7 +398,6 @@ class GuideSearcher:
                 ("Number of windows with " + min_count_str + " and this score",
                     num_with_max_score)
             ]
-
             # Print the above statistics, with padding on the left
             # so that the statistic names are right-justified in a
             # column and the values line up, left-justified, in a column
@@ -414,3 +413,349 @@ class CannotAchieveDesiredCoverageError(Exception):
         self.value = value
     def __str__(self):
         return repr(self.value)
+
+class PrimerSearcher():
+    """Methods to search for primers to use for a diagnostic.
+
+       The input is an alignment of sequences over which to search, as well as
+       parameters defining the space of acceptable primers.
+
+       This will insert a Primer Searching step upstream of guide detection.
+       The alignment will be searched for all possible guides.
+       This class will output a series of alignments, with all possible primer pairs below a max amplicon size.
+
+       The 5' end of the alignment will be the forward primer.
+       The 3' end will be the reverse primer.
+
+       This will result in a series of alignments to be queried by GuideSearcher(), from which it will try to
+       find guides.
+       """
+    def __init__(self, aln, primer_length, mismatches, window_size, cover_frac):
+        """
+        Args:
+            aln: alignment.Alignment representing an alignment of sequences
+            primer_length: length of the primer to construct
+            mismatches: threshold on number of mismatches for determining whether
+                a primer would hybridize to a target sequence
+            window_size: length of window such that a set of primers are only selected
+                if they are all within a window of this length
+            cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
+                 a primer
+        """
+        if window_size > aln.seq_length:
+            raise ValueError("window_size must be less than the length of the alignment")
+        if primer_length > window_size:
+            raise ValueError("primer must be less than the window size")
+        if cover_frac <= 0 or cover_frac > 1:
+            raise ValueError("cover_frac must be in (0,1]")
+
+        self.aln = aln
+        self.primer_length = primer_length
+        self.mismatches = mismatches
+        self.window_size = window_size
+        self.cover_frac = cover_frac
+
+        # Because calls to alignment.Alignment.construct_primer() are expensive
+        # and are repeated very often, memoize the output
+        self._memoized_primers = defaultdict(dict)
+
+        # Save the positions of selected primers in the alignment so these can
+        # be easily revisited. In case a primer sequence appears in multiple
+        # places, store a set of positions
+        self._selected_primers_positions = defaultdict(set)
+    def _construct_primer_memoized(self, start, seqs_to_consider):
+        """Make a memoized call to alignment.Alignment.construct_primer().
+
+        Args:
+            start: start position in alignment at which to target
+            seqs_to_consider: collection of indices of sequences to use when
+                constructing the primer
+
+        Returns:
+            result of alignment.Alignment.construct_primer()
+        """
+        seqs_to_consider_frozen = frozenset(seqs_to_consider)
+        if (start in self._memoized_primers and
+                seqs_to_consider_frozen in self._memoized_primers[start]):
+            return self._memoized_primers[start][seqs_to_consider_frozen]
+        else:
+            try:
+                p = self.aln.construct_primer(start, self.primer_length,
+                        seqs_to_consider, self.mismatches)
+            except alignment.CannotConstructGuideError:
+                # create a CannotContructPrimerError and replace this with that
+                p = None
+            self._memoized_primers[start][seqs_to_consider_frozen] = p
+            return p
+
+    def _cleanup_memoized_primers(self, pos):
+        """Remove a position that is stored in self._memoized_primers.
+
+        This should be called when the position no longer needs to be stored.
+
+        Args:
+            pos: start position that no longer needs to be memoized (i.e., where
+                primers covering at that start position are no longer needed)
+        """
+        if pos in self._memoized_primers:
+            del self._memoized_primers[pos]
+
+    def _find_optimal_primer_in_window(self, start, seqs_to_consider):
+        """Find the primer that hybridizes to the most sequences in a given window.
+
+        This considers each position within the specified window at which a primer
+        can start. At each, it determines the optimal primer (i.e., attempting to cover
+        the most number of sequences) as well as the number of sequences that the
+        primer covers (hybridizes to). It selects the primer that covers the most. This
+        breaks ties arbitrarily.
+
+        Args:
+            start: starting position of the window; the window spans [start,
+                start + self.window_size)
+            seqs_to_consider: collection of indices of sequences to use when selecting
+                a primer
+
+        Returns:
+            tuple (x, y, z) where:
+                x is the sequence of the selected primer
+                y is a collection of indices of sequences (a subset of
+                    seqs_to_consider) to which primer x will hybridize
+                z is the starting position of x in the alignment
+        """
+        assert start >= 0
+        assert start + self.window_size <= self.aln.seq_length
+
+        # Calculate the end of the search (exclusive), which is the last
+        # position in the window at which a primer can start; a primer needs to
+        # fit completely within the window
+        search_end = start + self.window_size - self.primer_length + 1
+
+        max_primer_cover = None
+        for pos in range(start, search_end):
+            p = self._construct_primer_memoized(pos, seqs_to_consider)
+            if p is None:
+                # There is no suitable primer at pos
+                if max_primer_cover is None:
+                    max_primer_cover = (None, set(), None)
+            else:
+                pr, covered_seqs = p
+                covered_seqs = set(covered_seqs)
+                if max_primer_cover is None:
+                    max_primer_cover = (pr, covered_seqs, pos)
+                else:
+                    if len(covered_seqs) > len(max_primer_cover[1]):
+                        # pr covers the most sequences of all primer so far in
+                        # this window
+                        max_primer_cover = (pr, covered_seqs, pos)
+        return max_primer_cover
+
+    def _find_primers_that_cover_in_window(self, start):
+        """Find a collection of primers that cover sequences in a given window.
+
+        Args:
+            start: starting position of the window; the window spans [start,
+                start + self.window_size)
+
+        Returns:
+            collection of str representing primers sequences that were selected
+        """
+        # Create the universe, which is all the input sequences
+        universe = set(range(self.aln.num_sequences))
+
+        num_that_can_be_uncovered = int(len(universe) -
+                                        self.cover_frac * len(universe))
+        # Above, use int(..) to take the floor. Also, expand out
+        # len(universe) rather than use int((1.0-self.cover_frac)*len(universe))
+        # due to precision errors in Python -- e.g., int((1.0-0.8)*5) yields 0
+        # on some machines.
+        num_left_to_cover = len(universe) - num_that_can_be_uncovered
+
+        primers_in_cover = set()
+        # Keep iterating until desired partial cover is obtained
+        while num_left_to_cover > 0:
+            # Find the primer that hybridizes to the most sequences, among
+            # those that are not in the cover
+            pr, pr_covered_seqs, pr_pos = self._find_optimal_primer_in_window(
+                start, universe)
+
+            if pr is None or len(pr_covered_seqs) == 0:
+                # No suitable primers could be constructed within the window
+                raise CannotAchieveDesiredCoverageError(("No suitable primers "
+                    "could be constructed in the window starting at %d, but "
+                    "more are needed to achieve desired coverage") % start)
+
+            # The set representing pr goes into the set cover, and all of the
+            # sequences it hybridizes to are removed from the universe
+            primers_in_cover.add(pr)
+            universe.difference_update(pr_covered_seqs)
+            num_left_to_cover = max(0, len(universe) - num_that_can_be_uncovered)
+
+            # Save the position of this primer in case the primer needs to be
+            # revisited
+            self._selected_primers_positions[pr].add(pr_pos)
+
+        return primers_in_cover
+
+    def _score_collection_of_primers(self, primers):
+        """Calculate a score representing how redundant primers are in covering
+        target genomes.
+
+        Many windows may have minimal primers designs that have the same
+        number of primers, and it can be difficult to pick between these.
+        For a set of primers S, this calculates a score that represents
+        the redundancy of S so that more redundant ("better") sets of
+        primers receive a higher score. The objective is to assign a higher
+        score to sets of primers that cover genomes with multiple primers
+        and/or in which many of the primers cover multiple genomes. A lower
+        score should go to sets of primers in which primers only cover
+        one genome (or a small number).
+
+        Because this is loosely defined, we use a crude heuristic to
+        calculate this score. For a set of primers S, the score is the
+        average fraction of sequences that are covered by primers in S
+        (i.e., the sum of the fraction of sequences covered by each primer
+        divided by the size of S). The score is a value in [0, 1].
+
+        The score is meant to be compared across sets of primers that
+        are the same size (i.e., have the same number of primers). It
+        is not necessarily useful for comparing across sets of primers
+        that differ in size.
+
+        Args:
+            primers: collection of str representing primer sequences
+
+        Returns:
+            score of primers, as defined above
+        """
+        sum_of_frac_of_seqs_bound = 0
+        for pr_seq in primers:
+            seqs_bound = set()
+            for pos in self._selected_primers_positions[pr_seq]:
+                seqs_bound.update(self.aln.sequences_bound_by_primer(pr_seq,
+                    pos, self.mismatches))
+            frac_bound = len(seqs_bound) / float(self.aln.num_sequences)
+            sum_of_frac_of_seqs_bound += frac_bound
+        score = sum_of_frac_of_seqs_bound / float(len(primers))
+        return score
+
+    def _find_primers_that_cover_for_each_window(self):
+        """Find the smallest collection of primers that cover sequences
+        in each window.
+
+        This runs a sliding window across the aligned sequences and, in each
+        window, calculates the smallest number of primers needed in the window
+        to cover the sequences by calling self._find_primers_that_cover_in_window().
+
+        This returns primers for each window, along with summary information
+        about the primers in the window.
+
+        This does not return primers for windows where it cannot achieve
+        the desired coverage in the window (e.g., due to indels or ambiguity).
+
+        Returns:
+            list of elements x_i in which each x_i corresponds to a window;
+            x_i is a tuple consisting of the following values, in order:
+              1) start position of the window
+              2) number of primers designed for the window (i.e., length of
+                 the set in (4))
+              3) score corresponding to the primers in the window, which can
+                 be used to break ties across windows that have the same
+                 number of minimal primers (higher is better)
+              4) set of primers that achieve the desired coverage and is
+                 minimal for the window
+        """
+        min_primers_in_cover = set()
+        min_primers_in_cover_count = None
+        primers = []
+        for start in range(0, self.aln.seq_length - self.window_size + 1):
+            logger.info(("Searching for primers within window starting "
+                         "at %d") % start)
+
+            try:
+                primers_in_cover = self._find_primers_that_cover_in_window(start)
+            except CannotAchieveDesiredCoverageError:
+                # Cannot achieve the desired coverage in this window; log and
+                # skip it
+                logger.warning(("No more suitable primers could be constructed "
+                    "in the window starting at %d, but more are needed to "
+                    "achieve the desired coverage") % start)
+                continue
+
+            num_primers = len(primers_in_cover)
+            score = self._score_collection_of_primers(primers_in_cover)
+            primers += [ [start, num_primers, score, primers_in_cover] ]
+
+            # We no longer need to memoize results for primers that start at
+            # this position
+            self._cleanup_memoized_primers(start)
+
+        return primers
+
+    def find_primers_that_cover(self, out_fn, sort=False, print_analysis=True):
+        """Find the smallest collection of primers that cover sequences, across
+        all windows.
+
+        This writes a table of the primers to a file, in which each row
+        corresponds to a window in the genome. It also optionally prints
+        an analysis to stdout.
+
+        Args:
+            out_fn: output TSV file to write primers sequences by window
+            sort: if set, sort output TSV by number of primers (ascending)
+                then by score (descending); when not set, default is to
+                sort by window position
+            print_analysis: print to stdout the best window(s) -- i.e.,
+                the one(s) with the smallest number of primers and highest
+                score
+        """
+        primer_collections = self._find_primers_that_cover_for_each_window()
+
+        if sort:
+            # Sort by number of primers ascending (x[1]), then by
+            # score of primers descending (-x[2])
+            primer_collections.sort(key=lambda x: (x[1], -x[2]))
+
+        with open(out_fn + "_primers", 'w') as outf_primers:
+            # Write a header
+            outf_primers.write('\t'.join(['window-start', 'window-end',
+                'count', 'score', 'primer-sequences']) + '\n')
+
+            for primers_in_window in primer_collections:
+                start, count, score, primer_seqs = primers_in_window
+                end = start + self.window_size
+                primer_seqs_str = ' '.join(sorted(list(primer_seqs)))
+                line = [start, end, count, score, primer_seqs_str]
+
+                outf_primers.write('\t'.join([str(x) for x in line]) + '\n')
+
+        if print_analysis:
+            min_count = min(x[1] for x in primer_collections)
+            num_with_min_count = sum(1 for x in primer_collections
+                if x[1] == min_count)
+            max_score_for_count = max(x[2] for x in primer_collections
+                if x[1] == min_count)
+            num_with_max_score = sum(1 for x in primer_collections if
+                x[1] == min_count and x[2] == max_score_for_count)
+
+            min_count_str = (str(min_count) + " primer" +
+                             ("s" if min_count > 1 else ""))
+
+            stat_display = [
+                ("Number of windows scanned", len(primer_collections)),
+                ("Minimum number of primers required in a window", min_count),
+                ("Number of windows with " + min_count_str,
+                    num_with_min_count),
+                ("Maximum score across windows with " + min_count_str,
+                    max_score_for_count),
+                ("Number of windows with " + min_count_str + " and this score",
+                    num_with_max_score)
+            ]
+            # Print the above statistics, with padding on the left
+            # so that the statistic names are right-justified in a
+            # column and the values line up, left-justified, in a column
+            max_stat_name_len = max(len(name) for name, val in stat_display)
+            for name, val in stat_display:
+                pad_spaces = max_stat_name_len - len(name)
+                name_padded = " "*pad_spaces + name + ":"
+                print(name_padded, str(val))
+
