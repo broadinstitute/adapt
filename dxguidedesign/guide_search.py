@@ -151,7 +151,7 @@ class GuideSearcher:
         the entire universe:
         We are given are universe U of (hashable) objects and a collection
         of m subsets S_1, S_2, ..., S_m of U whose union equals U. We wish
-        to approximate the smallest number of these subets whose union is U
+        to approximate the smallest number of these subsets whose union is U
         (i.e., "covers" the universe U). Pseudocode of the greedy algorithm
         is as follows:
           C <- {}
