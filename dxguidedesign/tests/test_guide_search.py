@@ -98,11 +98,13 @@ class TestGuideSearch(unittest.TestCase):
         self.assertNotIn(100, self.a._memoized_guides)
 
     def test_construct_guide_memoized_b(self):
-        self.assertIsNone(self.b._construct_guide_memoized(0, [0]))
-        self.assertIsNone(self.b._construct_guide_memoized(0, [0,1]))
-                         
-        self.assertIsNone(self.b._construct_guide_memoized(0, [0]))
-        self.assertIsNone(self.b._construct_guide_memoized(0, [0,1]))
+        self.assertIsNone(self.b._construct_guide_memoized(0, [1]))
+        self.assertEqual(self.b._construct_guide_memoized(0, [0,1]),
+                         ('ATCG', [0]))
+        
+        self.assertIsNone(self.b._construct_guide_memoized(0, [1]))
+        self.assertEqual(self.b._construct_guide_memoized(0, [0,1]),
+                         ('ATCG', [0]))
 
     def test_find_optimal_guide_in_window(self):
         self.assertEqual(self.c._find_optimal_guide_in_window(1,

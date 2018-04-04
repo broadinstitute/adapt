@@ -55,6 +55,9 @@ def guide_binds(guide_seq, target_seq, mismatches=0):
     whether its number of mismatches with the target sequence is within
     a threshold.
 
+    If the target sequence contains a gap (and the guide sequence does
+    not, as it should not), this decides that the guide does not bind.
+
     Args:
         guide_seq: str of a guide sequence
         target_seq: str of a target sequence, same length as guide_seq
@@ -64,4 +67,8 @@ def guide_binds(guide_seq, target_seq, mismatches=0):
         True iff the number of mismatches between guide_seq and target_seq
         is <= mismatches
     """
+    if '-' in target_seq:
+      assert '-' not in guide_seq
+      return False
+
     return seq_mismatches(guide_seq, target_seq) <= mismatches

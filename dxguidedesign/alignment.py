@@ -44,16 +44,24 @@ class Alignment:
         """
         return Alignment(self.seqs[pos_start:pos_end])
 
-    def has_indel(self):
-        """Determine whether there is an indel in the alignment.
+    def seqs_with_gap(self, seqs_to_consider=None):
+        """Determine sequences in the alignment that have a gap.
+
+        Args:
+            seqs_to_consider: only look within seqs_to_consider for
+                sequences with a gap; if None, then look in all
+                sequences
 
         Returns:
-            True iff there is an indel in the alignment
+            list of indices of sequences that contain a gap
         """
-        for s in self.seqs:
-            if '-' in s:
-                return True
-        return False
+        if seqs_to_consider is None:
+            seqs_to_consider = range(self.num_sequences)
+
+        has_gap = set()
+        for j in range(self.seq_length):
+            has_gap.update(i for i in seqs_to_consider if self.seqs[j][i] == '-')
+        return has_gap
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches):
         """Construct a single guide to target a set of sequences in the alignment.
@@ -83,13 +91,15 @@ class Alignment:
 
         aln_for_guide = self.extract_range(start, start + guide_length)
 
-        # If this region in the alignment has an indel, do not attempt to
-        # construct a guide that covers it (even if the alignment formed by just
-        # the sequences in seqs_to_consider do not have an indel)
-        if aln_for_guide.has_indel():
-            raise CannotConstructGuideError("Region in alignment has indel")
+        # Ignore any sequences in the alignment that have a gap in
+        # this region
+        seqs_to_ignore = set(aln_for_guide.seqs_with_gap(seqs_to_consider))
+        seqs_to_consider = sorted(list(set(seqs_to_consider) - seqs_to_ignore))
 
-        seqs_to_consider = sorted(list(seqs_to_consider))
+        # If every sequence in this region has a gap, then there are none
+        # left to consider
+        if len(seqs_to_consider) == 0:
+            raise CannotConstructGuideError("All sequences in region have a gap")
 
         # First construct the optimal guide to cover the sequences. This would be
         # a string x that maximizes the number of sequences s_i such that x and

@@ -57,10 +57,10 @@ class TestAlignment(unittest.TestCase):
             self.c.determine_consensus_sequence()
         self.assertIn(self.c.determine_consensus_sequence([0]), 'ATCGAA')
 
-    def test_has_indel(self):
-        self.assertFalse(self.a.has_indel())
-        self.assertFalse(self.b.has_indel())
-        self.assertTrue(self.c.has_indel())
+    def test_seqs_with_gap(self):
+        self.assertCountEqual(self.a.seqs_with_gap(), [])
+        self.assertCountEqual(self.b.seqs_with_gap(), [])
+        self.assertCountEqual(self.c.seqs_with_gap(), [1])
 
     def test_construct_guide_a(self):
         self.assertEqual(self.a.construct_guide(0, 4, [0,1,2,3,4], 0),
@@ -111,8 +111,8 @@ class TestAlignment(unittest.TestCase):
 
     def test_construct_guide_c(self):
         with self.assertRaises(alignment.CannotConstructGuideError):
-            # Should fail when alignment has an indel
-            self.c.construct_guide(0, 4, [0,1], 0)
+            # Should fail when the only sequence given (1) has an indel
+            self.c.construct_guide(0, 4, [1], 0)
 
     def test_sequences_bound_by_guide(self):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 0),
