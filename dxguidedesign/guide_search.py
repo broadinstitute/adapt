@@ -18,7 +18,8 @@ class GuideSearcher:
     parameters defining the space of acceptable guides.
     """
 
-    def __init__(self, aln, guide_length, mismatches, window_size, cover_frac):
+    def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
+                 missing_data_params):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -29,6 +30,11 @@ class GuideSearcher:
                 if they are all within a window of this length
             cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
                  a guide
+            missing_data_params: tuple (a, b) specifying to not attempt to
+                design guides overlapping sites where the fraction of
+                sequences with missing data is > min(a, b*m), where m is
+                the median fraction of sequences with missing data over the
+                alignment
         """
         if window_size > aln.seq_length:
             raise ValueError("window_size must be less than the length of the alignment")
@@ -52,6 +58,12 @@ class GuideSearcher:
         # places, store a set of positions
         self._selected_guide_positions = defaultdict(set)
 
+        # Determine a threshold at which to ignore sites with too much
+        # missing data
+        missing_min, missing_coeff = missing_data_params
+        self.missing_threshold = min(missing_min,
+            missing_coeff * self.aln.median_sequences_with_missing_data())
+
     def _construct_guide_memoized(self, start, seqs_to_consider):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
@@ -70,7 +82,8 @@ class GuideSearcher:
         else:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
-                        seqs_to_consider, self.mismatches)
+                        seqs_to_consider, self.mismatches,
+                        self.missing_threshold)
             except alignment.CannotConstructGuideError:
                 p = None
             self._memoized_guides[start][seqs_to_consider_frozen] = p
@@ -121,6 +134,7 @@ class GuideSearcher:
         max_guide_cover = None
         for pos in range(start, search_end):
             p = self._construct_guide_memoized(pos, seqs_to_consider)
+
             if p is None:
                 # There is no suitable guide at pos
                 if max_guide_cover is None:

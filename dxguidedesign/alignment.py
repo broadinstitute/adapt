@@ -2,6 +2,7 @@
 """
 
 import logging
+import statistics
 
 from dxguidedesign.utils import guide
 
@@ -32,6 +33,10 @@ class Alignment:
 
         self.seqs = seqs
 
+        # Memoize information missing data at each position
+        self._frac_missing = None
+        self._median_missing = None
+
     def extract_range(self, pos_start, pos_end):
         """Extract range of positions from alignment.
 
@@ -43,6 +48,43 @@ class Alignment:
             object of type Alignment including only the specified range
         """
         return Alignment(self.seqs[pos_start:pos_end])
+
+    def _compute_frac_missing(self):
+        """Compute fraction of sequences with missing data at each position.
+        """
+        self._frac_missing = [0 for _ in range(self.seq_length)]
+        for j in range(self.seq_length):
+            num_n = sum(1 for i in range(self.num_sequences)
+                        if self.seqs[j][i] == 'N')
+            self._frac_missing[j] = float(num_n) / self.num_sequences
+
+    def median_sequences_with_missing_data(self):
+        """Compute the median fraction of sequences with missing data, across
+        positions.
+
+        Returns:
+            median fraction of sequences that have 'N', taken across the
+            positions in the alignment
+        """
+        if self._median_missing is None:
+            if self._frac_missing is None:
+                self._compute_frac_missing()
+            self._median_missing = statistics.median(self._frac_missing)
+        return self._median_missing
+
+    def frac_missing_at_pos(self, pos):
+        """Find fraction of sequences with missing data at position.
+
+        Args:
+            pos: position in the alignment at which to return the fraction
+                of sequences with 'N'
+
+        Returns:
+            fraction of sequences at pos with 'N'
+        """
+        if self._frac_missing is None:
+            self._compute_frac_missing()
+        return self._frac_missing[pos]
 
     def seqs_with_gap(self, seqs_to_consider=None):
         """Determine sequences in the alignment that have a gap.
@@ -63,7 +105,8 @@ class Alignment:
             has_gap.update(i for i in seqs_to_consider if self.seqs[j][i] == '-')
         return has_gap
 
-    def construct_guide(self, start, guide_length, seqs_to_consider, mismatches):
+    def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
+            missing_threshold=1):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -77,6 +120,9 @@ class Alignment:
                 constructing the guide
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
+            missing_threshold: do not construct a guide if the fraction of
+                sequences with missing data, at any position in the target
+                range, exceeds this threshold
 
         Returns:
             tuple (x, y) where:
@@ -88,6 +134,11 @@ class Alignment:
         """
         assert start + guide_length <= self.seq_length
         assert len(seqs_to_consider) > 0
+
+        for pos in range(start, start + guide_length):
+            if self.frac_missing_at_pos(pos) > missing_threshold:
+                raise CannotConstructGuideError(("Too much missing data at "
+                    "a position in the target range"))
 
         aln_for_guide = self.extract_range(start, start + guide_length)
 

@@ -22,7 +22,8 @@ def main(args):
     # Find an optimal set of guides for each window in the genome,
     # and write them to a file
     gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
-                                    args.window_size, args.cover_frac)
+                                    args.window_size, args.cover_frac,
+                                    args.missing_thres)
     gs.find_guides_that_cover(args.out_tsv, sort=args.sort_out)
 
 
@@ -52,6 +53,14 @@ if __name__ == "__main__":
                         help=("If set, sort output TSV by number of guides "
                               "(ascending) then by score (descending); "
                               "default is to sort by window position"))
+    parser.add_argument('--missing-thres', nargs=2, type=float, default=[0.5, 1.5],
+        help=("Parameters governing the threshold on which sites to ignore "
+              "due to too much missing data. Two values (a, b) specifying not "
+              "to attempt to design guides overlapping sites where the "
+              "fraction of sequences with missing data is > min(a, b*m) where "
+              "m is the median fraction of sequences with missing data over "
+              "the alignment. Set a=1 and b to a large constant to not ignore "
+              "sites due to missing data."))
     parser.add_argument("--debug",
                         dest="log_level",
                         action="store_const",
