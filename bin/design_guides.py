@@ -53,14 +53,14 @@ if __name__ == "__main__":
                         help=("If set, sort output TSV by number of guides "
                               "(ascending) then by score (descending); "
                               "default is to sort by window position"))
-    parser.add_argument('--missing-thres', nargs=2, type=float, default=[0.5, 1.5],
+    parser.add_argument('--missing-thres', nargs=3, type=float, default=[0.5, 0.05, 1.5],
         help=("Parameters governing the threshold on which sites to ignore "
-              "due to too much missing data. Two values (a, b) specifying not "
-              "to attempt to design guides overlapping sites where the "
-              "fraction of sequences with missing data is > min(a, b*m) where "
-              "m is the median fraction of sequences with missing data over "
-              "the alignment. Set a=1 and b to a large constant to not ignore "
-              "sites due to missing data."))
+              "due to too much missing data. Two values (a, b, c) specifying "
+              "not to attempt to design guides overlapping sites where the "
+              "fraction of sequences with missing data is > min(a, max(b, c*m) "
+              "where m is the median fraction of sequences with missing data "
+              "over the alignment. Set a=1 and b=1 to not ignore sites due "
+              "to missing data."))
     parser.add_argument("--debug",
                         dest="log_level",
                         action="store_const",

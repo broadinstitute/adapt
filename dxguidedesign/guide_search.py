@@ -30,9 +30,9 @@ class GuideSearcher:
                 if they are all within a window of this length
             cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
                  a guide
-            missing_data_params: tuple (a, b) specifying to not attempt to
+            missing_data_params: tuple (a, b, c) specifying to not attempt to
                 design guides overlapping sites where the fraction of
-                sequences with missing data is > min(a, b*m), where m is
+                sequences with missing data is > min(a, max(b, c*m), where m is
                 the median fraction of sequences with missing data over the
                 alignment
         """
@@ -60,9 +60,9 @@ class GuideSearcher:
 
         # Determine a threshold at which to ignore sites with too much
         # missing data
-        missing_min, missing_coeff = missing_data_params
-        self.missing_threshold = min(missing_min,
-            missing_coeff * self.aln.median_sequences_with_missing_data())
+        missing_max, missing_min, missing_coeff = missing_data_params
+        self.missing_threshold = min(missing_max, max(missing_min,
+            missing_coeff * self.aln.median_sequences_with_missing_data()))
 
     def _construct_guide_memoized(self, start, seqs_to_consider):
         """Make a memoized call to alignment.Alignment.construct_guide().
