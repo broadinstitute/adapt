@@ -19,9 +19,16 @@ def main(args):
     seqs = seq_io.read_fasta(args.in_fasta)
     aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
 
+    # Find all strong primers in the alignment, and feed this into GuideSearcher
+    ps = guide_search.GuideSearcher(aln, args.primer_length, args.primer_mismatches,
+                                    args.primer_window_size, args.cover_frac)
+
+    # Somehow output this into into an alignment object, called 'primer_aln'
+    ps.find_primers_that_cover(args.out_tsv, sort=args.sort_out)
+
     # Find an optimal set of guides for each window in the genome,
     # and write them to a file
-    gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
+    gs = guide_search.GuideSearcher(primer_aln, args.guide_length, args.mismatches,
                                     args.window_size, args.cover_frac)
     gs.find_guides_that_cover(args.out_tsv, sort=args.sort_out)
 
@@ -38,6 +45,15 @@ if __name__ == "__main__":
     parser.add_argument('-w', '--window_size', type=int, default=200,
                         help=("Ensure that selected guides are all within a "
                               "window of this size"))
+    # Add in the primer arguments
+    parser.add_argument('-pl', '--primer_length', type=int, default=28,
+                        help="Length of each primer to construct")
+    parser.add_argument('-pm', '--primer_mismatches', type=int, default=0,
+                        help='Number of mistmatches to tolerate in each primer')
+    parser.add_argument('-pw', '--primer_window_size', type=int, default=50,
+                        help=('Set the window size in which one primer will be found '
+                              'Ex: If -pl=28, -pw=50, the strongest 28-nt primer will ' 
+                              'be found in the 50-nt window ')
     def check_cover_frac(val):
         fval = float(val)
         if fval > 0 and fval <= 1:
@@ -67,3 +83,16 @@ if __name__ == "__main__":
 
     log.configure_logging(args.log_level)
     main(args)
+
+"""Improvements:
+    
+    Add a PrimerFinder step that feeds into the GuideFinder step.
+    
+    When I ran this on Norovirus, it output the same optimal guide like 30 times for the same region.
+    This happens because it iterates by 1 nt windows (which is great).
+    But instead of displaying the same guide 30 times, we should just display it once and give it some
+    kind of really high confidence score.
+    
+    Ways to code this: If the start position of window2 is within window1 AND guide1 and guide2 are identical,
+    score this well but don't display both.
+"""
