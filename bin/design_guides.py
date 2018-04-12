@@ -19,18 +19,19 @@ def main(args):
     seqs = seq_io.read_fasta(args.in_fasta)
     aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
 
-    # Find all strong primers in the alignment, and feed this into GuideSearcher
+    # Find all strong primers in the alignment
     ps = guide_search.GuideSearcher(aln, args.primer_length, args.primer_mismatches,
                                     args.primer_window_size, args.cover_frac)
 
-    # Somehow output this into into an alignment object, called 'primer_aln'
-    ps.find_primers_that_cover(args.out_tsv, sort=args.sort_out)
+    # From primers, construct list of windows, output those to primer_obj
+    primer_obj = ps.find_primers_that_cover(args.out_tsv, sort=args.sort_out)
 
     # Find an optimal set of guides for each window in the genome,
     # and write them to a file
-    gs = guide_search.GuideSearcher(primer_aln, args.guide_length, args.mismatches,
+    for window in primer_obj:
+        gs = guide_search.GuideSearcher(window, args.guide_length, args.mismatches,
                                     args.window_size, args.cover_frac)
-    gs.find_guides_that_cover(args.out_tsv, sort=args.sort_out)
+        gs.find_guides_that_cover(args.out_tsv, sort=args.sort_out)
 
 
 if __name__ == "__main__":

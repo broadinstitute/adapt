@@ -3,6 +3,7 @@
 
 from collections import defaultdict
 import logging
+import os
 
 from dxguidedesign import alignment
 
@@ -363,10 +364,11 @@ class GuideSearcher:
             # score of guides descending (-x[2])
             guide_collections.sort(key=lambda x: (x[1], -x[2]))
 
-        with open(out_fn, 'w') as outf:
-            # Write a header
-            outf.write('\t'.join(['window-start', 'window-end',
-                'count', 'score', 'guide-sequences']) + '\n')
+        with open(out_fn, 'a+') as outf:
+            # If file is empty, create a header
+            if os.path.getsize(out_fn) == 0:
+                outf.write('\t'.join(['window-start', 'window-end',
+                    'count', 'score', 'guide-sequences']) + '\n')
 
             for guides_in_window in guide_collections:
                 start, count, score, guide_seqs = guides_in_window
@@ -433,7 +435,7 @@ class GuideSearcher:
             # score of guides descending (-x[2])
             guide_collections.sort(key=lambda x: (x[1], -x[2]))
 
-
+        # Generate a primer table with all optimal primers, write this to a table
         with open(primer_out_fn, 'w') as primer_table:
             # Write a header
             primer_table.write('\t'.join(['window-start', 'window-end',
@@ -447,6 +449,15 @@ class GuideSearcher:
 
                 primer_table.write('\t'.join([str(x) for x in line]) + '\n')
 
+        # From the primer table, determine all usable windows, and output all those to one new aln object
+        with open(primer_out_fn, 'r') as primer_table:
+            # Read the the primer table
+            # Add those primer positions as a tuple to a growing list
+            # Iterate through that list, finding all usable windows (usableWindow if end[j] - start[i] < ~250)
+            # Append each usable window to a list of usable windows.
+            # Convert that into a list of alignment objects
+            # Feed that list of alignment objects into GuideFinder()
+            # return primer_obj
 
         if print_analysis:
             min_count = min(x[1] for x in guide_collections)
