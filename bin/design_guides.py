@@ -12,25 +12,51 @@ from dxguidedesign.utils import seq_io
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
+def design_independently(args):
+    # Treat each alignment independently
+    for in_fasta, out_tsv in zip(args.in_fasta, args.out_tsv):
+        # Read the sequences and make an Alignment object
+        seqs = seq_io.read_fasta(in_fasta)
+        aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+
+        # Find an optimal set of guides for each window in the genome,
+        # and write them to a file
+        gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
+                                        args.window_size, args.cover_frac,
+                                        args.missing_thres)
+        gs.find_guides_that_cover(out_tsv, sort=args.sort_out)
+
+
+def design_for_id(args):
+    pass 
+
+
 def main(args):
     logger = logging.getLogger(__name__)
 
-    # Read the sequences and make an Alignment object
-    seqs = seq_io.read_fasta(args.in_fasta)
-    aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+    if len(args.in_fasta) != len(args.out_tsv):
+        raise Exception("Number output TSVs must match number of input FASTAs")
 
-    # Find an optimal set of guides for each window in the genome,
-    # and write them to a file
-    gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
-                                    args.window_size, args.cover_frac,
-                                    args.missing_thres)
-    gs.find_guides_that_cover(args.out_tsv, sort=args.sort_out)
-
+    if args.diff_id:
+        design_for_id(args)
+    else:
+        design_independently(args)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('in_fasta', help="Path to input fasta")
-    parser.add_argument('out_tsv', help="Path to output TSV")
+    parser.add_argument('in_fasta', nargs='+',
+                        help=("Path to input FASTA. More than one can be "
+                              "given; without --id specified, this just "
+                              "outputs guides independently for each alignment"))
+    parser.add_argument('-o', '--out_tsv', nargs='+', required=True,
+                        help=("Path to output TSV. If more than one input "
+                              "FASTA is given, the same number of output TSVs "
+                              "must be given; each output TSV corresponds to "
+                              "an input FASTA."))
+    parser.add_argument('--id', dest="diff_id", action='store_true',
+                        help=("Design guides to perform differential "
+                              "identification, where each input FASTA is a "
+                              "group/taxon to identify with specificity"))
     parser.add_argument('-l', '--guide_length', type=int, default=28,
                         help="Length of guide to construct")
     parser.add_argument('-m', '--mismatches', type=int, default=0,
