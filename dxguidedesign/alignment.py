@@ -55,7 +55,7 @@ class Alignment:
                 return True
         return False
 
-    def construct_guide(self, start, guide_length, seqs_to_consider, mismatches):
+    def construct_guide(self, start, guide_length, seqs_to_consider, mismatches, is_primer=False):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -78,8 +78,9 @@ class Alignment:
             (Note that it is possible that x binds to no sequences and that
             y will be empty.)
         """
-        assert start + guide_length <= self.seq_length
-        assert len(seqs_to_consider) > 0
+        if is_primer == False:
+            assert start + guide_length <= self.seq_length
+            assert len(seqs_to_consider) > 0
 
         aln_for_guide = self.extract_range(start, start + guide_length)
 
