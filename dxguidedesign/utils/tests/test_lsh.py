@@ -254,3 +254,23 @@ class TestMinHashNearNeighborLookup(unittest.TestCase):
             # Although e was not added, a query for it should return d
             self.assertCountEqual(nnl.query(e), {d})
 
+    def test_hash_idx(self):
+        a = ('ATCGATATGGGCACTGCTAT', 'abc', 'def')
+        b = tuple(a)  # identical to a
+        c = ('ATCGACATGGGCACTGGTAT', 'ghi', 'jkl')  # similar to a
+        d = ('AGTTGTCACCCTTGACGATA', 'mno', 'pqr')  # not similar to a
+        e = ('AGTTGTCACCCTTGACGATA', 'stu', 'vwx')  # similar to d
+
+        for k in [2, 5, 10]:
+            nnl = lsh.NearNeighborLookup(self.family, k, self.dist_thres,
+                self.dist_fn, 0.95, hash_idx=0)
+            nnl.add([a, b, c, d])
+
+            # b and c are within self.dist_thres of a, so only these
+            # should be returned (along with a); note that since
+            # a==b, {a,b,c}=={a,c}=={b,c} and nnl.query(a) returns
+            # a set, which will be {a,c} or {b,c}
+            self.assertCountEqual(nnl.query(a[0]), {a, b, c})
+
+            # Although e was not added, a query for it should return d
+            self.assertCountEqual(nnl.query(e[0]), {d})

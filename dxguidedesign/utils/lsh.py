@@ -171,7 +171,8 @@ class NearNeighborLookup:
     Andoni and Indyk 2008.
     """
 
-    def __init__(self, family, k, dist_thres, dist_fn, reporting_prob):
+    def __init__(self, family, k, dist_thres, dist_fn, reporting_prob,
+                 hash_idx=None):
         """
         This selects a number of hash tables (defined as L in the above
         reference) according to the strategy it outlines: we want any
@@ -189,11 +190,17 @@ class NearNeighborLookup:
                 a and b, to compare against dist_thres
             reporting_prob: report any neighbor of a query with
                 probability at least equal to this
+            hash_idx: if set, the inserted points are tuples and should
+                be key'd on the hash_idx'd index; e.g., (A, B, C) might
+                be a point and if hash_idx is 0, it is hashed only based on A,
+                B and C simply store additional information along with A,
+                and queries are based on distance to A
         """
         self.family = family
         self.k = k
         self.dist_thres = dist_thres
         self.dist_fn = dist_fn
+        self.hash_idx = hash_idx
 
         P1 = self.family.P1(dist_thres)
         if P1 == 1.0:
@@ -225,13 +232,17 @@ class NearNeighborLookup:
             ht = self.hashtables[j]
             g = self.hashtables_g[j].g
             for p in pts:
-                ht[g(p)].append(p)
+                p_key = p[self.hash_idx] if self.hash_idx is not None else p
+                ht[g(p_key)].append(p)
 
     def query(self, q):
         """Find neighbors of a query point.
 
         Args:
-            q: query point (e.g., probe)
+            q: query point (e.g., probe); if self.hash_idx is set and
+                the inserted points are tuples, q should only be the
+                key of what to search for (i.e., distance is measured
+                between q and p[self.hash_idx] for a stored point p)
 
         Returns:
             collection of stored points that are within self.dist_thres of
@@ -243,7 +254,8 @@ class NearNeighborLookup:
             ht = self.hashtables[j]
             g = self.hashtables_g[j].g
             for p in ht[g(q)]:
-                if self.dist_fn(q, p) <= self.dist_thres:
+                p_key = p[self.hash_idx] if self.hash_idx is not None else p
+                if self.dist_fn(q, p_key) <= self.dist_thres:
                     neighbors.add(p)
         return neighbors
 
