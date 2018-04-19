@@ -16,11 +16,11 @@ class TestGuideSearch(unittest.TestCase):
     def setUp(self):
         self.a_seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
-        self.a = guide_search.GuideSearcher(self.a_aln, 4, 0, 5, 1.0, (1, 100))
+        self.a = guide_search.GuideSearcher(self.a_aln, 4, 0, 5, 1.0, (1, 1, 100))
 
         self.b_seqs = ['ATCGAA', 'ATC-AA']
         self.b_aln = alignment.Alignment.from_list_of_seqs(self.b_seqs)
-        self.b = guide_search.GuideSearcher(self.b_aln, 4, 0, 5, 1.0, (1, 100))
+        self.b = guide_search.GuideSearcher(self.b_aln, 4, 0, 5, 1.0, (1, 1, 100))
 
         self.c_seqs = ['GTATCATCGGCCATGNAC',
                        'GTNNCATCGG-CATGNAC',
@@ -29,43 +29,43 @@ class TestGuideSearch(unittest.TestCase):
                        'GTATCATCGGCCATGNAC',
                        'GTATCAGCGGCCATGNAC']
         self.c_aln = alignment.Alignment.from_list_of_seqs(self.c_seqs)
-        self.c = guide_search.GuideSearcher(self.c_aln, 5, 1, 14, 1.0, (1, 100))
+        self.c = guide_search.GuideSearcher(self.c_aln, 5, 1, 14, 1.0, (1, 1, 100))
         self.c_partial = guide_search.GuideSearcher(self.c_aln, 5, 1, 14, 0.5,
-            (1, 100))
+            (1, 1, 100))
 
         self.d_seqs = ['GTATACGG',
                        'ACGTACGG',
                        'TACTACGG']
         self.d_aln = alignment.Alignment.from_list_of_seqs(self.d_seqs)
-        self.d = guide_search.GuideSearcher(self.d_aln, 5, 0, 8, 1.0, (1, 100))
+        self.d = guide_search.GuideSearcher(self.d_aln, 5, 0, 8, 1.0, (1, 1, 100))
 
         self.e_seqs = ['GTAGACGG',
                        'ACGTACGG',
                        'TACTTCGG']
         self.e_aln = alignment.Alignment.from_list_of_seqs(self.e_seqs)
-        self.e = guide_search.GuideSearcher(self.e_aln, 5, 1, 8, 1.0, (1, 100))
+        self.e = guide_search.GuideSearcher(self.e_aln, 5, 1, 8, 1.0, (1, 1, 100))
 
         self.f_seqs = ['GTNNACGN',
                        'ANNTACGN',
                        'TANTTNNN']
         self.f_aln = alignment.Alignment.from_list_of_seqs(self.f_seqs)
-        self.f = guide_search.GuideSearcher(self.f_aln, 5, 1, 8, 1.0, (1, 100))
+        self.f = guide_search.GuideSearcher(self.f_aln, 5, 1, 8, 1.0, (1, 1, 100))
 
         self.g_seqs = ['GTATCATCGGCCATCNAC',
                        'CTATCACCTGCTACGNAC',
                        'ATAGCACCGGCCATGNAC',
                        'TTAGGACCGACCATGNAC']
         self.g_aln = alignment.Alignment.from_list_of_seqs(self.g_seqs)
-        self.g = guide_search.GuideSearcher(self.g_aln, 5, 0, 18, 1.0, (1, 100))
+        self.g = guide_search.GuideSearcher(self.g_aln, 5, 0, 18, 1.0, (1, 1, 100))
         self.g_partial = guide_search.GuideSearcher(self.g_aln, 5, 0, 18, 0.5,
-            (1, 100))
+            (1, 1, 100))
 
         self.h_seqs = ['GTATCAGCGGCCATCNACAA',
                        'GTANCACCTGCTACGNACTT',
                        'GTATCAATGNCCATGNACCC',
                        'GTATCATCCACNATGNACGG']
         self.h_aln = alignment.Alignment.from_list_of_seqs(self.h_seqs)
-        self.h = guide_search.GuideSearcher(self.h_aln, 5, 1, 18, 1.0, (0.5, 1))
+        self.h = guide_search.GuideSearcher(self.h_aln, 5, 1, 18, 1.0, (0.5, 0, 1))
 
     def test_construct_guide_memoized_a(self):
         self.assertEqual(self.a._construct_guide_memoized(0, [0,1,2,3,4]),
