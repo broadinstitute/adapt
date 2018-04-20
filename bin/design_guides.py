@@ -9,6 +9,8 @@ from dxguidedesign import guide_search
 from dxguidedesign.utils import log
 from dxguidedesign.utils import seq_io
 
+from multiprocessing.dummy import Pool as ThreadPool
+
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
@@ -17,7 +19,8 @@ def main(args):
 
     # Testing: remove old guides file
     import os
-    os.system('rm short.guides.tsv && rm primer_positions.txt && rm primer_short.guides.tsv')
+    os.system('rm %s && rm %s && rm %s && rm %s' % (args.out_tsv, "primer_positions.txt",
+                                                    "primer_" + args.out_tsv, "no_duplicates_" + args.out_tsv))
 
     # Read the sequences and make an Alignment object
     seqs = seq_io.read_fasta(args.in_fasta)
@@ -30,8 +33,7 @@ def main(args):
                                         args.primer_window_size)
 
     # From primers, construct list of windows, output those to primer_obj
-    primer_obj = ps.find_primers_that_cover(args.out_tsv, sort=args.sort_out)
-    print(primer_obj)
+    primers = ps.find_primers_that_cover(args.out_tsv, sort=args.sort_out)
 
     # Find an optimal set of guides for each window in the genome,
     # and write them to a file
@@ -39,12 +41,15 @@ def main(args):
                                     args.window_size, args.cover_frac,
                                     args.primer_length, args.primer_mismatches,
                                     args.primer_window_size)
-    counter=0
-    for slice in primer_obj:
-        if counter >= 0:
-            gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out)
-            counter+=1
+    if len(primers) < 2:
+        print("Not enough primers identified. No guides could be constructed")
+        exit(1)
+
+    for slice in primers:
+        gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out)
+
     gs.clean_up_output(out_fn=args.out_tsv)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

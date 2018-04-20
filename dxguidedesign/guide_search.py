@@ -406,7 +406,7 @@ class GuideSearcher:
             guide_collections.sort(key=lambda x: (x[1], -x[2]))
 
         # Append to output file, since it is being called for each primer pair
-        with open(out_fn, 'a+') as outf:
+        with open(out_fn, "a+") as outf:
             # If file is empty, create a header
             if os.path.getsize(out_fn) == 0:
                 outf.write('\t'.join(['amplicon-start', 'amplicon-end','forward-primer', 'reverse-primer',
@@ -424,7 +424,6 @@ class GuideSearcher:
 
         if print_analysis:
             try:
-
                 min_count = min(x[1] for x in guide_collections)
                 num_with_min_count = sum(1 for x in guide_collections
                     if x[1] == min_count)
@@ -454,9 +453,11 @@ class GuideSearcher:
                     pad_spaces = max_stat_name_len - len(name)
                     name_padded = " "*pad_spaces + name + ":"
                     print(name_padded, str(val))
-            except:
-                print("Cannot print analysis for this guide set. Guide collections probably empty.")
-                #print("GUIDE COLLECTIONS:"); print(guide_collections)
+            except ValueError:
+                if len(guide_collections) < 1:
+                    print("Cannot print analysis for this guide set because none were found. Guide_collections empty.")
+                else:
+                    print("Cannot print analysis for this guide set. Unknown error.")
 
     def clean_up_output(self,out_fn):
 
@@ -889,7 +890,7 @@ class PrimerSearcher():
 
 
         # Return that list of indexes for good windows, to feed into GuideSearcher()
-        primer_obj = usable_windows
+        primers = usable_windows
 
         if print_analysis:
             min_count = min(x[1] for x in guide_collections)
@@ -922,7 +923,7 @@ class PrimerSearcher():
                 name_padded = " "*pad_spaces + name + ":"
                 print(name_padded, str(val))
 
-        return primer_obj
+        return primers
 
 class CannotAchieveDesiredCoverageError(Exception):
     def __init__(self, value):
