@@ -148,3 +148,25 @@ class TestGuideSearch(unittest.TestCase):
         self.assertEqual(self.h._find_guides_that_cover_in_window(0),
                          set(['CAACG', 'CACCC']))
 
+    def test_guide_is_suitable_fn(self):
+        seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
+                'CTATCAAAAAACCTGCTAGGGGGCGTAC',
+                'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
+                'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+
+        # The best guide is 'AAAAA'
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['AAAAA']))
+
+        # Do not allow guides with 'AAA' in them
+        def f(guide):
+            if 'AAA' in guide:
+                return False
+            else:
+                return True
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100),
+            guide_is_suitable_fn=f)
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['CCCCC', 'GGGGG']))
