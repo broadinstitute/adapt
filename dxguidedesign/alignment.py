@@ -1,10 +1,12 @@
 """Structure(s) and functions for working with alignments of sequences.
 """
 
+from collections import defaultdict
 import logging
 import statistics
 
 from dxguidedesign.utils import guide
+from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -309,3 +311,124 @@ class CannotConstructGuideError(Exception):
         self.value = value
     def __str__(self):
         return repr(self.value)
+
+
+class AlignmentQuerier:
+    """Supports queries for potential guide sequences across a set of
+    alignments.
+
+    This uses LSH to find near neighbors of queried guide sequences. It
+    constructs a data structure containing all subsequences in a given
+    collection of alignments (subsequences of length equal to the guide
+    length). These are sequences that could potentially be "hit" by a
+    guide. Then, on query, it performs approximate near neighbor search
+    and calculates the fraction of sequences in each alignment that are
+    hit by the queried guide.
+
+    This might use considerable memory, depending on the guide length,
+    reporting probability, etc. It currently stores in the data structure
+    a tuple (subsequence string s, index i of alignment with s, index j of
+    sequence in alignment i that has subsequence s). One option to reduce
+    memory usage would be to still key on the subsequence string, but
+    not store it in the tuple and, in its place, store the index x of the
+    subsequence in the j'th sequence of alignment i, so that the subsequence
+    can be found as: self.alns[i].seqs[x:(x + guide_length)][j].
+    """
+
+    def __init__(self, alns, guide_length, dist_thres, k=15,
+                 reporting_prob=0.95):
+        """
+        Args:
+            alns: list of Alignment objects
+            guide_length: length of guide sequences
+            dist_thres: detect a queried guide sequence as hitting a
+                sequence in an alignment if it is within a Hamming distance
+                of dist_thres
+            k: number of hash functions to draw from a family of
+                hash functions for amplification; each hash function is then
+                the concatenation (h_1, h_2, ..., h_k)
+            reporting_prob: ensure that any guide within dist_thres of
+                a queried guide is detected as such; this constructs
+                multiple hash functions (each of which is a concatenation
+                of k functions drawn from the family) to achieve this
+                probability
+        """
+        self.alns = alns
+        self.guide_length = guide_length
+
+        def hamming_dist(a, b):
+            return sum(1 if a[i] != b[i] else 0 for i in range(len(a)))
+        family = lsh.HammingDistanceFamily(guide_length)
+        self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, hamming_dist,
+            reporting_prob, hash_idx=0)
+
+    def setup(self):
+        """Build data structure for near neighbor lookup of guide sequences.
+        """
+        for aln_idx, aln in enumerate(self.alns):
+            # Convert aln.seqs from column-major order to row-major order
+            seqs = aln.make_list_of_seqs()
+
+            for seq_idx, seq in enumerate(seqs):
+                # Add all possible guide sequences g as:
+                #   (g, aln_idx, seq_idx)
+                pts = []
+                for j in range(aln.seq_length - self.guide_length + 1):
+                    g = seq[j:(j + self.guide_length)]
+                    pts += [(g, aln_idx, seq_idx)]
+                self.nnr.add(pts)
+
+    def frac_of_aln_hit_by_guide(self, guide):
+        """Calculate how many sequences in each alignment are hit by a query.
+
+        Args:
+            guide: guide sequence to query
+
+        Returns:
+            list of fractions f where f[i] gives the fraction of sequences
+            in the i'th alignment (self.alns[i]) that contain a subsequence
+            which is found to be a near neighbor of guide
+        """
+        assert len(guide) == self.guide_length
+
+        neighbors = self.nnr.query(guide)
+        seqs_hit_by_aln = defaultdict(set)
+        for neighbor in neighbors:
+            _, aln_idx, seq_idx = neighbor
+            seqs_hit_by_aln[aln_idx].add(seq_idx)
+
+        frac_of_aln_hit = []
+        for i, aln in enumerate(self.alns):
+            num_hit = len(seqs_hit_by_aln[i])
+            frac_hit = float(num_hit) / aln.num_sequences
+            frac_of_aln_hit += [frac_hit]
+        return frac_of_aln_hit
+
+    def guide_is_specific_to_aln(self, guide, aln_idx, frac_hit_thres):
+        """Determine if guide is specific to a particular alignment.
+
+        Note that this does *not* verify whether guide hits the alignment
+        with index aln_idx -- only that it does not hit all the others.
+
+        Args:
+            guide: guide sequence to check
+            aln_idx: check if guide is specific to the alignment with this
+                index (self.alns[aln_dx])
+            frac_hit_thres: say that a guide "hits" an alignment A if the
+                fraction of sequences in A that it hits is > this value
+
+        Returns:
+            True iff guide does not hit alignments other than aln_idx
+        """
+        frac_of_aln_hit = self.frac_of_aln_hit_by_guide(guide)
+        for j, frac in enumerate(frac_of_aln_hit):
+            if aln_idx == j:
+                # This frac is for alignment aln_idx; it should be high and
+                # is irrelevant for specificity (but we won't check that
+                # it is high)
+                continue
+            if frac > frac_hit_thres:
+                # guide hits too many sequences in alignment j
+                return False
+        return True
+
