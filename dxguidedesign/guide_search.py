@@ -341,6 +341,7 @@ class GuideSearcher:
                 logger.warning(("No more suitable guides could be constructed "
                     "in the window starting at %d, but more are needed to "
                     "achieve the desired coverage") % start)
+                self._cleanup_memoized_guides(start)
                 continue
 
             num_guides = len(guides_in_cover)
