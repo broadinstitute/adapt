@@ -4,6 +4,7 @@
 from collections import defaultdict
 import logging
 import os
+from matplotlib import pyplot
 
 from dxguidedesign import alignment
 
@@ -494,6 +495,57 @@ class GuideSearcher:
                 else:
                     outf.write(line + '\n')
                     previous_line = (start, end, guide_seqs)
+
+    def plot(self, out_fn):
+        out_fn = out_fn
+        amplicon_list = []
+
+        with open(out_fn, "r") as guides_table:
+            for line in guides_table:
+                line = line.strip()
+                if line.startswith("amplicon-start"):
+                    continue
+                line_arr = line.split("\t")
+                amplicon_start = line_arr[0]
+                amplicon_stop = line_arr[1]
+                amplicon_list.append((amplicon_start, amplicon_stop))
+
+
+        #amplicon_list = [(0,200), (300,500), (750,950), (2500,2700), (9000,9200)]
+
+        pyplot.figure(num=None, figsize=(8, 6), dpi=72, facecolor='w', edgecolor='k')
+        pyplot.xlabel("Genome Position")
+        pyplot.yticks([])
+        pyplot.xticks([x for x in range(0,int(self.aln.seq_length), 1000)])
+        y=0
+
+        # prevent overlap
+        old_stop = 0
+
+        for amplicon in amplicon_list:
+            y+= 1 #prevent overlapping lines
+            start = int(amplicon[0])
+            stop = int(amplicon[1])
+            #if old_stop <= start:
+            #    y+=1
+            #y -= 1
+            old_stop = stop
+
+            x = range(start, stop)
+            pyplot.plot(x, [y]*len(x))
+        pyplot.show()
+
+
+
+    # Plot the consensus strength (% identity) at each base of the consensus sequence
+    # pyplot.figure(num=None, figsize=(8, 6), dpi=300, facecolor='w', edgecolor='k')
+    # pyplot.bar(x=range(0,len(consensus_scores)), height=consensus_scores, width=1.0, color='red', align='edge')
+    # pyplot.ylabel("Consensus Strength (% identity)")
+    # pyplot.xlabel("Genome position")
+    # pyplot.show()
+
+
+
 
 class PrimerSearcher():
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,

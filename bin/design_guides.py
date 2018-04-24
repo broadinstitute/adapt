@@ -49,7 +49,7 @@ def main(args):
         gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out)
 
     gs.clean_up_output(out_fn=args.out_tsv)
-
+    gs.plot("no_duplicates_" + args.out_tsv)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
