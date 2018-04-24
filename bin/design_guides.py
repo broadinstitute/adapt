@@ -41,6 +41,7 @@ def design_for_id(args):
         "identification"))
     aq = alignment.AlignmentQuerier(alns, args.guide_length,
         args.diff_id_mismatches)
+    aq.setup()
 
     for i, aln in enumerate(alns):
         def guide_is_specific(guide):

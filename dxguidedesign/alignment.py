@@ -361,6 +361,7 @@ class AlignmentQuerier:
         family = lsh.HammingDistanceFamily(guide_length)
         self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, hamming_dist,
             reporting_prob, hash_idx=0)
+        self.is_setup = False
 
     def setup(self):
         """Build data structure for near neighbor lookup of guide sequences.
@@ -377,6 +378,7 @@ class AlignmentQuerier:
                     g = seq[j:(j + self.guide_length)]
                     pts += [(g, aln_idx, seq_idx)]
                 self.nnr.add(pts)
+        self.is_setup = True
 
     def frac_of_aln_hit_by_guide(self, guide):
         """Calculate how many sequences in each alignment are hit by a query.
@@ -389,6 +391,10 @@ class AlignmentQuerier:
             in the i'th alignment (self.alns[i]) that contain a subsequence
             which is found to be a near neighbor of guide
         """
+        if not self.is_setup:
+            raise Exception(("AlignmentQuerier.setup() must be called before "
+                "querying for near neighbors"))
+
         assert len(guide) == self.guide_length
 
         neighbors = self.nnr.query(guide)
