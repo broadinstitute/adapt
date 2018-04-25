@@ -3,7 +3,6 @@
 
 from collections import defaultdict
 import logging
-import os
 from matplotlib import pyplot
 
 from dxguidedesign import alignment
@@ -376,7 +375,7 @@ class GuideSearcher:
 
         return guides
     
-    def find_guides_that_cover(self, out_fn, slice, sort=True, print_analysis=True):
+    def find_guides_that_cover(self, out_fn, slice, sort=True, print_analysis=True, first_slice=False):
         """Find the smallest collection of guides that cover sequences, across
         all windows.
 
@@ -392,6 +391,9 @@ class GuideSearcher:
             print_analysis: print to stdout the best window(s) -- i.e.,
                 the one(s) with the smallest number of guides and highest
                 score
+            first_slice: if it's the first amplicon window, we'll need to
+                        create a new file and write a header; otherwise,
+                        we'll just append to the existing file
         """
         slice = slice
         good_window_start = int(slice[0])
@@ -406,13 +408,15 @@ class GuideSearcher:
             # score of guides descending (-x[2])
             guide_collections.sort(key=lambda x: (x[1], -x[2]))
 
-        # Append to output file, since it is being called for each primer pair
-        with open(out_fn, "a+") as outf:
-            # If file is empty, create a header
-            if os.path.getsize(out_fn) == 0:
-                outf.write('\t'.join(['amplicon-start', 'amplicon-end','forward-primer', 'reverse-primer',
-                   'guide-count', 'guide-score', 'guide-sequence(s)']) + '\n')
+        # If this is the first slice/ first amplicon, create a new file and write a header, then proceed
+        if first_slice:
+            with open(out_fn, "w") as outf:
+            # File is empty, create a header
+                outf.write('\t'.join(['amplicon-start', 'amplicon-end', 'forward-primer', 'reverse-primer',
+                                      'guide-count', 'guide-score', 'guide-sequence(s)']) + '\n')
 
+        # Append to existing output file since it is being called for each primer pair
+        with open(out_fn, "a+") as outf:
             for guides_in_window in guide_collections:
                 guide_start, count, score, guide_seqs = guides_in_window
                 end = int(good_window_end)
@@ -472,16 +476,6 @@ class GuideSearcher:
             for line in inf:
                 line = line.strip()
 
-                '''
-                # Simple de-duplication
-                if line == previous_line:
-                    continue
-
-                else:
-                    previous_line = line
-                    outf.write(line + '\n')
-                '''
-
                 line_arr = line.split('\t')
                 start = line_arr[0]
                 end = line_arr[1]
@@ -511,41 +505,49 @@ class GuideSearcher:
                 amplicon_list.append((amplicon_start, amplicon_stop))
 
 
-        #amplicon_list = [(0,200), (300,500), (750,950), (2500,2700), (9000,9200)]
-
+        # Set up visualization
         pyplot.figure(num=None, figsize=(8, 6), dpi=72, facecolor='w', edgecolor='k')
+        pyplot.title("Potential Amplicon Targets for SHERLOCK Testing")
         pyplot.xlabel("Genome Position")
-        pyplot.yticks([])
-        pyplot.xticks([x for x in range(0,int(self.aln.seq_length), 1000)])
-        y=0
+        pyplot.xlim(0,self.aln.seq_length)
 
-        # prevent overlap
-        old_stop = 0
+        x_ticks = [x for x in range(0,int(self.aln.seq_length), 500)]
+        x_ticks.append(self.aln.seq_length)
+        if x_ticks[-1] - x_ticks[-2] <= 250:
+            x_ticks.remove(x_ticks[-2]) # Removes visual clutter when plotting
+
+        # Want a tick every 500 bp, but only want label every 1000 bp
+        xlab = []
+        for tick in x_ticks:
+            if (tick % 1000) == 0:
+                xlab.append(tick)
+            elif (tick % 1000) == 500:
+                xlab.append("")
+            elif (tick == self.aln.seq_length):
+                xlab.append(tick)
+                break
+
+        pyplot.xticks(x_ticks, xlab)
+        pyplot.yticks([])
+
+        # To prevent overlap, make sure that the current amplicon starts after the end of the previous amplicon
+        y=0
+        previous_stop = 0
 
         for amplicon in amplicon_list:
-            y+= 1 #prevent overlapping lines
             start = int(amplicon[0])
             stop = int(amplicon[1])
-            #if old_stop <= start:
-            #    y+=1
-            #y -= 1
-            old_stop = stop
+
+            if start <= previous_stop:
+                y += 1
+            else:
+                y = 0
+            previous_stop = stop
 
             x = range(start, stop)
             pyplot.plot(x, [y]*len(x))
+
         pyplot.show()
-
-
-
-    # Plot the consensus strength (% identity) at each base of the consensus sequence
-    # pyplot.figure(num=None, figsize=(8, 6), dpi=300, facecolor='w', edgecolor='k')
-    # pyplot.bar(x=range(0,len(consensus_scores)), height=consensus_scores, width=1.0, color='red', align='edge')
-    # pyplot.ylabel("Consensus Strength (% identity)")
-    # pyplot.xlabel("Genome position")
-    # pyplot.show()
-
-
-
 
 class PrimerSearcher():
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,

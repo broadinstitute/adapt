@@ -19,8 +19,10 @@ def main(args):
 
     # Testing: remove old guides file
     import os
-    os.system('rm %s && rm %s && rm %s && rm %s' % (args.out_tsv, "primer_positions.txt",
-                                                    "primer_" + args.out_tsv, "no_duplicates_" + args.out_tsv))
+    os.system('rm -f %s && rm -f %s && '
+              'rm -f %s && rm -f %s' %
+              (args.out_tsv, "primer_positions.txt",
+               "primer_" + args.out_tsv, "no_duplicates_" + args.out_tsv))
 
     # Read the sequences and make an Alignment object
     seqs = seq_io.read_fasta(args.in_fasta)
@@ -46,7 +48,10 @@ def main(args):
         exit(1)
 
     for slice in primers:
-        gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out)
+        if slice == primers[0]:
+            gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out, first_slice=True)
+        else:
+            gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out)
 
     gs.clean_up_output(out_fn=args.out_tsv)
     gs.plot("no_duplicates_" + args.out_tsv)

@@ -5,7 +5,9 @@ This is a Python package for designing guides to be used for diagnostics with SH
 
 ## Dependencies
 
-It is tested under Python 3.5, but should also work with earlier versions of Python 3. There are no other dependencies.
+It is tested under Python 3.5, but should also work with earlier versions of Python 3. 
+Also requires installation of the `matplotlib` library.
+If `pip` is installed, simply run `pip install matplotlib` to resolve this dependency.
 
 ## Install
 
