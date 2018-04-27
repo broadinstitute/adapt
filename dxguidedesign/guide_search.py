@@ -504,7 +504,6 @@ class GuideSearcher:
                 amplicon_stop = line_arr[1]
                 amplicon_list.append((amplicon_start, amplicon_stop))
 
-
         # Set up visualization
         pyplot.figure(num=None, figsize=(8, 6), dpi=72, facecolor='w', edgecolor='k')
         pyplot.title("Potential Amplicon Targets for SHERLOCK Testing")
