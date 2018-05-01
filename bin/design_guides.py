@@ -9,20 +9,10 @@ from dxguidedesign import guide_search
 from dxguidedesign.utils import log
 from dxguidedesign.utils import seq_io
 
-from multiprocessing.dummy import Pool as ThreadPool
-
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
-
 
 def main(args):
     logger = logging.getLogger(__name__)
-
-    # Testing: remove old guides file
-    import os
-    os.system('rm -f %s && rm -f %s && '
-              'rm -f %s && rm -f %s' %
-              (args.out_tsv, "primer_positions.txt",
-               "primer_" + args.out_tsv, "no_duplicates_" + args.out_tsv))
 
     # Read the sequences and make an Alignment object
     seqs = seq_io.read_fasta(args.in_fasta)
@@ -34,11 +24,10 @@ def main(args):
                                         args.primer_length, args.primer_mismatches,
                                         args.primer_window_size)
 
-    # From primers, construct list of windows, output those to primer_obj
+    # From primers, construct list of windows, return those as the `primers` object
     primers = ps.find_primers_that_cover(args.out_tsv, sort=args.sort_out)
 
-    # Find an optimal set of guides for each window in the genome,
-    # and write them to a file
+    # Set up the guide search
     gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
                                     args.window_size, args.cover_frac,
                                     args.primer_length, args.primer_mismatches,
@@ -47,14 +36,18 @@ def main(args):
         print("Not enough primers identified. No guides could be constructed")
         exit(1)
 
-    for slice in primers:
-        if slice == primers[0]:
-            gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out, first_slice=True)
+    # Take the candidate primer windows and use those genomic coordinates to invoke GuideSearcher
+    for primer_slice in primers:
+        if primer_slice == primers[0]:
+            gs.find_guides_that_cover(args.out_tsv, primer_slice, sort=args.sort_out, first_slice=True)
         else:
-            gs.find_guides_that_cover(args.out_tsv, slice, sort=args.sort_out)
+            gs.find_guides_that_cover(args.out_tsv, primer_slice, sort=args.sort_out)
 
+    # Filter out any duplicated entries or suboptimal amplicons
     gs.clean_up_output(out_fn=args.out_tsv)
-    gs.plot("no_duplicates_" + args.out_tsv)
+
+    # Visualize the target amplicons
+    gs.plot(args.out_tsv)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -66,8 +59,8 @@ if __name__ == "__main__":
                         help=("Allow for this number of mismatches when "
                               "determining whether a guide covers a sequence"))
     parser.add_argument('-w', '--window_size', type=int, default=200,
-                        help=("Ensure that selected guides are all within a "
-                              "window of this size"))
+                        help=("Maximum amplicon size. Needs to be long enough"
+                              "to include forward-primer, guide, and reverse-primer"))
     # Add in the primer arguments
     parser.add_argument('-pl', '--primer_length', type=int, default=28,
                         help="Length of each primer to construct")
@@ -106,16 +99,3 @@ if __name__ == "__main__":
 
     log.configure_logging(args.log_level)
     main(args)
-
-"""Improvements:
-    
-    Add a PrimerFinder step that feeds into the GuideFinder step.
-    
-    When I ran this on Norovirus, it output the same optimal guide like 30 times for the same region.
-    This happens because it iterates by 1 nt windows (which is great).
-    But instead of displaying the same guide 30 times, we should just display it once and give it some
-    kind of really high confidence score.
-    
-    Ways to code this: If the start position of window2 is within window1 AND guide1 and guide2 are identical,
-    score this well but don't display both.
-"""

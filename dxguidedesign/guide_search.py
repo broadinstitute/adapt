@@ -16,7 +16,9 @@ class GuideSearcher:
     """Methods to search for guides to use for a diagnostic.
 
     The input is an alignment of sequences over which to search, as well as
-    parameters defining the space of acceptable guides.
+    parameters defining the space of acceptable guides. Will be called from the
+    PrimerFinder method, which will invoke GuideSearcher over an amplicon
+    bound by the forward primer and reverse primer.
     """
 
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
@@ -329,30 +331,7 @@ class GuideSearcher:
         slice_end = good_window_end-self.guide_length-self.primer_length
 
         # Search in the window between the end of the forward primer and beginning of the reverse primer
-        '''
-        for start in range(good_window_start+self.primer_length,
-                           good_window_end-self.guide_length-self.primer_length):
-            logger.info(("Searching for guides within window starting "
-                         "at %d") % start)
 
-            try:
-                guides_in_cover = self._find_guides_that_cover_in_window(start, slice_end)
-            except CannotAchieveDesiredCoverageError:
-                # Cannot achieve the desired coverage in this window; log and
-                # skip it
-                logger.warning(("No more suitable guides could be constructed "
-                    "in the window starting at %d, but more are needed to "
-                    "achieve the desired coverage") % start)
-                continue
-
-            num_guides = len(guides_in_cover)
-            score = self._score_collection_of_guides(guides_in_cover)
-            guides += [ [start, num_guides, score, guides_in_cover] ]
-
-            # We no longer need to memoize results for guides that start at
-            # this position
-            self._cleanup_memoized_guides(start)
-        '''
         # Just do one search for the best guide that spans each entire window/amplicon, excluding the primers.
         start = good_window_start + self.primer_length
         slice_end = good_window_end - self.guide_length - self.primer_length
@@ -375,7 +354,7 @@ class GuideSearcher:
 
         return guides
     
-    def find_guides_that_cover(self, out_fn, slice, sort=True, print_analysis=True, first_slice=False):
+    def find_guides_that_cover(self, out_fn, primer_slice, sort=True, print_analysis=True, first_slice=False):
         """Find the smallest collection of guides that cover sequences, across
         all windows.
 
@@ -395,11 +374,11 @@ class GuideSearcher:
                         create a new file and write a header; otherwise,
                         we'll just append to the existing file
         """
-        slice = slice
-        good_window_start = int(slice[0])
-        good_window_end = int(slice[1])
-        forward_primer = str(slice[2])
-        reverse_primer = str(slice[3])
+        primer_slice = primer_slice
+        good_window_start = int(primer_slice[0])
+        good_window_end = int(primer_slice[1])
+        forward_primer = str(primer_slice[2])
+        reverse_primer = str(primer_slice[3])
 
         guide_collections = self._find_guides_that_cover_for_each_window(good_window_start, good_window_end)
 
@@ -466,11 +445,18 @@ class GuideSearcher:
 
     def clean_up_output(self,out_fn):
 
-        """Clean up output file to remove duplicates
+        """Clean up the results output file to remove duplicates
+        Args:
+            out_fn: output TSV file to write cleaned up, de-duplicated amplicons
+        Returns:
+            a new de-deuplicated TSV file, overwrites and replaces out_fn
         """
+
         out_fn = out_fn
 
-        with open(out_fn, 'r') as inf, open("no_duplicates_" + out_fn, 'w') as outf:
+        # Read in the raw amplicon results file, filter out duplicates, save this to a list
+        with open(out_fn, 'r') as inf:
+            no_duplicate_lines = []
             previous_line = ''
 
             for line in inf:
@@ -479,18 +465,31 @@ class GuideSearcher:
                 line_arr = line.split('\t')
                 start = line_arr[0]
                 end = line_arr[1]
-                guide_count = line_arr[4]
-                guide_score = line_arr[5]
                 guide_seqs = [].append(line_arr[6].split(' '))
 
                 # If two amplicons have the same start and same guides, but different stops, just keep the shorter one
                 if start in previous_line and guide_seqs in previous_line:
                     continue
                 else:
-                    outf.write(line + '\n')
+                    no_duplicate_lines.append(line)
                     previous_line = (start, end, guide_seqs)
 
+        # Open the cleaned up list, overwrite the raw results file with the cleaned up output
+        with open(out_fn, 'w') as outf:
+            for line in no_duplicate_lines:
+                outf.write(line + "\n")
+
     def plot(self, out_fn):
+        """Take the text output from the previous steps and use the `matplotlib` library to plot each amplicon
+           as its own line along the viral genome
+
+            Args:
+                out_fn: results TSV file, with results to plot
+
+            Returns:
+                a `matplotlib` plot
+        """
+
         out_fn = out_fn
         amplicon_list = []
 
@@ -549,6 +548,12 @@ class GuideSearcher:
         pyplot.show()
 
 class PrimerSearcher():
+    """Finds all possible primers in the sequence alignment.
+       Will look for all primers, find forward/reverse primer pairs
+       that would result in usable amplicons, and invokes GuideSearcher
+       to find the best guide per primer-bounded amplicon.
+    """
+
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
                  primer_length, primer_mismatches, primer_window_size):
         """
@@ -894,7 +899,6 @@ class PrimerSearcher():
                 the one(s) with the smallest number of guides and highest
                 score
         """
-        primer_out_fn = "primer_" + out_fn
         guide_collections = self._find_guides_that_cover_for_each_window()
 
         if sort:
@@ -902,23 +906,18 @@ class PrimerSearcher():
             # score of guides descending (-x[2])
             guide_collections.sort(key=lambda x: (x[1], -x[2]))
 
-        # Generate a primer table with all optimal primers, write this to a table
-        with open(primer_out_fn, 'w') as primer_table:
-            primer_positions = []
-            # Write a header
-            primer_table.write('\t'.join(['window-start', 'window-end',
-                'count', 'score', 'primer-sequences']) + '\n')
+        # Create a list that will contain all candidate primers
+        primer_positions = []
 
-            for guides_in_window in guide_collections:
-                start, count, score, guide_seqs = guides_in_window
-                end = start + self.primer_window_size
-                guide_seqs_str = ' '.join(sorted(list(guide_seqs)))
-                line = [start, end, count, score, guide_seqs_str]
+        for guides_in_window in guide_collections:
+            start, count, score, guide_seqs = guides_in_window
+            end = start + self.primer_window_size
+            guide_seqs_str = ' '.join(sorted(list(guide_seqs)))
+            line = [start, end, count, score, guide_seqs_str]
 
-                # As opposed to guides, where you can use more than 1, you need a maximum primer count of 1
-                if count == 1:
-                    primer_table.write('\t'.join([str(x) for x in line]) + '\n')
-                    primer_positions.append((start, end, str(guide_seqs).strip("{''}")))
+            # As opposed to guides, where you can use more than 1, you need a maximum primer count of 1
+            if count == 1:
+                primer_positions.append((start, end, str(guide_seqs).strip("{''}")))
 
         # Iterate through that list, finding all usable windows, and adding those windows to a list, along
         # with their primer sequences
@@ -933,14 +932,6 @@ class PrimerSearcher():
                     if primer_positions[j][0] - primer_positions[i][1] >= self.guide_length:
                         usable_windows.append((primer_positions[i][0], primer_positions[j][1],
                                                primer_positions[i][2], primer_positions[j][2]))
-
-        # For testing purposes
-        with open("primer_positions.txt", "w") as output:
-            for window in usable_windows:
-                    output.write("(" + str(window[0]) + "," + str(window[1]) + "," +
-                                 str(window[2]) + "," + str(window[3]) + ")")
-                    output.write("\n")
-
 
         # Return that list of indexes for good windows, to feed into GuideSearcher()
         primers = usable_windows
