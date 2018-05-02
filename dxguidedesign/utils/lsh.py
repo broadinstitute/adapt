@@ -118,7 +118,7 @@ class MinHashFamily:
                 logger.warning(("The k-mer size %d is large (> (1/2)x) "
                     "compared to the size of a sequence to hash (%d), which "
                     "might make it difficult for MinHash to find similar "
-                    "sequence"))
+                    "sequence"), self.kmer_size, len(s))
             kmer_hashes = []
             for i in range(len(s) - self.kmer_size + 1):
                 kmer = s[i:(i + self.kmer_size)]
