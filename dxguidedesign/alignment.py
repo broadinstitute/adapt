@@ -433,7 +433,7 @@ class AlignmentQuerier:
     """
 
     def __init__(self, alns, guide_length, dist_thres, k=15,
-                 reporting_prob=0.95):
+                 reporting_prob=0.7):
         """
         Args:
             alns: list of Alignment objects
@@ -445,10 +445,10 @@ class AlignmentQuerier:
                 hash functions for amplification; each hash function is then
                 the concatenation (h_1, h_2, ..., h_k)
             reporting_prob: ensure that any guide within dist_thres of
-                a queried guide is detected as such; this constructs
-                multiple hash functions (each of which is a concatenation
-                of k functions drawn from the family) to achieve this
-                probability
+                a queried guide is detected as such with this probability;
+                this constructs multiple hash functions (each of which is a
+                concatenation of k functions drawn from the family) to achieve
+                this probability
         """
         self.alns = alns
         self.guide_length = guide_length

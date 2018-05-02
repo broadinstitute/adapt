@@ -189,7 +189,8 @@ class TestAlignmentQuerier(unittest.TestCase):
         aln_c = alignment.Alignment.from_list_of_seqs(aln_c_seqs)
 
         alns = [aln_a, aln_b, aln_c]
-        self.aq = alignment.AlignmentQuerier(alns, 5, 1, k=3)
+        self.aq = alignment.AlignmentQuerier(alns, 5, 1, k=3,
+            reporting_prob=0.95)
         self.aq.setup()
 
     def test_frac_of_aln_hit_by_guide(self):
