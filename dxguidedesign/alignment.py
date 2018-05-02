@@ -108,7 +108,7 @@ class Alignment:
         return has_gap
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
-            missing_threshold=1):
+            guide_clusterer, missing_threshold=1):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -122,6 +122,11 @@ class Alignment:
                 constructing the guide
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
+            guide_clusterer: object of SequenceClusterer to use for clustering
+                potential guide sequences; it must have been initialized with
+                a family suitable for guides of length guide_length; if None,
+                then don't cluster, and instead draw a consensus from all
+                the sequences
             missing_threshold: do not construct a guide if the fraction of
                 sequences with missing data, at any position in the target
                 range, exceeds this threshold
@@ -154,12 +159,25 @@ class Alignment:
         if len(seqs_to_consider) == 0:
             raise CannotConstructGuideError("All sequences in region have a gap")
 
+        seq_rows = aln_for_guide.make_list_of_seqs(seqs_to_consider,
+            include_idx=True)
+
         # First construct the optimal guide to cover the sequences. This would be
         # a string x that maximizes the number of sequences s_i such that x and
         # s_i are equal to within 'mismatches' mismatches; it's called the "max
         # close string" or "close to most strings" problem. For simplicity, let's
-        # assume for now that the optimal guide is just the consensus sequence.
-        consensus = aln_for_guide.determine_consensus_sequence(seqs_to_consider)
+        # do the following: cluster the sequences (just the portion with
+        # potential guides) with LSH, get the biggest cluster, and take the
+        # consensus of that cluster.
+        if guide_clusterer is None:
+            # Don't cluster; instead, draw the consensus from all the
+            # sequences. Effectively, treat the largest cluster as consisting
+            # of all sequences to consider
+            largest_cluster_idxs = seqs_to_consider
+        else:
+            largest_cluster_idxs = guide_clusterer.largest_cluster(seq_rows)
+        consensus = aln_for_guide.determine_consensus_sequence(
+            largest_cluster_idxs)
         gd = consensus
 
         # If all that exists at a position in the alignment is 'N', then do
@@ -169,47 +187,68 @@ class Alignment:
         if 'N' in gd:
             raise CannotConstructGuideError("A position has all 'N'")
 
-        seq_rows = aln_for_guide.make_list_of_seqs(seqs_to_consider)
         def determine_binding_seqs(gd_sequence):
             binding_seqs = []
-            for seq_idx, seq in zip(seqs_to_consider, seq_rows):
+            for seq, seq_idx in seq_rows:
                 if guide.guide_binds(gd_sequence, seq, mismatches):
                     binding_seqs += [seq_idx]
             return binding_seqs
 
         binding_seqs = determine_binding_seqs(gd)
 
-        # It's possible that the consensus sequence (guide) does not bind to
-        # any of the sequences. In this case, simply select the first
-        # sequence from seq_row that has no ambiguity and make this the guide;
-        # this is guaranteed to have at least one binding sequence (itself)
+        # It's possible that the consensus sequence (guide) of a cluster does
+        # not bind to any of the sequences. In this case, simply select the first
+        # sequence from the largest cluster that has no ambiguity and make this
+        # the guide; this is guaranteed to have at least one binding sequence
+        # (itself)
         if len(binding_seqs) == 0:
-            for s in seq_rows:
+            suitable_guides = []
+            for s, idx in seq_rows:
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
                     # s has no ambiguity and is a suitable guide
-                    gd = s
+                    if idx in largest_cluster_idxs:
+                        # Pick s as the guide
+                        gd = s
+                        binding_seqs = determine_binding_seqs(gd)
+                        break
+                    else:
+                        suitable_guides += [s]
+            if len(binding_seqs) == 0:
+                # All sequences in the largest cluster have ambiguity, so now
+                # simply pick any suitable guide
+                if len(suitable_guides) > 0:
+                    gd = suitable_guides[0]
                     binding_seqs = determine_binding_seqs(gd)
-                    break
+
             # If it made it here, then all of the sequences have ambiguity
             # (so none are suitable guides); gd will remain the consensus and
             # binding_seqs will still be empty
 
         return (gd, binding_seqs)
 
-    def make_list_of_seqs(self, seqs_to_consider=None):
+    def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False):
         """Construct list of sequences from the alignment.
 
         Args:
             seqs_to_consider: collection of indices of sequences to use (if None,
                 use all)
+            include_idx: instead of a list of str giving the sequences in
+                the alignment, return a list of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is the index in the
+                alignment
 
         Returns:
-            list of str giving the sequences in the alignment
+            list of str giving the sequences in the alignment (or, list of
+            tuples if include_idx is True)
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
-        return [''.join(self.seqs[j][i] for j in range(self.seq_length))
-                for i in seqs_to_consider]
+        if include_idx:
+            return [(''.join(self.seqs[j][i] for j in range(self.seq_length)), i)
+                    for i in seqs_to_consider]
+        else:
+            return [''.join(self.seqs[j][i] for j in range(self.seq_length))
+                    for i in seqs_to_consider]
 
     def determine_consensus_sequence(self, seqs_to_consider=None):
         """Determine consensus sequence from the alignment.
@@ -311,6 +350,64 @@ class CannotConstructGuideError(Exception):
         self.value = value
     def __str__(self):
         return repr(self.value)
+
+
+class SequenceClusterer:
+    """Supports clustering sequences using LSH.
+
+    This is useful for approximating an optimal guide over a collection of
+    sequences.
+    """
+
+    def __init__(self, family, k=10):
+        """
+        Args:
+            family: object of hash family from which to draw hash functions
+            k: number of hash functions to draw from a family of
+                hash functions for amplification; each hash function is then
+                the concatenation (h_1, h_2, ..., h_k)
+        """
+        self.hash_concat = lsh.HashConcatenation(family, k)
+
+    def cluster(self, seqs_with_idx):
+        """Generate clusters of given sequences.
+
+        Args:
+            seqs_with_idx: collection of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is an identifier
+                of the sequence (e.g., index in an alignment); all idx
+                in the collection must be unique
+
+        Returns:
+            collection {S_i} where each S_i is a set of idx from
+            seqs_with_idx that form a cluster; the S_i's are disjoint and
+            their union is all the idx
+        """
+        def g(seq):
+            # Hash a sequence; since the output of self.hash_concat is a
+            # tuple of strings, we can join it into one string
+            return ''.join(self.hash_concat.g(seq))
+
+        d = defaultdict(set)
+        for seq, idx in seqs_with_idx:
+            d[g(seq)].add(idx)
+        return d.values()
+
+    def largest_cluster(self, seqs_with_idx):
+        """Find sequences that form the largest cluster.
+
+        Args:
+            seqs_with_idx: collection of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is an identifier
+                of the sequence (e.g., index in an alignment); all idx
+                in the collection must be unique
+
+        Returns:
+            set of idx from seqs_with_idx whose sequences form the largest
+            cluster
+        """
+        clusters = self.cluster(seqs_with_idx)
+        return max(clusters, key=lambda c: len(c))
 
 
 class AlignmentQuerier:

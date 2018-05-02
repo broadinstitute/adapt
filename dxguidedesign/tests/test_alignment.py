@@ -5,6 +5,7 @@ import random
 import unittest
 
 from dxguidedesign import alignment
+from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -14,6 +15,9 @@ class TestAlignment(unittest.TestCase):
     """
 
     def setUp(self):
+        # Set a random seed so hash functions are always the same
+        random.seed(0)
+
         self.a_seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.a = alignment.Alignment.from_list_of_seqs(self.a_seqs)
 
@@ -22,6 +26,8 @@ class TestAlignment(unittest.TestCase):
 
         self.c_seqs = ['ATCGAA', 'ATC-AA']
         self.c = alignment.Alignment.from_list_of_seqs(self.c_seqs)
+
+        self.gc = alignment.SequenceClusterer(lsh.HammingDistanceFamily(4), k=2)
 
     def test_make_list_of_seqs_a(self):
         self.assertEqual(self.a.make_list_of_seqs(),
@@ -64,62 +70,99 @@ class TestAlignment(unittest.TestCase):
         self.assertCountEqual(self.c.seqs_with_gap(), [1])
 
     def test_construct_guide_a(self):
-        self.assertEqual(self.a.construct_guide(0, 4, [0,1,2,3,4], 0),
+        self.assertEqual(self.a.construct_guide(0, 4, [0,1,2,3,4], 0, self.gc),
                          ('ATCG', [0,1,2,3]))
-        self.assertEqual(self.a.construct_guide(0, 4, [0,1,2,3,4], 1),
+        self.assertEqual(self.a.construct_guide(0, 4, [0,1,2,3,4], 1, self.gc),
                          ('ATCG', [0,1,2,3,4]))
-        self.assertEqual(self.a.construct_guide(0, 4, [4], 1),
+        self.assertEqual(self.a.construct_guide(0, 4, [4], 1, self.gc),
                          ('AGCG', [4]))
-        self.assertIn(self.a.construct_guide(0, 4, [2,3], 0),
+        self.assertIn(self.a.construct_guide(0, 4, [2,3], 0, self.gc),
                       [('ATCG', [2,3]), ('ACCG', [2,3])])
-        self.assertEqual(self.a.construct_guide(1, 4, [0,1,2,3,4], 0),
+        self.assertEqual(self.a.construct_guide(1, 4, [0,1,2,3,4], 0, self.gc),
                          ('TCGA', [0,1,2,3]))
-        self.assertEqual(self.a.construct_guide(2, 4, [0,1,2,3,4], 0),
+        self.assertEqual(self.a.construct_guide(2, 4, [0,1,2,3,4], 0, self.gc),
                          ('CGAA', [0,2,4]))
-        self.assertEqual(self.a.construct_guide(2, 4, [0,1,2,3,4], 1),
+        self.assertEqual(self.a.construct_guide(2, 4, [0,1,2,3,4], 1, self.gc),
                          ('CGAA', [0,1,2,3,4]))
-        self.assertEqual(self.a.construct_guide(2, 4, [0,1,2,3,4], 2),
+        self.assertEqual(self.a.construct_guide(2, 4, [0,1,2,3,4], 2, self.gc),
                          ('CGAA', [0,1,2,3,4]))
-        self.assertIn(self.a.construct_guide(2, 4, [0,1,2,3], 0),
+        self.assertIn(self.a.construct_guide(2, 4, [0,1,2,3], 0, self.gc),
                       [('CGAA', [0,2]), ('CGAT', [1,3])])
-        self.assertIn(self.a.construct_guide(2, 4, [0,1,2,3], 1),
+        self.assertIn(self.a.construct_guide(2, 4, [0,1,2,3], 1, self.gc),
                       [('CGAA', [0,1,2,3]), ('CGAT', [0,1,2,3])])
 
     def test_construct_guide_b(self):
-        self.assertEqual(self.b.construct_guide(0, 4, [0,1,2,3,4], 0),
+        # self.b has many Ns, which makes it difficult to write test cases
+        # when clustering (the clusters tend to consist of guides in
+        # which a position only has N); so pass None to guide_clusterer in
+        # construct_guide() to skip clustering
+        self.assertEqual(self.b.construct_guide(0, 4, [0,1,2,3,4], 0, None),
                          ('ATCG', [0,2]))
-        self.assertEqual(self.b.construct_guide(0, 4, [0,1,2,3,4], 1),
+        self.assertEqual(self.b.construct_guide(0, 4, [0,1,2,3,4], 1, None),
                          ('ATCG', [0,2]))
-        self.assertEqual(self.b.construct_guide(0, 4, [0,1,2,3,4], 2),
+        self.assertEqual(self.b.construct_guide(0, 4, [0,1,2,3,4], 2, None),
                          ('ATCG', [0,1,2,3,4]))
-        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 0),
+        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 0, None),
                          ('CGAA', [0]))
-        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 1),
+        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 1, None),
                          ('CGAT', [0]))
-        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 2),
+        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 2, None),
                          ('CGAT', [0,1,2,3]))
-        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 3),
+        self.assertEqual(self.b.construct_guide(2, 4, [0,1,2,3,4], 3, None),
                          ('CGAT', [0,1,2,3,4]))
-        self.assertEqual(self.b.construct_guide(2, 4, [2,4], 1),
+        self.assertEqual(self.b.construct_guide(2, 4, [2,4], 1, None),
                          ('CGAC', []))
-        self.assertEqual(self.b.construct_guide(2, 4, [2,4], 2),
+        self.assertEqual(self.b.construct_guide(2, 4, [2,4], 2, None),
                          ('CGAC', [2,4]))
-        self.assertIn(self.b.construct_guide(2, 4, [2,3,4], 2),
+        self.assertIn(self.b.construct_guide(2, 4, [2,3,4], 2, None),
                       [('CGAC', [2,4]), ('CGAT', [2,3])])
         with self.assertRaises(alignment.CannotConstructGuideError):
             # Should fail when 'N' is all that exists at a position
-            self.b.construct_guide(0, 4, [1,3,4], 0)
+            self.b.construct_guide(0, 4, [1,3,4], 0, None)
 
     def test_construct_guide_c(self):
         with self.assertRaises(alignment.CannotConstructGuideError):
             # Should fail when the only sequence given (1) has an indel
-            self.c.construct_guide(0, 4, [1], 0)
+            self.c.construct_guide(0, 4, [1], 0, self.gc)
 
     def test_sequences_bound_by_guide(self):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 0),
                          [0,1,2,3])
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 1),
                          [0,1,2,3,4])
+
+
+class TestSequenceClusterer(unittest.TestCase):
+    """Tests the SequenceClusterer class.
+    """
+
+    def setUp(self):
+        # Set a random seed so hash functions are always the same
+        random.seed(0)
+
+        family = lsh.HammingDistanceFamily(10)
+        self.sc = alignment.SequenceClusterer(family, k=3)
+
+    def test_cluster(self):
+        seqs = [('ATCGAAATAA', 4),
+                ('ATCGAAATAA', 5),
+                ('ATTGAAATAT', 1),
+                ('CTGGTCATAA', 2),
+                ('CTCGTCATAA', 3)]
+
+        clusters = self.sc.cluster(seqs)
+        self.assertCountEqual(clusters,
+            {frozenset({1, 4, 5}), frozenset({2, 3})})
+
+    def test_largest_cluster(self):
+        seqs = [('ATCGAAATAA', 4),
+                ('ATCGAAATAA', 5),
+                ('ATTGAAATAT', 1),
+                ('CTGGTCATAA', 2),
+                ('CTCGTCATAA', 3)]
+
+        largest_cluster = self.sc.largest_cluster(seqs)
+        self.assertCountEqual(largest_cluster, {1, 4, 5})
 
 
 class TestAlignmentQuerier(unittest.TestCase):

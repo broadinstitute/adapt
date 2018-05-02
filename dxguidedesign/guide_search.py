@@ -5,6 +5,7 @@ from collections import defaultdict
 import logging
 
 from dxguidedesign import alignment
+from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -69,6 +70,10 @@ class GuideSearcher:
 
         self.guide_is_suitable_fn = guide_is_suitable_fn
 
+        self.guide_clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length),
+            k=min(10, int(guide_length/2)))
+
     def _construct_guide_memoized(self, start, seqs_to_consider):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
@@ -88,7 +93,7 @@ class GuideSearcher:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
                         seqs_to_consider, self.mismatches,
-                        self.missing_threshold)
+                        self.guide_clusterer, self.missing_threshold)
             except alignment.CannotConstructGuideError:
                 p = None
             self._memoized_guides[start][seqs_to_consider_frozen] = p
