@@ -65,6 +65,10 @@ def main(args):
     if len(args.in_fasta) != len(args.out_tsv):
         raise Exception("Number output TSVs must match number of input FASTAs")
 
+    if (args.diff_id_mismatches or args.diff_id_frac) and not args.diff_id:
+        logger.warning(("--id-m or --id-frac is useless without also "
+            "specifying --id"))
+
     if args.diff_id:
         design_for_id(args)
     else:
