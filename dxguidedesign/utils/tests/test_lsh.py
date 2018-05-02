@@ -147,12 +147,14 @@ class TestHammingHashConcatenation(unittest.TestCase):
 
         self.family = lsh.HammingDistanceFamily(20)
         self.G = lsh.HashConcatenation(self.family, 100)
+        self.G_join = lsh.HashConcatenation(self.family, 100, join_as_str=True)
 
     def test_identical(self):
         # Identical a and b should collide even with large k
         a = 'ATCGATATGGGCACTGCTAT'
         b = str(a)
         self.assertEqual(self.G.g(a), self.G.g(b))
+        self.assertEqual(self.G_join.g(a), self.G_join.g(b))
 
     def test_similar(self):
         # Similar (but not identical) a and b should rarely
@@ -161,10 +163,14 @@ class TestHammingHashConcatenation(unittest.TestCase):
         b = 'ATCGACATGGGCACTGGTAT'
 
         collision_count = 0
+        collision_count_join = 0
         for i in range(10):
             if self.G.g(a) == self.G.g(b):
                 collision_count += 1
+            if self.G_join.g(a) == self.G_join.g(b):
+                collision_count_join += 1
         self.assertLess(collision_count, 2)
+        self.assertLess(collision_count_join, 2)
 
     def test_not_similar(self):
         a = 'ATCGATATGGGCACTGCTAT'
@@ -172,10 +178,14 @@ class TestHammingHashConcatenation(unittest.TestCase):
 
         # a and b should rarely collide
         collision_count = 0
+        collision_count_join = 0
         for i in range(10):
             if self.G.g(a) == self.G.g(b):
                 collision_count += 1
+            if self.G_join.g(a) == self.G_join.g(b):
+                collision_count_join += 1
         self.assertLess(collision_count, 2)
+        self.assertLess(collision_count_join, 2)
 
 
 class TestHammingNearNeighborLookup(unittest.TestCase):

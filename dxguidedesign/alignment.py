@@ -457,7 +457,7 @@ class AlignmentQuerier:
             return sum(1 if a[i] != b[i] else 0 for i in range(len(a)))
         family = lsh.HammingDistanceFamily(guide_length)
         self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, hamming_dist,
-            reporting_prob, hash_idx=0)
+            reporting_prob, hash_idx=0, join_concat_as_str=True)
         self.is_setup = False
 
     def setup(self):

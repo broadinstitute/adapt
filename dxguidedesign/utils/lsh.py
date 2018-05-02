@@ -146,9 +146,19 @@ class MinHashFamily:
 class HashConcatenation:
     """Concatenated hash functions (AND constructions)."""
 
-    def __init__(self, family, k):
+    def __init__(self, family, k, join_as_str=False):
+        """
+        Args:
+            family: hash family object; must have a make_h() function
+            k: number of hash functions to concatenate
+            join_as_str: if True, concatenate the output of the k hash
+                functions into a string before returning the concatenated
+                result; if False (default), simply return a tuple of the
+                k outputs
+        """
         self.family = family
         self.k = k
+        self.join_as_str = join_as_str
         self.hs = [family.make_h() for _ in range(k)]
 
     def g(self, x):
@@ -161,7 +171,10 @@ class HashConcatenation:
             concatenation of the result of the self.k random hash functions
             evaluated at x
         """
-        return tuple([h(x) for h in self.hs])
+        if self.join_as_str:
+            return ''.join(h(x) for h in self.hs)
+        else:
+            return tuple([h(x) for h in self.hs])
 
 
 class NearNeighborLookup:
@@ -172,7 +185,7 @@ class NearNeighborLookup:
     """
 
     def __init__(self, family, k, dist_thres, dist_fn, reporting_prob,
-                 hash_idx=None):
+                 hash_idx=None, join_concat_as_str=False):
         """
         This selects a number of hash tables (defined as L in the above
         reference) according to the strategy it outlines: we want any
@@ -195,6 +208,10 @@ class NearNeighborLookup:
                 be a point and if hash_idx is 0, it is hashed only based on A,
                 B and C simply store additional information along with A,
                 and queries are based on distance to A
+            join_concat_as_str: if True, have concatenated hash functions
+                return a string rather than tuple (this can be more
+                efficient, but works only if each hash function from the
+                family returns a string)
         """
         self.family = family
         self.k = k
@@ -217,7 +234,8 @@ class NearNeighborLookup:
         self.hashtables = []
         self.hashtables_g = []
         for j in range(self.num_tables):
-            g = HashConcatenation(self.family, self.k)
+            g = HashConcatenation(self.family, self.k,
+                join_as_str=join_concat_as_str)
             self.hashtables += [defaultdict(list)]
             self.hashtables_g += [g]
 
