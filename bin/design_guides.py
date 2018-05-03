@@ -79,6 +79,13 @@ def main(args):
     if (args.diff_id_mismatches or args.diff_id_frac) and not args.diff_id:
         logger.warning(("--id-m or --id-frac is useless without also "
             "specifying --id"))
+    if args.diff_id:
+        # Specify default values for --id-m and --id-frac (to allow the above
+        # check, do not do this with argparse directly)
+        if not args.diff_id_mismatches:
+            args.diff_id_mismatches = 2
+        if not args.diff_id_frac:
+            args.diff_id_frac = 0.05
 
     if args.diff_id:
         design_for_id(args)
@@ -136,14 +143,12 @@ if __name__ == "__main__":
               "identification, where each input FASTA is a "
               "group/taxon to identify with specificity; see "
               "--id-m and --id-thres for more"))
-    parser.add_argument('--id-m', dest="diff_id_mismatches",
-        type=int, default=2,
+    parser.add_argument('--id-m', dest="diff_id_mismatches", type=int,
         help=("Allow for this number of mismatches when determining whether "
               "a guide 'hits' a sequence in a group/taxon other than the "
               "for which it is being designed; higher values correspond to more "
               "specificity. Ignored when --id is not set."))
-    parser.add_argument('--id-frac', dest="diff_id_frac",
-        type=float, default=0.05,
+    parser.add_argument('--id-frac', dest="diff_id_frac", type=float,
         help=("Decide that a guide 'hits' a group/taxon if it 'hits' a "
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity. Ignored "
