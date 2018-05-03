@@ -49,14 +49,25 @@ def design_for_id(args):
             # alignments other than aln
             return aq.guide_is_specific_to_aln(guide, i, args.diff_id_frac)
 
+        # Mask alignment with index i (aln) from being reported in queries
+        # because we will likely get many guide sequences that hit aln, but we
+        # do not care about these for checking specificity
+        logger.info("Masking alignment %d from alignment queries", i)
+        aq.mask_aln(i)
+
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
         # specific to this alignment
+        logger.info("Finding guides for alignment %d", i)
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
                                         args.window_size, args.cover_frac,
                                         args.missing_thres,
                                         guide_is_suitable_fn=guide_is_specific)
         gs.find_guides_that_cover(args.out_tsv[i], sort=args.sort_out)
+
+        # i should no longer be masked from queries
+        logger.info("Unmasking alignment %d from alignment queries", i)
+        aq.unmask_all_aln()
 
 
 def main(args):

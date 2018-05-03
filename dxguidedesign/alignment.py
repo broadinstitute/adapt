@@ -477,6 +477,30 @@ class AlignmentQuerier:
                 self.nnr.add(pts)
         self.is_setup = True
 
+    def mask_aln(self, aln_idx):
+        """Mask an alignment from being reported in near neighbor lookup.
+
+        Note that masking an alignment A can be much more efficient than
+        leaving it in the near neighbor data structures and filtering
+        the output of queries that match A. This is especially true if
+        many neighbors of queries will be from A because the near neighbor
+        query function will spend a lot of time comparing the query against
+        guides (neighbors) from A.
+
+        Args:
+            aln_idx: index of alignment in self.alns to mask from lookups
+        """
+        # The alignment index is stored in index 1 of the tuple
+        mask_idx = 1
+
+        self.nnr.mask(mask_idx, aln_idx)
+
+    def unmask_all_aln(self):
+        """Unmask all alignments that may have been masked in the near neighbor
+        lookup.
+        """
+        self.nnr.unmask_all()
+
     def frac_of_aln_hit_by_guide(self, guide):
         """Calculate how many sequences in each alignment are hit by a query.
 
@@ -529,6 +553,8 @@ class AlignmentQuerier:
                 # This frac is for alignment aln_idx; it should be high and
                 # is irrelevant for specificity (but we won't check that
                 # it is high)
+                # Note that if aln_idx has already been masked, then this
+                # check should not be necessary (j should never equal aln_idx)
                 continue
             if frac > frac_hit_thres:
                 # guide hits too many sequences in alignment j

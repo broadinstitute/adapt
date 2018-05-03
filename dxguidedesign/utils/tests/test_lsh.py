@@ -223,6 +223,37 @@ class TestHammingNearNeighborLookup(unittest.TestCase):
             # Although e was not added, a query for it should return d
             self.assertCountEqual(nnl.query(e), {d})
 
+    def test_masking(self):
+        a = ('ATCGATATGGGCACTGCTAT', 1)
+        b = (str(a[0]), 2)  # identical to a
+        c = ('ATCGACATGGGCACTGGTAT', 3)  # similar to a
+        d = ('AGTTGTCACCCTTGACGATA', 1)  # not similar to a
+        e = ('AGTTGTCACCCTTGACGATA', 4)  # similar to d
+
+        for k in [2, 5, 10]:
+            nnl = lsh.NearNeighborLookup(self.family, k, self.dist_thres,
+                self.dist_fn, 0.95, hash_idx=0)
+            nnl.add([a, b, c, d])
+
+            # As with above test (test_varied_key()), the following should
+            # hold true:
+            self.assertCountEqual(nnl.query(a[0]), {a, b, c})
+            self.assertCountEqual(nnl.query(e[0]), {d})
+
+            # Mask where the second index of the tuple (index 1) is 1
+            nnl.mask(1, 1)
+
+            # Now a and d should not be reported
+            self.assertCountEqual(nnl.query(a[0]), {b, c})
+            self.assertCountEqual(nnl.query(e[0]), {})
+
+            # Unmask all
+            nnl.unmask_all()
+
+            # Now the same results as above (before masking) should hold
+            self.assertCountEqual(nnl.query(a[0]), {a, b, c})
+            self.assertCountEqual(nnl.query(e[0]), {d})
+
 
 class TestMinHashNearNeighborLookup(unittest.TestCase):
     """Tests approximate near neighbor lookups with MinHash."""

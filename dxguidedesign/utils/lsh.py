@@ -232,11 +232,13 @@ class NearNeighborLookup:
         # function for hashing into it (the functions are concatenations
         # of k hash functions from the given family)
         self.hashtables = []
+        self.hashtables_masked = []
         self.hashtables_g = []
         for j in range(self.num_tables):
             g = HashConcatenation(self.family, self.k,
                 join_as_str=join_concat_as_str)
-            self.hashtables += [defaultdict(list)]
+            self.hashtables += [defaultdict(set)]
+            self.hashtables_masked += [defaultdict(set)]
             self.hashtables_g += [g]
 
     def add(self, pts):
@@ -251,7 +253,59 @@ class NearNeighborLookup:
             g = self.hashtables_g[j].g
             for p in pts:
                 p_key = p[self.hash_idx] if self.hash_idx is not None else p
-                ht[g(p_key)].append(p)
+                ht[g(p_key)].add(p)
+
+    def mask(self, mask_idx, mask_val):
+        """Mask points from the hash tables that meet given criteria.
+
+        The points stored must be tuples. This moves the points that meet
+        the given criteria (according to mask_idx and mask_val) into separate
+        hash tables, so that they can be returned to the main hash tables
+        when they should be unmasked.
+
+        Args:
+            mask_idx: mask according to this index in a tuple specifying
+                a point
+            mask_val: mask all points p where p[mask_idx] == mask_val
+        """
+        for j in range(self.num_tables):
+            ht = self.hashtables[j]
+            ht_masked = self.hashtables_masked[j]
+            keys_to_del = set()
+            for k in ht.keys():
+                # Find all points p in bucket with key k to mask
+                p_to_mask = set()
+                for p in ht[k]:
+                    if p[mask_idx] == mask_val:
+                        p_to_mask.add(p)
+
+                for p in p_to_mask:
+                    # Delete p from bucket with key k
+                    ht[k].remove(p)
+                    # Add p to the mask hash table
+                    ht_masked[k].add(p)
+
+                if len(ht[k]) == 0:
+                    keys_to_del.add(k)
+            # Delete empty buckets in ht
+            for k in keys_to_del:
+                del ht[k]
+
+    def unmask_all(self):
+        """Unmask all points that have been masked.
+
+        This moves all points from the mask hash tables into the main
+        hash tables.
+        """
+        for j in range(self.num_tables):
+            ht = self.hashtables[j]
+            ht_masked = self.hashtables_masked[j]
+            for k in ht_masked.keys():
+                for p in ht_masked[k]:
+                    ht[k].add(p)
+
+            # Reset this mask hash table
+            self.hashtables_masked[j] = defaultdict(set)
 
     def query(self, q):
         """Find neighbors of a query point.
