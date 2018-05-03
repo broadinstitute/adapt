@@ -433,7 +433,7 @@ class AlignmentQuerier:
     """
 
     def __init__(self, alns, guide_length, dist_thres, k=15,
-                 reporting_prob=0.7):
+                 reporting_prob=0.95):
         """
         Args:
             alns: list of Alignment objects
