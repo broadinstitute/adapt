@@ -1,6 +1,7 @@
 """Tests for guide_search module.
 """
 
+import random
 import unittest
 
 from dxguidedesign import alignment
@@ -14,6 +15,9 @@ class TestGuideSearch(unittest.TestCase):
     """
 
     def setUp(self):
+        # Set a random seed so hash functions are always the same
+        random.seed(0)
+
         self.a_seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
         self.a = guide_search.GuideSearcher(self.a_aln, 4, 0, 5, 1.0, (1, 1, 100))
@@ -66,6 +70,17 @@ class TestGuideSearch(unittest.TestCase):
                        'GTATCATCCACNATGNACGG']
         self.h_aln = alignment.Alignment.from_list_of_seqs(self.h_seqs)
         self.h = guide_search.GuideSearcher(self.h_aln, 5, 1, 18, 1.0, (0.5, 0, 1))
+
+        # Skip guide clustering, which may not work well when the guides
+        # are so short in these tests
+        self.a.guide_clusterer = None
+        self.b.guide_clusterer = None
+        self.c.guide_clusterer = None
+        self.d.guide_clusterer = None
+        self.e.guide_clusterer = None
+        self.f.guide_clusterer = None
+        self.g.guide_clusterer = None
+        self.h.guide_clusterer = None
 
     def test_construct_guide_memoized_a(self):
         self.assertEqual(self.a._construct_guide_memoized(0, [0,1,2,3,4]),
@@ -148,3 +163,25 @@ class TestGuideSearch(unittest.TestCase):
         self.assertEqual(self.h._find_guides_that_cover_in_window(0),
                          set(['CAACG', 'CACCC']))
 
+    def test_guide_is_suitable_fn(self):
+        seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
+                'CTACCAAAAAACCTGCTAGGGGGCGTAC',
+                'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
+                'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+
+        # The best guide is 'AAAAA'
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['AAAAA']))
+
+        # Do not allow guides with 'AAA' in them
+        def f(guide):
+            if 'AAA' in guide:
+                return False
+            else:
+                return True
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100),
+            guide_is_suitable_fn=f)
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['CCCCC', 'GGGGG']))

@@ -34,7 +34,7 @@ python bin/design_guides.py -h
 
 The package includes an alignment of LASV sequences (S segment) from Sierra Leone. For example:
 ```
-python bin/design_guides.py examples/SLE_S.aligned.fasta guides.tsv -w 200 -l 28 -m 1 -p 0.95
+python bin/design_guides.py examples/SLE_S.aligned.fasta -o guides.tsv -w 200 -l 28 -m 1 -p 0.95
 ```
 reads an alignment from `examples/SLE_S.aligned.fasta`. From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest collection of guides that:
 * are all within the window

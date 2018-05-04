@@ -1,10 +1,12 @@
 """Structure(s) and functions for working with alignments of sequences.
 """
 
+from collections import defaultdict
 import logging
 import statistics
 
 from dxguidedesign.utils import guide
+from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -106,7 +108,7 @@ class Alignment:
         return has_gap
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
-            missing_threshold=1):
+            guide_clusterer, missing_threshold=1):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -120,6 +122,11 @@ class Alignment:
                 constructing the guide
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
+            guide_clusterer: object of SequenceClusterer to use for clustering
+                potential guide sequences; it must have been initialized with
+                a family suitable for guides of length guide_length; if None,
+                then don't cluster, and instead draw a consensus from all
+                the sequences
             missing_threshold: do not construct a guide if the fraction of
                 sequences with missing data, at any position in the target
                 range, exceeds this threshold
@@ -152,12 +159,25 @@ class Alignment:
         if len(seqs_to_consider) == 0:
             raise CannotConstructGuideError("All sequences in region have a gap")
 
+        seq_rows = aln_for_guide.make_list_of_seqs(seqs_to_consider,
+            include_idx=True)
+
         # First construct the optimal guide to cover the sequences. This would be
         # a string x that maximizes the number of sequences s_i such that x and
         # s_i are equal to within 'mismatches' mismatches; it's called the "max
         # close string" or "close to most strings" problem. For simplicity, let's
-        # assume for now that the optimal guide is just the consensus sequence.
-        consensus = aln_for_guide.determine_consensus_sequence(seqs_to_consider)
+        # do the following: cluster the sequences (just the portion with
+        # potential guides) with LSH, get the biggest cluster, and take the
+        # consensus of that cluster.
+        if guide_clusterer is None:
+            # Don't cluster; instead, draw the consensus from all the
+            # sequences. Effectively, treat the largest cluster as consisting
+            # of all sequences to consider
+            largest_cluster_idxs = seqs_to_consider
+        else:
+            largest_cluster_idxs = guide_clusterer.largest_cluster(seq_rows)
+        consensus = aln_for_guide.determine_consensus_sequence(
+            largest_cluster_idxs)
         gd = consensus
 
         # If all that exists at a position in the alignment is 'N', then do
@@ -167,47 +187,68 @@ class Alignment:
         if 'N' in gd:
             raise CannotConstructGuideError("A position has all 'N'")
 
-        seq_rows = aln_for_guide.make_list_of_seqs(seqs_to_consider)
         def determine_binding_seqs(gd_sequence):
             binding_seqs = []
-            for seq_idx, seq in zip(seqs_to_consider, seq_rows):
+            for seq, seq_idx in seq_rows:
                 if guide.guide_binds(gd_sequence, seq, mismatches):
                     binding_seqs += [seq_idx]
             return binding_seqs
 
         binding_seqs = determine_binding_seqs(gd)
 
-        # It's possible that the consensus sequence (guide) does not bind to
-        # any of the sequences. In this case, simply select the first
-        # sequence from seq_row that has no ambiguity and make this the guide;
-        # this is guaranteed to have at least one binding sequence (itself)
+        # It's possible that the consensus sequence (guide) of a cluster does
+        # not bind to any of the sequences. In this case, simply select the first
+        # sequence from the largest cluster that has no ambiguity and make this
+        # the guide; this is guaranteed to have at least one binding sequence
+        # (itself)
         if len(binding_seqs) == 0:
-            for s in seq_rows:
+            suitable_guides = []
+            for s, idx in seq_rows:
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
                     # s has no ambiguity and is a suitable guide
-                    gd = s
+                    if idx in largest_cluster_idxs:
+                        # Pick s as the guide
+                        gd = s
+                        binding_seqs = determine_binding_seqs(gd)
+                        break
+                    else:
+                        suitable_guides += [s]
+            if len(binding_seqs) == 0:
+                # All sequences in the largest cluster have ambiguity, so now
+                # simply pick any suitable guide
+                if len(suitable_guides) > 0:
+                    gd = suitable_guides[0]
                     binding_seqs = determine_binding_seqs(gd)
-                    break
+
             # If it made it here, then all of the sequences have ambiguity
             # (so none are suitable guides); gd will remain the consensus and
             # binding_seqs will still be empty
 
         return (gd, binding_seqs)
 
-    def make_list_of_seqs(self, seqs_to_consider=None):
+    def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False):
         """Construct list of sequences from the alignment.
 
         Args:
             seqs_to_consider: collection of indices of sequences to use (if None,
                 use all)
+            include_idx: instead of a list of str giving the sequences in
+                the alignment, return a list of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is the index in the
+                alignment
 
         Returns:
-            list of str giving the sequences in the alignment
+            list of str giving the sequences in the alignment (or, list of
+            tuples if include_idx is True)
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
-        return [''.join(self.seqs[j][i] for j in range(self.seq_length))
-                for i in seqs_to_consider]
+        if include_idx:
+            return [(''.join(self.seqs[j][i] for j in range(self.seq_length)), i)
+                    for i in seqs_to_consider]
+        else:
+            return [''.join(self.seqs[j][i] for j in range(self.seq_length))
+                    for i in seqs_to_consider]
 
     def determine_consensus_sequence(self, seqs_to_consider=None):
         """Determine consensus sequence from the alignment.
@@ -309,3 +350,214 @@ class CannotConstructGuideError(Exception):
         self.value = value
     def __str__(self):
         return repr(self.value)
+
+
+class SequenceClusterer:
+    """Supports clustering sequences using LSH.
+
+    This is useful for approximating an optimal guide over a collection of
+    sequences.
+    """
+
+    def __init__(self, family, k=10):
+        """
+        Args:
+            family: object of hash family from which to draw hash functions
+            k: number of hash functions to draw from a family of
+                hash functions for amplification; each hash function is then
+                the concatenation (h_1, h_2, ..., h_k)
+        """
+        self.hash_concat = lsh.HashConcatenation(family, k)
+
+    def cluster(self, seqs_with_idx):
+        """Generate clusters of given sequences.
+
+        Args:
+            seqs_with_idx: collection of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is an identifier
+                of the sequence (e.g., index in an alignment); all idx
+                in the collection must be unique
+
+        Returns:
+            collection {S_i} where each S_i is a set of idx from
+            seqs_with_idx that form a cluster; the S_i's are disjoint and
+            their union is all the idx
+        """
+        def g(seq):
+            # Hash a sequence; since the output of self.hash_concat is a
+            # tuple of strings, we can join it into one string
+            return ''.join(self.hash_concat.g(seq))
+
+        d = defaultdict(set)
+        for seq, idx in seqs_with_idx:
+            d[g(seq)].add(idx)
+        return d.values()
+
+    def largest_cluster(self, seqs_with_idx):
+        """Find sequences that form the largest cluster.
+
+        Args:
+            seqs_with_idx: collection of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is an identifier
+                of the sequence (e.g., index in an alignment); all idx
+                in the collection must be unique
+
+        Returns:
+            set of idx from seqs_with_idx whose sequences form the largest
+            cluster
+        """
+        clusters = self.cluster(seqs_with_idx)
+        return max(clusters, key=lambda c: len(c))
+
+
+class AlignmentQuerier:
+    """Supports queries for potential guide sequences across a set of
+    alignments.
+
+    This uses LSH to find near neighbors of queried guide sequences. It
+    constructs a data structure containing all subsequences in a given
+    collection of alignments (subsequences of length equal to the guide
+    length). These are sequences that could potentially be "hit" by a
+    guide. Then, on query, it performs approximate near neighbor search
+    and calculates the fraction of sequences in each alignment that are
+    hit by the queried guide.
+
+    This might use considerable memory, depending on the guide length,
+    reporting probability, etc. It currently stores in the data structure
+    a tuple (subsequence string s, index i of alignment with s, index j of
+    sequence in alignment i that has subsequence s). One option to reduce
+    memory usage would be to still key on the subsequence string, but
+    not store it in the tuple and, in its place, store the index x of the
+    subsequence in the j'th sequence of alignment i, so that the subsequence
+    can be found as: self.alns[i].seqs[x:(x + guide_length)][j].
+    """
+
+    def __init__(self, alns, guide_length, dist_thres, k=15,
+                 reporting_prob=0.95):
+        """
+        Args:
+            alns: list of Alignment objects
+            guide_length: length of guide sequences
+            dist_thres: detect a queried guide sequence as hitting a
+                sequence in an alignment if it is within a Hamming distance
+                of dist_thres
+            k: number of hash functions to draw from a family of
+                hash functions for amplification; each hash function is then
+                the concatenation (h_1, h_2, ..., h_k)
+            reporting_prob: ensure that any guide within dist_thres of
+                a queried guide is detected as such with this probability;
+                this constructs multiple hash functions (each of which is a
+                concatenation of k functions drawn from the family) to achieve
+                this probability
+        """
+        self.alns = alns
+        self.guide_length = guide_length
+
+        def hamming_dist(a, b):
+            return sum(1 if a[i] != b[i] else 0 for i in range(len(a)))
+        family = lsh.HammingDistanceFamily(guide_length)
+        self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, hamming_dist,
+            reporting_prob, hash_idx=0, join_concat_as_str=True)
+        self.is_setup = False
+
+    def setup(self):
+        """Build data structure for near neighbor lookup of guide sequences.
+        """
+        for aln_idx, aln in enumerate(self.alns):
+            # Convert aln.seqs from column-major order to row-major order
+            seqs = aln.make_list_of_seqs()
+
+            for seq_idx, seq in enumerate(seqs):
+                # Add all possible guide sequences g as:
+                #   (g, aln_idx, seq_idx)
+                pts = []
+                for j in range(aln.seq_length - self.guide_length + 1):
+                    g = seq[j:(j + self.guide_length)]
+                    pts += [(g, aln_idx, seq_idx)]
+                self.nnr.add(pts)
+        self.is_setup = True
+
+    def mask_aln(self, aln_idx):
+        """Mask an alignment from being reported in near neighbor lookup.
+
+        Note that masking an alignment A can be much more efficient than
+        leaving it in the near neighbor data structures and filtering
+        the output of queries that match A. This is especially true if
+        many neighbors of queries will be from A because the near neighbor
+        query function will spend a lot of time comparing the query against
+        guides (neighbors) from A.
+
+        Args:
+            aln_idx: index of alignment in self.alns to mask from lookups
+        """
+        # The alignment index is stored in index 1 of the tuple
+        mask_idx = 1
+
+        self.nnr.mask(mask_idx, aln_idx)
+
+    def unmask_all_aln(self):
+        """Unmask all alignments that may have been masked in the near neighbor
+        lookup.
+        """
+        self.nnr.unmask_all()
+
+    def frac_of_aln_hit_by_guide(self, guide):
+        """Calculate how many sequences in each alignment are hit by a query.
+
+        Args:
+            guide: guide sequence to query
+
+        Returns:
+            list of fractions f where f[i] gives the fraction of sequences
+            in the i'th alignment (self.alns[i]) that contain a subsequence
+            which is found to be a near neighbor of guide
+        """
+        if not self.is_setup:
+            raise Exception(("AlignmentQuerier.setup() must be called before "
+                "querying for near neighbors"))
+
+        assert len(guide) == self.guide_length
+
+        neighbors = self.nnr.query(guide)
+        seqs_hit_by_aln = defaultdict(set)
+        for neighbor in neighbors:
+            _, aln_idx, seq_idx = neighbor
+            seqs_hit_by_aln[aln_idx].add(seq_idx)
+
+        frac_of_aln_hit = []
+        for i, aln in enumerate(self.alns):
+            num_hit = len(seqs_hit_by_aln[i])
+            frac_hit = float(num_hit) / aln.num_sequences
+            frac_of_aln_hit += [frac_hit]
+        return frac_of_aln_hit
+
+    def guide_is_specific_to_aln(self, guide, aln_idx, frac_hit_thres):
+        """Determine if guide is specific to a particular alignment.
+
+        Note that this does *not* verify whether guide hits the alignment
+        with index aln_idx -- only that it does not hit all the others.
+
+        Args:
+            guide: guide sequence to check
+            aln_idx: check if guide is specific to the alignment with this
+                index (self.alns[aln_dx])
+            frac_hit_thres: say that a guide "hits" an alignment A if the
+                fraction of sequences in A that it hits is > this value
+
+        Returns:
+            True iff guide does not hit alignments other than aln_idx
+        """
+        frac_of_aln_hit = self.frac_of_aln_hit_by_guide(guide)
+        for j, frac in enumerate(frac_of_aln_hit):
+            if aln_idx == j:
+                # This frac is for alignment aln_idx; it should be high and
+                # is irrelevant for specificity (but we won't check that
+                # it is high)
+                # Note that if aln_idx has already been masked, then this
+                # check should not be necessary (j should never equal aln_idx)
+                continue
+            if frac > frac_hit_thres:
+                # guide hits too many sequences in alignment j
+                return False
+        return True
+
