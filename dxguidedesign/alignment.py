@@ -108,7 +108,7 @@ class Alignment:
         return has_gap
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
-            guide_clusterer, missing_threshold=1):
+            guide_clusterer, num_needed=None, missing_threshold=1):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -118,8 +118,8 @@ class Alignment:
         Args:
             start: start position in alignment at which to target
             guide_length: length of the guide
-            seqs_to_consider: collection of indices of sequences to use when
-                constructing the guide
+            seqs_to_consider: dict mapping universe group ID to collection of
+                indices to use when constructing the guide
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
             guide_clusterer: object of SequenceClusterer to use for clustering
@@ -127,6 +127,10 @@ class Alignment:
                 a family suitable for guides of length guide_length; if None,
                 then don't cluster, and instead draw a consensus from all
                 the sequences
+            num_needed: dict mapping universe group ID to the number of sequences
+                from the group that are left to cover in order to achieve
+                a desired coverage; these are used to help construct a
+                guide
             missing_threshold: do not construct a guide if the fraction of
                 sequences with missing data, at any position in the target
                 range, exceeds this threshold
@@ -135,7 +139,8 @@ class Alignment:
             tuple (x, y) where:
                 x is the sequence of the constructed guide
                 y is a list of indices of sequences (a subset of
-                    seqs_to_consider) to which the guide x will hybridize
+                    values in seqs_to_consider) to which the guide x will
+                    hybridize
             (Note that it is possible that x binds to no sequences and that
             y will be empty.)
         """
@@ -149,17 +154,21 @@ class Alignment:
 
         aln_for_guide = self.extract_range(start, start + guide_length)
 
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
         # Ignore any sequences in the alignment that have a gap in
         # this region
-        seqs_to_ignore = set(aln_for_guide.seqs_with_gap(seqs_to_consider))
-        seqs_to_consider = sorted(list(set(seqs_to_consider) - seqs_to_ignore))
+        seqs_to_ignore = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider[group_id].difference_update(seqs_to_ignore)
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
 
         # If every sequence in this region has a gap, then there are none
         # left to consider
-        if len(seqs_to_consider) == 0:
+        if len(all_seqs_to_consider) == 0:
             raise CannotConstructGuideError("All sequences in region have a gap")
 
-        seq_rows = aln_for_guide.make_list_of_seqs(seqs_to_consider,
+        seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
             include_idx=True)
 
         # First construct the optimal guide to cover the sequences. This would be
@@ -167,17 +176,35 @@ class Alignment:
         # s_i are equal to within 'mismatches' mismatches; it's called the "max
         # close string" or "close to most strings" problem. For simplicity, let's
         # do the following: cluster the sequences (just the portion with
-        # potential guides) with LSH, get the biggest cluster, and take the
-        # consensus of that cluster.
+        # potential guides) with LSH, pick a cluster (the "best" cluster)
+        # according to some heuristic, and take the consensus of that cluster.
         if guide_clusterer is None:
             # Don't cluster; instead, draw the consensus from all the
-            # sequences. Effectively, treat the largest cluster as consisting
+            # sequences. Effectively, treat the best cluster as consisting
             # of all sequences to consider
-            largest_cluster_idxs = seqs_to_consider
+            best_cluster_idxs = all_seqs_to_consider
+        elif num_needed is not None:
+            # Cluster and pick the cluster that contains the highest number
+            # of needed sequences to achieve the partial cover
+            clusters = guide_clusterer.cluster(seq_rows)
+            best_cluster_idxs, best_score = None, -1
+            for cluster_idxs in clusters:
+                # Calculate a score for this cluster by summing over the
+                # number of needed sequences that it contains, taken across
+                # the groups in the universe
+                score = 0
+                for group_id, needed in num_needed.items():
+                    contained_in_cluster = cluster_idxs & seqs_to_consider[group_id]
+                    score += min(needed, len(contained_in_cluster))
+                if score > best_score:
+                    best_cluster_idxs = cluster_idxs
+                    best_score = score
         else:
-            largest_cluster_idxs = guide_clusterer.largest_cluster(seq_rows)
+            # Cluster and pick the largest cluster (most number of sequences)
+            best_cluster_idxs = guide_clusterer.largest_cluster(seq_rows)
+
         consensus = aln_for_guide.determine_consensus_sequence(
-            largest_cluster_idxs)
+            best_cluster_idxs)
         gd = consensus
 
         # If all that exists at a position in the alignment is 'N', then do
@@ -206,7 +233,7 @@ class Alignment:
             for s, idx in seq_rows:
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
                     # s has no ambiguity and is a suitable guide
-                    if idx in largest_cluster_idxs:
+                    if idx in best_cluster_idxs:
                         # Pick s as the guide
                         gd = s
                         binding_seqs = determine_binding_seqs(gd)

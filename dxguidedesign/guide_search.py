@@ -79,29 +79,45 @@ class GuideSearcher:
             lsh.HammingDistanceFamily(guide_length),
             k=min(10, int(guide_length/2)))
 
-    def _construct_guide_memoized(self, start, seqs_to_consider):
+    def _construct_guide_memoized(self, start, seqs_to_consider,
+            num_needed=None):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
         Args:
             start: start position in alignment at which to target
-            seqs_to_consider: collection of indices of sequences to use when
-                constructing the guide
+            seqs_to_consider: dict mapping universe group ID to collection
+                of indices to use when constructing the guide
+            num_needed: dict mapping universe group ID to the number of
+                sequences from the group that are left to cover in order to
+                achieve the desired partial cover
 
         Returns:
             result of alignment.Alignment.construct_guide()
         """
-        seqs_to_consider_frozen = frozenset(seqs_to_consider)
+        # Make frozen version of both dicts; note that values in
+        # seqs_to_consider may be sets that need to be frozen
+        seqs_to_consider_frozen = set()
+        for k, v in seqs_to_consider.items():
+            seqs_to_consider_frozen.add((k, frozenset(v)))
+        seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
+        if num_needed is None:
+            num_needed_frozen = None
+        else:
+            num_needed_frozen = frozenset(num_needed.items())
+
+        key = (seqs_to_consider_frozen, num_needed_frozen)
         if (start in self._memoized_guides and
-                seqs_to_consider_frozen in self._memoized_guides[start]):
-            return self._memoized_guides[start][seqs_to_consider_frozen]
+                key in self._memoized_guides[start]):
+            return self._memoized_guides[start][key]
         else:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
                         seqs_to_consider, self.mismatches,
-                        self.guide_clusterer, self.missing_threshold)
+                        self.guide_clusterer, num_needed=num_needed,
+                        missing_threshold=self.missing_threshold)
             except alignment.CannotConstructGuideError:
                 p = None
-            self._memoized_guides[start][seqs_to_consider_frozen] = p
+            self._memoized_guides[start][key] = p
             return p
 
     def _cleanup_memoized_guides(self, pos):
@@ -153,11 +169,10 @@ class GuideSearcher:
         # fit completely within the window
         search_end = start + self.window_size - self.guide_length + 1
 
-        all_seqs_to_consider = set.union(*seqs_to_consider.values())
-
         max_guide_cover = None
         for pos in range(start, search_end):
-            p = self._construct_guide_memoized(pos, all_seqs_to_consider)
+            p = self._construct_guide_memoized(pos, seqs_to_consider,
+                num_needed)
 
             if p is not None and self.guide_is_suitable_fn is not None:
                 # Verify if the guide is suitable according to the given
