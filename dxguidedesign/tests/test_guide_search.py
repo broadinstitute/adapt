@@ -34,7 +34,7 @@ class TestGuideSearch(unittest.TestCase):
                        'GTATCAGCGGCCATGNAC']
         self.c_aln = alignment.Alignment.from_list_of_seqs(self.c_seqs)
         self.c = guide_search.GuideSearcher(self.c_aln, 5, 1, 14, 1.0, (1, 1, 100))
-        self.c_partial = guide_search.GuideSearcher(self.c_aln, 5, 1, 14, 0.5,
+        self.c_partial = guide_search.GuideSearcher(self.c_aln, 5, 1, 14, 0.6,
             (1, 1, 100))
 
         self.d_seqs = ['GTATACGG',
@@ -132,24 +132,40 @@ class TestGuideSearch(unittest.TestCase):
 
     def test_find_optimal_guide_in_window(self):
         self.assertEqual(self.c._find_optimal_guide_in_window(1,
-                            set([0,1,2,3,4,5])),
-                         ('ATCGG', set([0,1,2,4,5])))
+                            {0: set([0,1,2,3,4,5])}, {0: 6}),
+                         ('ATCGG', set([0,1,2,4,5]), 5, 5))
 
     def test_find_optimal_guide_in_window_at_end_boundary(self):
-        self.assertEqual(self.d._find_optimal_guide_in_window(0, set([0,1,2])),
-                         ('TACGG', set([0,1,2]), 3))
-        self.assertEqual(self.e._find_optimal_guide_in_window(0, set([0,1,2])),
-                         ('TACGG', set([0,1,2]), 3))
+        self.assertEqual(self.d._find_optimal_guide_in_window(0,
+                            {0: set([0,1,2])}, {0: 3}),
+                         ('TACGG', set([0,1,2]), 3, 3))
+        self.assertEqual(self.e._find_optimal_guide_in_window(0,
+                            {0: set([0,1,2])}, {0: 3}),
+                         ('TACGG', set([0,1,2]), 3, 3))
 
-    def test_find_optimal_guide_in_window(self):
-        self.assertEqual(self.f._find_optimal_guide_in_window(0, set([0,1,2])),
-                         (None, set(), None))
+    def test_find_optimal_guide_in_window_none(self):
+        self.assertEqual(self.f._find_optimal_guide_in_window(0,
+                            {0: set([0,1,2])}, {0: 3}),
+                         (None, set(), None, 0))
+
+    def test_find_optimal_guide_in_window_with_groups_1(self):
+        g_opt = self.g._find_optimal_guide_in_window(0,
+            {2017: {0, 2}, 2018: {1, 3}}, {2017: 0, 2018: 1})
+        gd, gd_covered, gd_start, gd_score = g_opt
+
+        # We only need to cover 1 sequence from the 2018 group ({1, 3});
+        # check that at least one of these is covered
+        self.assertTrue(1 in gd_covered or 3 in gd_covered)
+
+        # Since we only need to cover 1 sequence in total, the score
+        # should only be 1
+        self.assertEqual(gd_score, 1)
 
     def test_find_guides_that_cover_in_window(self):
         self.assertEqual(self.c._find_guides_that_cover_in_window(1),
                          set(['ATCGG', 'AAAAA']))
-        self.assertEqual(self.c_partial._find_guides_that_cover_in_window(1),
-                         set(['ATCGG']))
+        self.assertIn(self.c_partial._find_guides_that_cover_in_window(1),
+                      {frozenset(['ATCGG']), frozenset(['TCATC'])})
 
         self.assertIn(self.g._find_guides_that_cover_in_window(0),
                       [set(['TATCA', 'CCATG']), set(['CGGCC', 'TTAGG', 'CTATC'])])
