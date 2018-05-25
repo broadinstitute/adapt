@@ -29,6 +29,7 @@ To see the arguments that the program accepts, run:
 ```
 python bin/design_guides.py -h
 ```
+Note that output sequences are directly from the input sequences; guide sequences should be reverse complements of the output.
 
 ## Examples
 
@@ -46,6 +47,6 @@ It outputs a TSV file, `guides.tsv`, in which each row corresponds to a window i
 * `window-start`/`window-end`: start (inclusive) and end (exclusive) positions of this window in the alignment
 * `count`: the number of guide sequences for this window
 * `score`: a statistic between 0 and 1 that describes the redundancy of the guide sequences in capturing the input sequences (higher is better); it is meant to break ties between windows that have the same number of guide sequences, and is not intended to be compared between windows with different numbers of guide sequences
-* `guide-sequences`: the sequences of the guides for this window, separated by spaces
+* `target-sequences`: the sequences of the targets for this window from which to construct guides, separated by spaces (guides should be reverse complements of these sequences)
 
 By default, the rows in `guides.tsv` are sorted by the position of the window. If you include the `--sort` argument to the program, it will sort the rows in `guides.tsv` so that the "best" choices of windows are on top. It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.

@@ -398,7 +398,7 @@ class GuideSearcher:
         with open(out_fn, 'w') as outf:
             # Write a header
             outf.write('\t'.join(['window-start', 'window-end',
-                'count', 'score', 'guide-sequences']) + '\n')
+                'count', 'score', 'target-sequences']) + '\n')
 
             for guides_in_window in guide_collections:
                 start, count, score, guide_seqs = guides_in_window
