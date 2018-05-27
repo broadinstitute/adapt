@@ -226,3 +226,26 @@ class TestGuideSearch(unittest.TestCase):
             guide_is_suitable_fn=f)
         self.assertEqual(gs._find_guides_that_cover_in_window(0),
                          set(['CCCCC', 'GGGGG']))
+
+    def test_with_groups(self):
+        seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
+                'ATCTTTACGATGCTCTGGTTAGCCATCT',
+                'ATCTTATCGTTGGACTCGTAAGGCACCT',
+                'ATCAGATCGCTGAGCTTGTGAGACAGCT',
+                'TAGATCTAATCCCAGTATGGTACTTATC',
+                'TAGAACTAATGGCAGTTTGGTCCTTGTC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+
+        # 4 guides are needed (3 for the first 4 sequences, 1 for the last
+        # 2 sequences)
+        self.assertEqual(len(gs._find_guides_that_cover_in_window(0)), 4)
+
+        # Divide into groups, wanting to cover more of group 2018; now
+        # we only need 1 guide from group 2010 and 1 from group 2018, so just
+        # 2 guides are needed
+        seq_groups = {2010: {0, 1, 2, 3}, 2018: {4, 5}}
+        cover_frac = {2010: 0.1, 2018: 1.0}
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, cover_frac, (1, 1, 100),
+            seq_groups=seq_groups)
+        self.assertEqual(len(gs._find_guides_that_cover_in_window(0)), 2)

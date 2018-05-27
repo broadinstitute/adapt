@@ -20,7 +20,8 @@ class GuideSearcher:
     """
 
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
-                 missing_data_params, guide_is_suitable_fn=None):
+                 missing_data_params, guide_is_suitable_fn=None,
+                 seq_groups=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -30,7 +31,7 @@ class GuideSearcher:
             window_size: length of window such that a set of guides are only selected
                 if they are all within a window of this length
             cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
-                 a guide
+                 a guide; see group_seqs
             missing_data_params: tuple (a, b, c) specifying to not attempt to
                 design guides overlapping sites where the fraction of
                 sequences with missing data is > min(a, max(b, c*m), where m is
@@ -39,12 +40,17 @@ class GuideSearcher:
             guide_is_suitable_fn: if set, the value of this argument is a
                 function f(x) such that this will only construct a guide x
                 for which f(x) is True
+            seq_groups: dict that maps group ID to collection of sequences in
+                that group. If set, cover_frac must also be a dict that maps
+                group ID to the fraction of sequences in that group that
+                must be 'captured' by a guide. If None, then do not divide
+                the sequences into groups.
         """
         if window_size > aln.seq_length:
             raise ValueError("window_size must be less than the length of the alignment")
         if guide_length > window_size:
             raise ValueError("guide_length must be less than the window size")
-        if cover_frac <= 0 or cover_frac > 1:
+        if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
 
         self.aln = aln
@@ -52,11 +58,33 @@ class GuideSearcher:
         self.mismatches = mismatches
         self.window_size = window_size
 
-        # Setup a single dummy group containing all sequences, and make
-        # cover_frac be the fraction of sequences that must be covered in
-        # this group
-        self.seq_groups = {0: set(range(self.aln.num_sequences))}
-        self.cover_frac = {0: cover_frac}
+        if seq_groups is not None:
+            # Check that each group has a valid cover fraction
+            for group_id in seq_groups.keys():
+                assert group_id in cover_frac
+                if cover_frac[group_id] <= 0 or cover_frac[group_id] > 1:
+                    raise ValueError(("cover_frac for group %d must be "
+                        "in (0,1]") % group_id)
+
+            # Check that each sequence is only in one group
+            seqs_seen = set()
+            for group_id, seqs in seq_groups.items():
+                for s in seqs:
+                    assert s not in seqs_seen
+                seqs_seen.update(seqs)
+
+            # Check that each sequence is in a group
+            for i in range(self.aln.num_sequences):
+                assert i in seqs_seen
+
+            self.seq_groups = seq_groups
+            self.cover_frac = cover_frac
+        else:
+            # Setup a single dummy group containing all sequences, and make
+            # cover_frac be the fraction of sequences that must be covered in
+            # this group
+            self.seq_groups = {0: set(range(self.aln.num_sequences))}
+            self.cover_frac = {0: cover_frac}
 
         # Because calls to alignment.Alignment.construct_guide() are expensive
         # and are repeated very often, memoize the output
