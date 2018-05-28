@@ -100,18 +100,18 @@ if __name__ == "__main__":
         help=("Path to input FASTA. More than one can be "
               "given; without --id specified, this just "
               "outputs guides independently for each alignment"))
-    parser.add_argument('-o', '--out_tsv', nargs='+', required=True,
+    parser.add_argument('-o', '--out-tsv', nargs='+', required=True,
         help=("Path to output TSV. If more than one input "
               "FASTA is given, the same number of output TSVs "
               "must be given; each output TSV corresponds to "
               "an input FASTA."))
 
-    parser.add_argument('-l', '--guide_length', type=int, default=28,
+    parser.add_argument('-l', '--guide-length', type=int, default=28,
         help="Length of guide to construct")
     parser.add_argument('-m', '--mismatches', type=int, default=0,
         help=("Allow for this number of mismatches when "
               "determining whether a guide covers a sequence"))
-    parser.add_argument('-w', '--window_size', type=int, default=200,
+    parser.add_argument('-w', '--window-size', type=int, default=200,
         help=("Ensure that selected guides are all within a "
               "window of this size"))
 
@@ -122,7 +122,7 @@ if __name__ == "__main__":
             return fval
         else:
             raise argparse.ArgumentTypeError("%s is an invalid -p value" % val)
-    parser.add_argument('-p', '--cover_frac', type=check_cover_frac, default=1.0,
+    parser.add_argument('-p', '--cover-frac', type=check_cover_frac, default=1.0,
         help=("The fraction of sequences that must be covered "
               "by the selected guides"))
 
