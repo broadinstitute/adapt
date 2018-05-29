@@ -3,39 +3,89 @@
 
 import argparse
 import logging
+import re
 
 from dxguidedesign import alignment
 from dxguidedesign import guide_search
 from dxguidedesign.utils import log
 from dxguidedesign.utils import seq_io
+from dxguidedesign.utils import year_cover
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 logger = logging.getLogger(__name__)
 
 
+def seqs_grouped_by_year(seqs, args):
+    years_fn, year_highest_cover, year_cover_decay = args.cover_by_year_decay
+
+    # Map sequence names to index in alignment, and construct alignment
+    seq_list = []
+    seq_idx = {}
+    for i, (name, seq) in enumerate(seqs.items()):
+        seq_idx[name] = i
+        seq_list += [seq]
+    aln = alignment.Alignment.from_list_of_seqs(seq_list)
+
+    # Read sequences for each year, and check that every sequence has
+    # a year
+    years = year_cover.read_years(years_fn)
+    all_seqs_with_year = set.union(*years.values())
+    for seq in seq_idx.keys():
+        if seq not in all_seqs_with_year:
+            raise Exception("Unknown year for sequence '%s'" % seq)
+
+    # Convert years dict to map to indices rather than sequence names
+    years_idx = {}
+    for year in years.keys():
+        # Skip names not in seq_idx because the years file may contain
+        # sequences that are not in seqs
+        years_idx[year] = set(seq_idx[name] for name in years[year]
+            if name in seq_idx)
+
+    # Construct desired partial cover for each year
+    cover_frac = year_cover.construct_partial_covers(
+        years.keys(), year_highest_cover, args.cover_frac, year_cover_decay)
+
+    return aln, years_idx, cover_frac
+
 def design_independently(args):
     # Treat each alignment independently
     for in_fasta, out_tsv in zip(args.in_fasta, args.out_tsv):
         # Read the sequences and make an Alignment object
         seqs = seq_io.read_fasta(in_fasta)
-        aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+        if args.cover_by_year_decay:
+            aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args)
+        else:
+            aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+            seq_groups = None
+            cover_frac = args.cover_frac
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
-                                        args.window_size, args.cover_frac,
-                                        args.missing_thres)
+                                        args.window_size, cover_frac,
+                                        args.missing_thres,
+                                        seq_groups=seq_groups)
         gs.find_guides_that_cover(out_tsv, sort=args.sort_out)
 
 
 def design_for_id(args):
     # Create an alignment object for each input
     alns = []
+    seq_groups_per_input = []
+    cover_frac_per_input = []
     for in_fasta in args.in_fasta:
         seqs = seq_io.read_fasta(in_fasta)
-        aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+        if args.cover_by_year_decay:
+            aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args)
+        else:
+            aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+            seq_groups = None
+            cover_frac = args.cover_frac
         alns += [aln]
+        seq_groups_per_input += [seq_groups]
+        cover_frac_per_input += [cover_frac]
 
     logger.info(("Constructing data structure to allow differential "
         "identification"))
@@ -44,6 +94,9 @@ def design_for_id(args):
     aq.setup()
 
     for i, aln in enumerate(alns):
+        seq_groups = seq_groups_per_input[i]
+        cover_frac = cover_frac_per_input[i]
+
         def guide_is_specific(guide):
             # Returns True iff guide does not hit too many sequences in
             # alignments other than aln
@@ -61,9 +114,10 @@ def design_for_id(args):
         # specific to this alignment
         logger.info("Finding guides for alignment %d (of %d)", i + 1, len(alns))
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
-                                        args.window_size, args.cover_frac,
+                                        args.window_size, cover_frac,
                                         args.missing_thres,
-                                        guide_is_suitable_fn=guide_is_specific)
+                                        guide_is_suitable_fn=guide_is_specific,
+                                        seq_groups=seq_groups)
         gs.find_guides_that_cover(args.out_tsv[i], sort=args.sort_out)
 
         # i should no longer be masked from queries
@@ -125,6 +179,35 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--cover-frac', type=check_cover_frac, default=1.0,
         help=("The fraction of sequences that must be covered "
               "by the selected guides"))
+
+    class ParseCoverDecay(argparse.Action):
+        # This is needed because --cover-by-year-decay has multiple args
+        # of different types
+        def __call__(self, parser, namespace, values, option_string=None):
+            a, b, c = values
+            # Check that b is a valid year
+            year_pattern = re.compile('^(\d{4})$')
+            if year_pattern.match(b):
+                bi = int(b)
+            else:
+                raise argparse.ArgumentTypeError(("%s is an invalid 4-digit "
+                    "year") % b)
+            # Check that c is a valid decay
+            cf = float(c)
+            if cf <= 0 or cf >= 1:
+                raise argparse.ArgumentTypeError(("%s is an invalid decay; it "
+                    "must be a float in (0,1)" % c))
+            setattr(namespace, self.dest, (a, bi, cf))
+    parser.add_argument('--cover-by-year-decay', nargs=3, action=ParseCoverDecay,
+        help=("<A> <B> <C>; if set, group input sequences by year and set a "
+              "desired partial cover for each year (fraction of sequences that "
+              "must be covered by guides) as follows: A is a tsv giving "
+              "a year for each input sequence (col 1 is sequence name "
+              "matching that in the input FASTA, col 2 is year). All years "
+              ">= B receive a desired cover fraction of COVER_FRAC "
+              "(specified with -p or --cover-frac). Each preceding year "
+              "receives a desired cover fraction that decays by C -- i.e., "
+              "year n is given C*(desired cover fraction of year n+1)"))
 
     parser.add_argument('--sort', dest='sort_out', action='store_true',
         help=("If set, sort output TSV by number of guides "
