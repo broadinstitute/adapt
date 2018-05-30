@@ -20,7 +20,8 @@ class GuideSearcher:
     """
 
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
-                 missing_data_params, guide_is_suitable_fn=None):
+                 missing_data_params, guide_is_suitable_fn=None,
+                 seq_groups=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -30,7 +31,7 @@ class GuideSearcher:
             window_size: length of window such that a set of guides are only selected
                 if they are all within a window of this length
             cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
-                 a guide
+                 a guide; see group_seqs
             missing_data_params: tuple (a, b, c) specifying to not attempt to
                 design guides overlapping sites where the fraction of
                 sequences with missing data is > min(a, max(b, c*m), where m is
@@ -39,19 +40,51 @@ class GuideSearcher:
             guide_is_suitable_fn: if set, the value of this argument is a
                 function f(x) such that this will only construct a guide x
                 for which f(x) is True
+            seq_groups: dict that maps group ID to collection of sequences in
+                that group. If set, cover_frac must also be a dict that maps
+                group ID to the fraction of sequences in that group that
+                must be 'captured' by a guide. If None, then do not divide
+                the sequences into groups.
         """
         if window_size > aln.seq_length:
             raise ValueError("window_size must be less than the length of the alignment")
         if guide_length > window_size:
             raise ValueError("guide_length must be less than the window size")
-        if cover_frac <= 0 or cover_frac > 1:
+        if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
 
         self.aln = aln
         self.guide_length = guide_length
         self.mismatches = mismatches
         self.window_size = window_size
-        self.cover_frac = cover_frac
+
+        if seq_groups is not None:
+            # Check that each group has a valid cover fraction
+            for group_id in seq_groups.keys():
+                assert group_id in cover_frac
+                if cover_frac[group_id] <= 0 or cover_frac[group_id] > 1:
+                    raise ValueError(("cover_frac for group %d must be "
+                        "in (0,1]") % group_id)
+
+            # Check that each sequence is only in one group
+            seqs_seen = set()
+            for group_id, seqs in seq_groups.items():
+                for s in seqs:
+                    assert s not in seqs_seen
+                seqs_seen.update(seqs)
+
+            # Check that each sequence is in a group
+            for i in range(self.aln.num_sequences):
+                assert i in seqs_seen
+
+            self.seq_groups = seq_groups
+            self.cover_frac = cover_frac
+        else:
+            # Setup a single dummy group containing all sequences, and make
+            # cover_frac be the fraction of sequences that must be covered in
+            # this group
+            self.seq_groups = {0: set(range(self.aln.num_sequences))}
+            self.cover_frac = {0: cover_frac}
 
         # Because calls to alignment.Alignment.construct_guide() are expensive
         # and are repeated very often, memoize the output
@@ -74,29 +107,45 @@ class GuideSearcher:
             lsh.HammingDistanceFamily(guide_length),
             k=min(10, int(guide_length/2)))
 
-    def _construct_guide_memoized(self, start, seqs_to_consider):
+    def _construct_guide_memoized(self, start, seqs_to_consider,
+            num_needed=None):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
         Args:
             start: start position in alignment at which to target
-            seqs_to_consider: collection of indices of sequences to use when
-                constructing the guide
+            seqs_to_consider: dict mapping universe group ID to collection
+                of indices to use when constructing the guide
+            num_needed: dict mapping universe group ID to the number of
+                sequences from the group that are left to cover in order to
+                achieve the desired partial cover
 
         Returns:
             result of alignment.Alignment.construct_guide()
         """
-        seqs_to_consider_frozen = frozenset(seqs_to_consider)
+        # Make frozen version of both dicts; note that values in
+        # seqs_to_consider may be sets that need to be frozen
+        seqs_to_consider_frozen = set()
+        for k, v in seqs_to_consider.items():
+            seqs_to_consider_frozen.add((k, frozenset(v)))
+        seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
+        if num_needed is None:
+            num_needed_frozen = None
+        else:
+            num_needed_frozen = frozenset(num_needed.items())
+
+        key = (seqs_to_consider_frozen, num_needed_frozen)
         if (start in self._memoized_guides and
-                seqs_to_consider_frozen in self._memoized_guides[start]):
-            return self._memoized_guides[start][seqs_to_consider_frozen]
+                key in self._memoized_guides[start]):
+            return self._memoized_guides[start][key]
         else:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
                         seqs_to_consider, self.mismatches,
-                        self.guide_clusterer, self.missing_threshold)
+                        self.guide_clusterer, num_needed=num_needed,
+                        missing_threshold=self.missing_threshold)
             except alignment.CannotConstructGuideError:
                 p = None
-            self._memoized_guides[start][seqs_to_consider_frozen] = p
+            self._memoized_guides[start][key] = p
             return p
 
     def _cleanup_memoized_guides(self, pos):
@@ -111,7 +160,8 @@ class GuideSearcher:
         if pos in self._memoized_guides:
             del self._memoized_guides[pos]
 
-    def _find_optimal_guide_in_window(self, start, seqs_to_consider):
+    def _find_optimal_guide_in_window(self, start, seqs_to_consider,
+            num_needed):
         """Find the guide that hybridizes to the most sequences in a given window.
 
         This considers each position within the specified window at which a guide
@@ -123,15 +173,21 @@ class GuideSearcher:
         Args:
             start: starting position of the window; the window spans [start,
                 start + self.window_size)
-            seqs_to_consider: collection of indices of sequences to use when selecting
-                a guide
+            seqs_to_consider: dict mapping universe group ID to collection of
+                indices of sequences to use when selecting a guide
+            num_needed: dict mapping universe group ID to the number of
+                sequences from the group that are left to cover in order to
+                achieve the desired (partial) cover
 
         Returns:
-            tuple (x, y, z) where:
-                x is the sequence of the selected guide
-                y is a collection of indices of sequences (a subset of
-                    seqs_to_consider) to which guide x will hybridize
-                z is the starting position of x in the alignment
+            tuple (w, x, y, z) where:
+                w is the sequence of the selected guide
+                x is a collection of indices of sequences (a subset of
+                    sequence IDs in seqs_to_consider) to which guide w will
+                    hybridize
+                y is the starting position of w in the alignment
+                z is a score representing the amount of the remaining
+                    universe that w covers
         """
         assert start >= 0
         assert start + self.window_size <= self.aln.seq_length
@@ -143,7 +199,8 @@ class GuideSearcher:
 
         max_guide_cover = None
         for pos in range(start, search_end):
-            p = self._construct_guide_memoized(pos, seqs_to_consider)
+            p = self._construct_guide_memoized(pos, seqs_to_consider,
+                num_needed)
 
             if p is not None and self.guide_is_suitable_fn is not None:
                 # Verify if the guide is suitable according to the given
@@ -155,17 +212,29 @@ class GuideSearcher:
             if p is None:
                 # There is no suitable guide at pos
                 if max_guide_cover is None:
-                    max_guide_cover = (None, set(), None)
+                    max_guide_cover = (None, set(), None, 0)
             else:
                 gd, covered_seqs = p
                 covered_seqs = set(covered_seqs)
+
+                # Calculate a score for this guide based on the partial
+                # coverage it achieves across the groups
+                score = 0
+                for group_id, needed in num_needed.items():
+                    covered_in_group = covered_seqs & seqs_to_consider[group_id]
+
+                    # needed is the number of elements that have yet to be
+                    # covered in order to obtain the desired partial cover
+                    # in group_id; there is no reason to favor a guide that
+                    # covers more than needed
+                    score += min(needed, len(covered_in_group))
+
                 if max_guide_cover is None:
-                    max_guide_cover = (gd, covered_seqs, pos)
+                    max_guide_cover = (gd, covered_seqs, pos, score)
                 else:
-                    if len(covered_seqs) > len(max_guide_cover[1]):
-                        # gd covers the most sequences of all guides so far in
-                        # this window
-                        max_guide_cover = (gd, covered_seqs, pos)
+                    if score > max_guide_cover[3]:
+                        # gd has the highest score
+                        max_guide_cover = (gd, covered_seqs, pos, score)
         return max_guide_cover
 
     def _find_guides_that_cover_in_window(self, start):
@@ -201,6 +270,7 @@ class GuideSearcher:
         that it is NP-hard to approximate the problem to within c*ln(|U|)
         for any 0 < c < 1. Thus, this is a very good approximation given
         what is possible.
+
         Here, we generalize the above case to support a partial set cover;
         rather than looping while the universe is not covered, we instead
         loop until we have covered as much as the universe as we desire to
@@ -208,7 +278,20 @@ class GuideSearcher:
         universe to cover). The paper "Improved performance of the greedy
         algorithm for the minimum set cover and minimum partial cover
         problems" (Petr Slavik) provides guarantees on the approximation to
-        the partial cover.
+        the partial cover. We select a set S_i on each iteration as the one
+        that maximizes min(r, S_i \intersect U) where r is the number of
+        elements left to cover to achieve the desired partial cover.
+
+        We also generalize this to support a "multi-universe" -- i.e.,
+        where the universe is divided into groups and we want to achieve
+        a particular partial cover for each group. For example, each group
+        may encompass sequences from a particular year. We iterate until
+        we have covered as much of each group in the universe as we desire
+        to cover. We select a set S_i on each iteration as the one that
+        maximizes as score, where the score is calculated by summing across
+        each group g the value min(r_g, S_i \intersect U_g) where r_g
+        is the number of elements left to cover in g to achieve the desired
+        partial cover, and U_g is the universe left to cover for group g.
 
         In this problem, the universe U is the set of all sequences (i.e.,
         each element represents a sequence). Each subset S_i of U represents
@@ -238,24 +321,35 @@ class GuideSearcher:
         Returns:
             collection of str representing guide sequences that were selected
         """
-        # Create the universe, which is all the input sequences
-        universe = set(range(self.aln.num_sequences))
+        # Create the universe, which is all the input sequences for each
+        # group
+        universe = {}
+        for group_id, seq_ids in self.seq_groups.items():
+            universe[group_id] = set(seq_ids)
 
-        num_that_can_be_uncovered = int(len(universe) -
-                                        self.cover_frac * len(universe))
-        # Above, use int(..) to take the floor. Also, expand out
-        # len(universe) rather than use int((1.0-self.cover_frac)*len(universe))
-        # due to precision errors in Python -- e.g., int((1.0-0.8)*5) yields 0
-        # on some machines.
-        num_left_to_cover = len(universe) - num_that_can_be_uncovered
+        num_that_can_be_uncovered = {}
+        num_left_to_cover = {}
+        for group_id, seq_ids in universe.items():
+            num_that_can_be_uncovered[group_id] = int(len(seq_ids) -
+                self.cover_frac[group_id] * len(seq_ids))
+            # Above, use int(..) to take the floor. Also, expand out
+            # len(seq_ids) rather than use
+            # int((1.0-self.cover_frac[.])*len(seq_ids)) due to precision
+            # errors in Python -- e.g., int((1.0-0.8)*5) yields 0
+            # on some machines.
+
+            num_left_to_cover[group_id] = (len(seq_ids) -
+                num_that_can_be_uncovered[group_id])
 
         guides_in_cover = set()
-        # Keep iterating until desired partial cover is obtained
-        while num_left_to_cover > 0:
+        # Keep iterating until desired partial cover is obtained for all
+        # groups
+        while [True for group_id in universe.keys()
+               if num_left_to_cover[group_id] > 0]:
             # Find the guide that hybridizes to the most sequences, among
             # those that are not in the cover
-            gd, gd_covered_seqs, gd_pos = self._find_optimal_guide_in_window(
-                start, universe)
+            gd, gd_covered_seqs, gd_pos, gd_score = self._find_optimal_guide_in_window(
+                start, universe, num_left_to_cover)
 
             if gd is None or len(gd_covered_seqs) == 0:
                 # No suitable guides could be constructed within the window
@@ -264,10 +358,13 @@ class GuideSearcher:
                     "more are needed to achieve desired coverage") % start)
 
             # The set representing gd goes into the set cover, and all of the
-            # sequences it hybridizes to are removed from the universe
+            # sequences it hybridizes to are removed from their group in the
+            # universe
             guides_in_cover.add(gd)
-            universe.difference_update(gd_covered_seqs)
-            num_left_to_cover = max(0, len(universe) - num_that_can_be_uncovered)
+            for group_id in universe.keys():
+                universe[group_id].difference_update(gd_covered_seqs)
+                num_left_to_cover[group_id] = max(0,
+                    len(universe[group_id]) - num_that_can_be_uncovered[group_id])
 
             # Save the position of this guide in case the guide needs to be
             # revisited
