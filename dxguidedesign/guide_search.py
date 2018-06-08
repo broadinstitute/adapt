@@ -3,6 +3,7 @@
 
 from collections import defaultdict
 import logging
+import math
 
 from dxguidedesign import alignment
 from dxguidedesign.utils import lsh
@@ -388,9 +389,11 @@ class GuideSearcher:
 
         Because this is loosely defined, we use a crude heuristic to
         calculate this score. For a set of guides S, the score is the
-        average fraction of sequences that are covered by guides in S
-        (i.e., the sum of the fraction of sequences covered by each guide
-        divided by the size of S). The score is a value in [0, 1].
+        average fraction of sequences that need to be covered (as specified
+        by cover_frac) that are covered by guides in S, where the average
+        is taken over the guides. That is, it is the sum of the fraction of
+        needed sequences covered by each guide in S divided by the size
+        of S. The score is a value in [0, 1].
 
         The score is meant to be compared across sets of guides that
         are the same size (i.e., have the same number of guides). It
@@ -403,14 +406,41 @@ class GuideSearcher:
         Returns:
             score of guides, as defined above
         """
+        # For each group, calculate the number of sequences in the group
+        # that ought to be covered and also store the seq_ids as a set
+        num_needed_to_cover_in_group = {}
+        total_num_needed_to_cover = 0
+        for group_id, seq_ids in self.seq_groups.items():
+            num_needed = math.ceil(self.cover_frac[group_id] * len(seq_ids))
+            num_needed_to_cover_in_group[group_id] = (num_needed, set(seq_ids))
+            total_num_needed_to_cover += num_needed
+
+        # For each guide gd_seq, calculate the fraction of sequences that
+        # need to be covered that are covered by gd_seq
         sum_of_frac_of_seqs_bound = 0
         for gd_seq in guides:
+            # Determine all the sequences covered by gd_seq
             seqs_bound = set()
             for pos in self._selected_guide_positions[gd_seq]:
                 seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
                     pos, self.mismatches))
-            frac_bound = len(seqs_bound) / float(self.aln.num_sequences)
+
+            # For each group, find the number of sequences that need to
+            # be covered that are covered by gd_seq, and sum these over
+            # all the groups
+            total_num_covered = 0
+            for group_id in num_needed_to_cover_in_group.keys():
+                num_needed, seqs_in_group = num_needed_to_cover_in_group[group_id]
+                covered_in_group = seqs_bound & seqs_in_group
+                num_covered = min(num_needed, len(covered_in_group))
+                total_num_covered += num_covered
+
+            # Calculate the fraction of sequences that need to be covered
+            # (total_num_needed_to_cover) that are covered by gd_seq
+            # (total_num_covered)
+            frac_bound = float(total_num_covered) / total_num_needed_to_cover
             sum_of_frac_of_seqs_bound += frac_bound
+
         score = sum_of_frac_of_seqs_bound / float(len(guides))
         return score
 

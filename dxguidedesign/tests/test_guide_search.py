@@ -249,3 +249,53 @@ class TestGuideSearch(unittest.TestCase):
         gs = guide_search.GuideSearcher(aln, 5, 0, 28, cover_frac, (1, 1, 100),
             seq_groups=seq_groups)
         self.assertEqual(len(gs._find_guides_that_cover_in_window(0)), 2)
+
+    def test_score_collection_of_guides_without_groups(self):
+        seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
+                'ATCTTTACGATGCTCTGGTTAGCCATCT',
+                'ATCTTATCGTTGGACTCGTAAGGCACCT',
+                'ATCAGATCGCTGAGCTTGTGAGACAGCT',
+                'TAGATCTAATCCCAGTATGGTACTTATC',
+                'TAGAACTAATGGCAGTTTGGTACTTGTC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+
+        # The function _score_collection_of_guides() will need to know
+        # positions of guides (in _selected_guide_positions), so insert
+        # these
+        gs._selected_guide_positions = {'TCGAT': {6}, 'GGTAC': {18}}
+
+        guides = ['TCGAT', 'GGTAC']
+        # TCGAT covers 1 sequence (1/6) and GGTAC covers 2 sequences (2/6),
+        # so the average is 0.25
+        self.assertEqual(gs._score_collection_of_guides(guides), 0.25)
+
+    def test_score_collection_of_guides_with_groups(self):
+        seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
+                'ATCTTTTCGATGCTCTGGTTAGCCATCT',
+                'ATCTTATCGTTGGACTCGTAAGGCACCT',
+                'ATCAGATCGCTGAGCTTGTGAGACAGCT',
+                'TAGATCTAATCCCAGTATGGTACTTATC',
+                'TAGAACTAATGGCAGTTTGGTTCTTGTC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        seq_groups = {2010: {0, 1, 2, 3}, 2018: {4, 5}}
+        cover_frac = {2010: 0.1, 2018: 1.0}
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, cover_frac, (1, 1, 100),
+            seq_groups=seq_groups)
+
+        # The function _score_collection_of_guides() will need to know
+        # positions of guides (in _selected_guide_positions), so insert
+        # these
+        gs._selected_guide_positions = {'TCGAT': {6}, 'GGTAC': {18}}
+
+        guides = ['TCGAT', 'GGTAC']
+        # 3 sequences are needed in total (1 from 2010 and 2 from 2018)
+        # TCGAT covers 1 needed sequence from 2010 and 0 needed sequences
+        # from 2018: so it covers 1/3 needed sequences
+        # GGTAC covers 0 needed sequences from 2010 and 1 needed sequence
+        # from 2018: so it covers 1/3 needed sequences
+        # The average of these fractions (the score) is 1/3
+        self.assertEqual(gs._score_collection_of_guides(guides), 1/3.0)
+
