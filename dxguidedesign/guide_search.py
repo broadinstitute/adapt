@@ -143,7 +143,8 @@ class GuideSearcher:
                 p = self.aln.construct_guide(start, self.guide_length,
                         seqs_to_consider, self.mismatches,
                         self.guide_clusterer, num_needed=num_needed,
-                        missing_threshold=self.missing_threshold)
+                        missing_threshold=self.missing_threshold,
+                        guide_is_suitable_fn=self.guide_is_suitable_fn)
             except alignment.CannotConstructGuideError:
                 p = None
             self._memoized_guides[start][key] = p
@@ -204,8 +205,9 @@ class GuideSearcher:
                 num_needed)
 
             if p is not None and self.guide_is_suitable_fn is not None:
-                # Verify if the guide is suitable according to the given
-                # function
+                # Verify that the guide is suitable according to the given
+                # function (it should be, in order to have been output
+                # by self.aln.construct_guide(..))
                 gd, _ = p
                 if not self.guide_is_suitable_fn(gd):
                     p = None
