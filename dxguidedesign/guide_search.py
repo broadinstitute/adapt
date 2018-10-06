@@ -525,13 +525,19 @@ class GuideSearcher:
         with open(out_fn, 'w') as outf:
             # Write a header
             outf.write('\t'.join(['window-start', 'window-end',
-                'count', 'score', 'target-sequences']) + '\n')
+                'count', 'score', 'target-sequences',
+                'target-sequence-positions']) + '\n')
 
             for guides_in_window in guide_collections:
                 start, count, score, guide_seqs = guides_in_window
                 end = start + self.window_size
-                guide_seqs_str = ' '.join(sorted(list(guide_seqs)))
-                line = [start, end, count, score, guide_seqs_str]
+                guide_seqs_sorted = sorted(list(guide_seqs))
+                guide_seqs_str = ' '.join(guide_seqs_sorted)
+                positions = [self._selected_guide_positions[gd_seq]
+                             for gd_seq in guide_seqs_sorted]
+                positions_str = ' '.join(str(p) for p in positions)
+                line = [start, end, count, score, guide_seqs_str,
+                        positions_str]
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')
 

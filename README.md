@@ -48,5 +48,6 @@ It outputs a TSV file, `guides.tsv`, in which each row corresponds to a window i
 * `count`: the number of guide sequences for this window
 * `score`: a statistic between 0 and 1 that describes the redundancy of the guide sequences in capturing the input sequences (higher is better); it is meant to break ties between windows that have the same number of guide sequences, and is not intended to be compared between windows with different numbers of guide sequences
 * `target-sequences`: the sequences of the targets for this window from which to construct guides, separated by spaces (guides should be reverse complements of these sequences)
+* `target-sequence-positions`: the positions of the guide sequences in the alignment, in the same order as the sequences are reported; since a guide may come from >1 position, positions are reported in set notation (e.g., \{100\})
 
 By default, the rows in `guides.tsv` are sorted by the position of the window. If you include the `--sort` argument to the program, it will sort the rows in `guides.tsv` so that the "best" choices of windows are on top. It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.
