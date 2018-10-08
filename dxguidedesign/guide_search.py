@@ -112,6 +112,14 @@ class GuideSearcher:
 
         self.required_guides = required_guides
 
+        # Verify positions of the guides are within the alignment
+        highest_possible_gd_pos = self.aln.seq_length - self.guide_length
+        for gd, gd_pos in self.required_guides.items():
+            if gd_pos < 0 or gd_pos > highest_possible_gd_pos:
+                raise Exception(("A guide with sequence '%s' at position %d "
+                    "is required to be in the output, but does not fall "
+                    "within the alignment") % (gd, gd_pos))
+
         # Because determining which sequences are covered by each required
         # guide is expensive and will be done repeatedly on the same guide,
         # memoize them
