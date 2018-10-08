@@ -1,6 +1,7 @@
 """Tests for guide_search module.
 """
 
+import logging
 import random
 import unittest
 
@@ -15,6 +16,9 @@ class TestGuideSearch(unittest.TestCase):
     """
 
     def setUp(self):
+        # Disable logging
+        logging.disable(logging.WARNING)
+
         # Set a random seed so hash functions are always the same
         random.seed(0)
 
@@ -359,3 +363,6 @@ class TestGuideSearch(unittest.TestCase):
         self.assertEqual(guides_in_cover,
                          {'ATGCC', 'TCGAA', 'AAAAA'})
 
+    def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
