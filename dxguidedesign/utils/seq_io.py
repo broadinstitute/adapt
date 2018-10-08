@@ -80,3 +80,57 @@ def write_fasta(seqs, out_fn, chars_per_line=70):
             for seq_line in seq_wrapped:
                 f.write(seq_line + '\n')
             f.write('\n')
+
+
+def read_required_guides(fn, expected_guide_length, num_alignments):
+    """Read list of required guides.
+
+    There must be 3 columns in the file:
+        1 - an identifier for an alignment that the guide should be
+            covering (0-based, with maximum value < num_alignments)
+        2 - the guide sequence
+        3 - the position (start) of the guide sequence in the
+            corresponding alignment
+
+    Args:
+        fn: path to file, with the format given above
+        expected_guide_length: the length of each guide sequence in
+            the file in nt; only used as a check
+        num_alignments: the number of alignments that the required
+            guides cover
+
+    Returns:
+        list x of length num_alignments such that x[i] corresponds
+        to the i'th alignment, as given in column 1. x[i] is a
+        dict mapping guide sequences (column 2) to their position
+        (column 2)
+    """
+    required_guides = [{} for _ in range(num_alignments)]
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            aln_id = int(ls[0])
+            gd = ls[1]
+            gd_pos = int(ls[2])
+
+            # Check aln_id
+            if aln_id < 0 or aln_id > num_alignments - 1:
+                raise Exception(("Alignment id %d in column 1 of required "
+                    "guides file is invalid; must be in [0, %d]") %
+                    (aln_id, num_alignments - 1))
+
+            # Check guide length
+            if len(gd) != expected_guide_length:
+                raise Exception(("Guide with sequence '%s' in required guides "
+                    "file has length %d, but it should have length %d") %
+                    (gd, len(gd), expected_guide_length))
+
+            # Check that the guide sequence only shows once for this
+            # alignment (i.e., has not already appeared)
+            if gd in required_guides[aln_id]:
+                raise Exception(("Guide with sequence '%s' shows >1 time "
+                    "for alignment with id %d") % (gd, aln_id))
+
+            required_guides[aln_id][gd] = gd_pos
+
+    return required_guides

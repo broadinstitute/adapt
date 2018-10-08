@@ -50,8 +50,16 @@ def seqs_grouped_by_year(seqs, args):
     return aln, years_idx, cover_frac
 
 def design_independently(args):
+    # Read required guides, if provided
+    num_aln = len(args.in_fasta)
+    if args.required_guides:
+        required_guides = seq_io.read_required_guides(
+            args.required_guides, args.guide_length, num_aln)
+    else:
+        required_guides = [{} for _ in range(num_aln)]
+
     # Treat each alignment independently
-    for in_fasta, out_tsv in zip(args.in_fasta, args.out_tsv):
+    for i, (in_fasta, out_tsv) in enumerate(zip(args.in_fasta, args.out_tsv)):
         # Read the sequences and make an Alignment object
         seqs = seq_io.read_fasta(in_fasta)
         if args.cover_by_year_decay:
@@ -61,12 +69,15 @@ def design_independently(args):
             seq_groups = None
             cover_frac = args.cover_frac
 
+        required_guides_for_aln = required_guides[i]
+
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
                                         args.window_size, cover_frac,
                                         args.missing_thres,
-                                        seq_groups=seq_groups)
+                                        seq_groups=seq_groups,
+                                        required_guides=required_guides_for_aln)
         gs.find_guides_that_cover(out_tsv, sort=args.sort_out)
 
 
@@ -87,6 +98,14 @@ def design_for_id(args):
         seq_groups_per_input += [seq_groups]
         cover_frac_per_input += [cover_frac]
 
+    # Read required guides, if provided
+    num_aln = len(alns)
+    if args.required_guides:
+        required_guides = seq_io.read_required_guides(
+            args.required_guides, args.guide_length, num_aln)
+    else:
+        required_guides = [{} for _ in range(num_aln)]
+
     logger.info(("Constructing data structure to allow differential "
         "identification"))
     aq = alignment.AlignmentQuerier(alns, args.guide_length,
@@ -96,6 +115,7 @@ def design_for_id(args):
     for i, aln in enumerate(alns):
         seq_groups = seq_groups_per_input[i]
         cover_frac = cover_frac_per_input[i]
+        required_guides_for_aln = required_guides[i]
 
         def guide_is_specific(guide):
             # Returns True iff guide does not hit too many sequences in
@@ -117,7 +137,8 @@ def design_for_id(args):
                                         args.window_size, cover_frac,
                                         args.missing_thres,
                                         guide_is_suitable_fn=guide_is_specific,
-                                        seq_groups=seq_groups)
+                                        seq_groups=seq_groups,
+                                        required_guides=required_guides_for_aln)
         gs.find_guides_that_cover(args.out_tsv[i], sort=args.sort_out)
 
         # i should no longer be masked from queries
@@ -238,6 +259,17 @@ if __name__ == "__main__":
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity. Ignored "
               "when --id is not set."))
+
+    parser.add_argument('--required-guides',
+        help=("Path to a file that gives guide sequences that will be "
+              "included in the guide cover and output for the windows "
+              "in which they belong, e.g., if certain guide sequences are "
+              "shown experimentally to perform well. The file must have "
+              "3 columns: col 1 gives an identifier for the alignment "
+              "that the guide covers, such that i represents the i'th "
+              "FASTA given as input (0-based); col 2 gives a guide sequence; "
+              "col 3 gives the start position of the guide (0-based) in "
+              "the alignment"))
 
     parser.add_argument("--debug",
                         dest="log_level",
