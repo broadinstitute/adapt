@@ -299,3 +299,63 @@ class TestGuideSearch(unittest.TestCase):
         # The average of these fractions (the score) is 1/3
         self.assertEqual(gs._score_collection_of_guides(guides), 1/3.0)
 
+    def test_with_required_guides_full_coverage(self):
+        seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
+                'ATCTAATCGATGCTCTGGTTAGCCATCT',
+                'ATCCAATCGCAGTACTCGTAAGGCACCT',
+                'ATCAAATCGGTGAGCTTGTGAGACAGCT',
+                'TAGAAATCGAACTAGTATGGTACTTATC',
+                'TAGAAATCGTGGCAGTTTGGTTCTTGTC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        # First 5 listed guides are from the alignment and the
+        # positions given are correct; last guide ('AAAAA') is made up
+        # but should still be in the output
+        required_guides = {'ATGCC': 9, 'ATGCT': 9, 'TCGAA': 6, 'ATCGT': 5,
+                           'TTGTC': 23, 'AAAAA': 5}
+
+        # Search with 0 mismatches and 100% coverage
+        gs = guide_search.GuideSearcher(aln, 5, 0, 11, 1.0, (1, 1, 100),
+            required_guides=required_guides)
+
+        # Search in window starting at position 3
+        guides_in_cover = gs._find_guides_that_cover_in_window(3)
+        # required_guides account for all sequences except the 3rd and 4th,
+        # which can be both covered by 'AATCG'; the position of 'TTGTC' is
+        # outside the window, so it should not be in the output
+        self.assertEqual(guides_in_cover,
+                         {'ATGCC', 'ATGCT', 'TCGAA', 'ATCGT', 'AAAAA', 'AATCG'})
+
+        # Search in window starting at position 4; results should be the
+        # same as above, but now use memoized values
+        guides_in_cover = gs._find_guides_that_cover_in_window(4)
+        self.assertEqual(guides_in_cover,
+                         {'ATGCC', 'ATGCT', 'TCGAA', 'ATCGT', 'AAAAA', 'AATCG'})
+
+    def test_with_required_guides_partial_coverage(self):
+        seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
+                'ATCTAATCGATGCTCTGGTTAGCCATCT',
+                'ATCCAATCGCAGTACTCGTAAGGCACCT',
+                'ATCAAATCGGTGAGCTTGTGAGACAGCT',
+                'TAGAAATCGAACTAGTATGGTACTTATC',
+                'TAGAAATCGTGGCAGTTTGGTTCTTGTC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        # First 3 listed guides are from the alignment and the
+        # positions given are correct; last guide ('AAAAA') is made up
+        # but should still be in the output
+        required_guides = {'ATGCC': 9, 'TCGAA': 6, 'TTGTC': 23,
+                           'AAAAA': 5}
+
+        # Search with 1 mismatch and 50% coverage
+        gs = guide_search.GuideSearcher(aln, 5, 1, 11, 0.5, (1, 1, 100),
+            required_guides=required_guides)
+
+        # Search in window starting at position 3
+        guides_in_cover = gs._find_guides_that_cover_in_window(3)
+        # required_guides can account for 3 of the 6 sequences
+        # the position of 'TTGTC' is outside the window, so it should not be
+        # in the output
+        self.assertEqual(guides_in_cover,
+                         {'ATGCC', 'TCGAA', 'AAAAA'})
+

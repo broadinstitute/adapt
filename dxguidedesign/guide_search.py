@@ -22,7 +22,7 @@ class GuideSearcher:
 
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
                  missing_data_params, guide_is_suitable_fn=None,
-                 seq_groups=None):
+                 seq_groups=None, required_guides={}):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -46,6 +46,12 @@ class GuideSearcher:
                 group ID to the fraction of sequences in that group that
                 must be 'captured' by a guide. If None, then do not divide
                 the sequences into groups.
+            required_guides: dict that maps guide sequences to their position
+                in the alignment; all of these guide sequences are immediately
+                placed in the set of covering guides for their appropriate
+                windows before finding other guides, so that they are
+                guaranteed to be in the output (i.e., the set of covering
+                guides is initialized with these guides)
         """
         if window_size > aln.seq_length:
             raise ValueError("window_size must be less than the length of the alignment")
@@ -103,6 +109,13 @@ class GuideSearcher:
             missing_coeff * self.aln.median_sequences_with_missing_data()))
 
         self.guide_is_suitable_fn = guide_is_suitable_fn
+
+        self.required_guides = required_guides
+
+        # Because determining which sequences are covered by each required
+        # guide is expensive and will be done repeatedly on the same guide,
+        # memoize them
+        self._memoized_seqs_covered_by_required_guides = {}
 
         self.guide_clusterer = alignment.SequenceClusterer(
             lsh.HammingDistanceFamily(guide_length),
@@ -315,6 +328,10 @@ class GuideSearcher:
         of 1.0; in this case, we simply select the smallest number of guides
         that achieve the desired coverage.
 
+        The collection of covering guides (C, above) is initialized with the
+        guides in self.required_guides that fall within the given window,
+        and the universe is initialized accordingly.
+
         Args:
             start: starting position of the window; the window spans [start,
                 start + self.window_size)
@@ -343,6 +360,45 @@ class GuideSearcher:
                 num_that_can_be_uncovered[group_id])
 
         guides_in_cover = set()
+        def add_guide_to_cover(gd, gd_covered_seqs, gd_pos):
+            # The set representing gd goes into the set cover, and all of the
+            # sequences it hybridizes to are removed from their group in the
+            # universe
+            guides_in_cover.add(gd)
+            for group_id in universe.keys():
+                universe[group_id].difference_update(gd_covered_seqs)
+                num_left_to_cover[group_id] = max(0,
+                    len(universe[group_id]) - num_that_can_be_uncovered[group_id])
+            # Save the position of this guide in case the guide needs to be
+            # revisited
+            self._selected_guide_positions[gd].add(gd_pos)
+
+        # Place all guides from self.required_guides that fall within this
+        # window into guides_in_cover
+        for gd, gd_pos in self.required_guides.items():
+            if (gd_pos < start or
+                    gd_pos + self.guide_length > start + self.window_size):
+                # gd is not fully within this window
+                continue
+            # Find the sequences in the alignment that are bound by gd
+            r = (gd, gd_pos)
+            if r in self._memoized_seqs_covered_by_required_guides:
+                gd_covered_seqs = self._memoized_seqs_covered_by_required_guides[r]
+            else:
+                # Determine which sequences are bound by gd, and memoize
+                # them
+                gd_covered_seqs = self.aln.sequences_bound_by_guide(
+                    gd, gd_pos, self.mismatches)
+                if len(gd_covered_seqs) == 0:
+                    # gd covers no sequences at gd_pos; still initialize with it
+                    # but give a warning
+                    logger.warning(("Guide '%s' at position %d does not cover "
+                        "any sequences but is being required in the cover") %
+                        (gd, gd_pos))
+                self._memoized_seqs_covered_by_required_guides[r] = gd_covered_seqs
+            # Add gd to the cover, and update the universe
+            add_guide_to_cover(gd, gd_covered_seqs, gd_pos)
+
         # Keep iterating until desired partial cover is obtained for all
         # groups
         while [True for group_id in universe.keys()
@@ -358,18 +414,8 @@ class GuideSearcher:
                     "could be constructed in the window starting at %d, but "
                     "more are needed to achieve desired coverage") % start)
 
-            # The set representing gd goes into the set cover, and all of the
-            # sequences it hybridizes to are removed from their group in the
-            # universe
-            guides_in_cover.add(gd)
-            for group_id in universe.keys():
-                universe[group_id].difference_update(gd_covered_seqs)
-                num_left_to_cover[group_id] = max(0,
-                    len(universe[group_id]) - num_that_can_be_uncovered[group_id])
-
-            # Save the position of this guide in case the guide needs to be
-            # revisited
-            self._selected_guide_positions[gd].add(gd_pos)
+            # Add gd to the set cover
+            add_guide_to_cover(gd, gd_covered_seqs, gd_pos)
 
         return guides_in_cover
 
