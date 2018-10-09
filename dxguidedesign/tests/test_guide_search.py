@@ -363,6 +363,42 @@ class TestGuideSearch(unittest.TestCase):
         self.assertEqual(guides_in_cover,
                          {'ATGCC', 'TCGAA', 'AAAAA'})
 
+    def test_guide_overlaps_blacklisted_range(self):
+        seqs = ['AAAAAAAAAAAAAAAAAAAA']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        blacklisted_ranges = {(3, 8), (14, 18)}
+
+        gs = guide_search.GuideSearcher(aln, 3, 0, 10, 1.0, (1, 1, 100),
+            blacklisted_ranges=blacklisted_ranges)
+
+        # For each position i, encode 1 if the guide (of length 3)
+        # starting at i overlaps a blacklisted range, and 0 otherwise
+        does_overlap = '01111111000011111100'
+        for i in range(len(does_overlap)):
+            if does_overlap[i] == '0':
+                self.assertFalse(gs._guide_overlaps_blacklisted_range(i))
+            elif does_overlap[i] == '1':
+                self.assertTrue(gs._guide_overlaps_blacklisted_range(i))
+
+    def test_optimal_guide_with_blacklisted_range(self):
+        seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
+                'CTACCAAAAAACCTGCTAGGGGGCGTAC',
+                'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
+                'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+
+        # The best guide is 'AAAAA'
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['AAAAA']))
+
+        # Do not allow guides overlapping (5, 9)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100),
+            blacklisted_ranges={(5, 9)})
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['CCCCC', 'GGGGG']))
+
     def tearDown(self):
         # Re-enable logging
         logging.disable(logging.NOTSET)

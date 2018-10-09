@@ -22,7 +22,7 @@ class GuideSearcher:
 
     def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
                  missing_data_params, guide_is_suitable_fn=None,
-                 seq_groups=None, required_guides={}):
+                 seq_groups=None, required_guides={}, blacklisted_ranges={}):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -52,6 +52,11 @@ class GuideSearcher:
                 windows before finding other guides, so that they are
                 guaranteed to be in the output (i.e., the set of covering
                 guides is initialized with these guides)
+            blacklisted_ranges: set of tuples (start, end) that provide
+                ranges in the alignment from which guides should not be
+                constructed. No guide that might overlap these ranges is
+                constructed. Note that start is inclusive and end is
+                exclusive.
         """
         if window_size > aln.seq_length:
             raise ValueError("window_size must be less than the length of the alignment")
@@ -125,6 +130,15 @@ class GuideSearcher:
         # memoize them
         self._memoized_seqs_covered_by_required_guides = {}
 
+        self.blacklisted_ranges = blacklisted_ranges
+
+        # Verify blacklisted ranges are within the alignment
+        for start, end in blacklisted_ranges:
+            if start < 0 or end <= start or end > self.aln.seq_length:
+                raise Exception(("A blacklisted range [%d, %d) is invalid "
+                    "for a given alignment; ranges must fall within the "
+                    "alignment: [0, %d)") % (start, end, self.aln.seq_length))
+
         self.guide_clusterer = alignment.SequenceClusterer(
             lsh.HammingDistanceFamily(guide_length),
             k=min(10, int(guide_length/2)))
@@ -182,6 +196,24 @@ class GuideSearcher:
         if pos in self._memoized_guides:
             del self._memoized_guides[pos]
 
+    def _guide_overlaps_blacklisted_range(self, gd_pos):
+        """Determine whether a guide would overlap a blacklisted range.
+
+        The blacklisted ranges are given in self.blacklisted_ranges.
+
+        Args:
+            gd_pos: start position of a guide
+
+        Returns:
+            True iff the guide overlaps a blacklisted range
+        """
+        gd_end = gd_pos + self.guide_length - 1
+        for start, end in self.blacklisted_ranges:
+            if ((gd_pos >= start and gd_pos < end) or
+                    (gd_end >= start and gd_end < end)):
+                return True
+        return False
+
     def _find_optimal_guide_in_window(self, start, seqs_to_consider,
             num_needed):
         """Find the guide that hybridizes to the most sequences in a given window.
@@ -221,8 +253,13 @@ class GuideSearcher:
 
         max_guide_cover = None
         for pos in range(start, search_end):
-            p = self._construct_guide_memoized(pos, seqs_to_consider,
-                num_needed)
+            if self._guide_overlaps_blacklisted_range(pos):
+                # guide starting at pos would overlap a blacklisted range,
+                # so skip this guide
+                p = None
+            else:
+                p = self._construct_guide_memoized(pos, seqs_to_consider,
+                    num_needed)
 
             if p is not None and self.guide_is_suitable_fn is not None:
                 # Verify if the guide is suitable according to the given
