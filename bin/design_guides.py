@@ -58,6 +58,13 @@ def design_independently(args):
     else:
         required_guides = [{} for _ in range(num_aln)]
 
+    # Read blacklisted ranges, if provided
+    if args.blacklisted_ranges:
+        blacklisted_ranges = seq_io.read_blacklisted_ranges(
+            args.blacklisted_ranges, num_aln)
+    else:
+        blacklisted_ranges = [{} for _ in range(num_aln)]
+
     # Treat each alignment independently
     for i, (in_fasta, out_tsv) in enumerate(zip(args.in_fasta, args.out_tsv)):
         # Read the sequences and make an Alignment object
@@ -70,6 +77,7 @@ def design_independently(args):
             cover_frac = args.cover_frac
 
         required_guides_for_aln = required_guides[i]
+        blacklisted_ranges_for_aln = blacklisted_ranges[i]
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file
@@ -77,7 +85,8 @@ def design_independently(args):
                                         args.window_size, cover_frac,
                                         args.missing_thres,
                                         seq_groups=seq_groups,
-                                        required_guides=required_guides_for_aln)
+                                        required_guides=required_guides_for_aln,
+                                        blacklisted_ranges=blacklisted_ranges_for_aln)
         gs.find_guides_that_cover(out_tsv, sort=args.sort_out)
 
 
@@ -106,6 +115,13 @@ def design_for_id(args):
     else:
         required_guides = [{} for _ in range(num_aln)]
 
+    # Read blacklisted ranges, if provided
+    if args.blacklisted_ranges:
+        blacklisted_ranges = seq_io.read_blacklisted_ranges(
+            args.blacklisted_ranges, num_aln)
+    else:
+        blacklisted_ranges = [{} for _ in range(num_aln)]
+
     logger.info(("Constructing data structure to allow differential "
         "identification"))
     aq = alignment.AlignmentQuerier(alns, args.guide_length,
@@ -116,6 +132,7 @@ def design_for_id(args):
         seq_groups = seq_groups_per_input[i]
         cover_frac = cover_frac_per_input[i]
         required_guides_for_aln = required_guides[i]
+        blacklisted_ranges_for_aln = blacklisted_ranges[i]
 
         def guide_is_specific(guide):
             # Returns True iff guide does not hit too many sequences in
@@ -138,7 +155,8 @@ def design_for_id(args):
                                         args.missing_thres,
                                         guide_is_suitable_fn=guide_is_specific,
                                         seq_groups=seq_groups,
-                                        required_guides=required_guides_for_aln)
+                                        required_guides=required_guides_for_aln,
+                                        blacklisted_ranges=blacklisted_ranges_for_aln)
         gs.find_guides_that_cover(args.out_tsv[i], sort=args.sort_out)
 
         # i should no longer be masked from queries
@@ -270,6 +288,15 @@ if __name__ == "__main__":
               "FASTA given as input (0-based); col 2 gives a guide sequence; "
               "col 3 gives the start position of the guide (0-based) in "
               "the alignment"))
+
+    parser.add_argument('--blacklisted-ranges',
+        help=("Path to a file that gives ranges in alignments from which "
+              "guides will not be constructed. The file must have 3 columns: "
+              "col 1 gives an identifier for the alignment that the range "
+              "corresponds to, such that i represents the i'th FASTA "
+              "given as input (0-based); col 2 gives the start position of "
+              "the range (inclusive); col 3 gives the end position of the "
+              "range (exclusive)"))
 
     parser.add_argument("--debug",
                         dest="log_level",

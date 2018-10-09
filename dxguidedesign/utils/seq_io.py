@@ -1,4 +1,4 @@
-"""Functions for working with sequence i/o.
+"""Functions for working with sequence (and related) i/o.
 """
 
 from collections import OrderedDict
@@ -134,3 +134,48 @@ def read_required_guides(fn, expected_guide_length, num_alignments):
             required_guides[aln_id][gd] = gd_pos
 
     return required_guides
+
+
+def read_blacklisted_ranges(fn, num_alignments):
+    """Read list of blacklisted ranges.
+
+    There must be 3 columns in the file:
+        1 - an identifier for an alignment that the guide should be
+            covering (0-based, with maxmimum value < num_alignments)
+        2 - the start position (inclusive) of a range in the
+            corresponding alignment
+        3 - the end position (exclusive) of a range in the
+            corresponding alignment
+
+    Args:
+        fn: path to file, with the format given above
+        num_alignments: the number of alignments that the ranges might
+            correspond to
+   
+    Returns:
+        list x of length num_alignments such that x[i] corresponds
+        to the i'th alignment, as given in column 1. x[i] is a set
+        of tuples (start, end) corresponding to the values in columns 2 and 3
+    """
+    blacklisted_ranges = [set() for _ in range(num_alignments)]
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            aln_id = int(ls[0])
+            start = int(ls[1])
+            end = int(ls[2])
+
+            # Check aln_id
+            if aln_id < 0 or aln_id > num_alignments - 1:
+                raise Exception(("Alignment id %d in column 1 of blacklisted "
+                    "ranges file is invalid; must be in [0, %d]") %
+                    (aln_id, num_alignments - 1))
+
+            # Check that end > start
+            if start < 0 or end <= start:
+                raise Exception(("Blacklisted range [%d, %d) is invalid; "
+                    "values must be >= 0 and end > start") % (start, end))
+
+            blacklisted_ranges[aln_id].add((start, end))
+
+    return blacklisted_ranges
