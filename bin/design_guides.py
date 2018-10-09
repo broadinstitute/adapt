@@ -17,6 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 def seqs_grouped_by_year(seqs, args):
+    """Group sequences according to their year and assigned partial covers.
+
+    Args:
+        seqs: dict mapping sequence name to sequence, as read from a FASTA
+        args: namespace of arguments provided to this executable
+
+    Returns:
+        tuple (aln, years_idx, cover_frac) where aln is an
+        alignment.Alignment object from seqs; years_idx is a dict
+        mapping each year to the set of indices in aln representing
+        sequences for that year; and cover_frac is a dict mapping each
+        year to the desired partial cover of sequences from that year,
+        as determined by args.cover_by_year_decay
+    """
     years_fn, year_highest_cover, year_cover_decay = args.cover_by_year_decay
 
     # Map sequence names to index in alignment, and construct alignment
@@ -51,6 +65,17 @@ def seqs_grouped_by_year(seqs, args):
 
 
 def parse_required_guides_and_blacklist(args):
+    """Parse files giving required guides and blacklisted sequence.
+
+    Args:
+        args: namespace of arguments provided to this executable
+
+    Returns:
+        tuple (required_guides, blacklisted_ranges) where required_guides
+        is a representation of data in the args.required_guides file; and
+        blacklisted_ranges is a representation of data in the
+        args.blacklisted_ranges file
+    """
     num_aln = len(args.in_fasta)
 
     # Read required guides, if provided
@@ -71,6 +96,11 @@ def parse_required_guides_and_blacklist(args):
 
 
 def design_independently(args):
+    """Design guides, treating targets independently.
+
+    Args:
+        args: namespace of arguments provided to this executable
+    """
     required_guides, blacklisted_ranges = \
         parse_required_guides_and_blacklist(args)
 
@@ -100,6 +130,11 @@ def design_independently(args):
 
 
 def design_for_id(args):
+    """Design guides for differential identification across targets.
+
+    Args:
+        args: namespace of arguments provided to this executable
+    """
     # Create an alignment object for each input
     alns = []
     seq_groups_per_input = []
