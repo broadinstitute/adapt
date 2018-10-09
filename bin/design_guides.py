@@ -49,9 +49,11 @@ def seqs_grouped_by_year(seqs, args):
 
     return aln, years_idx, cover_frac
 
-def design_independently(args):
-    # Read required guides, if provided
+
+def parse_required_guides_and_blacklist(args):
     num_aln = len(args.in_fasta)
+
+    # Read required guides, if provided
     if args.required_guides:
         required_guides = seq_io.read_required_guides(
             args.required_guides, args.guide_length, num_aln)
@@ -64,6 +66,13 @@ def design_independently(args):
             args.blacklisted_ranges, num_aln)
     else:
         blacklisted_ranges = [{} for _ in range(num_aln)]
+
+    return required_guides, blacklisted_ranges
+
+
+def design_independently(args):
+    required_guides, blacklisted_ranges = \
+        parse_required_guides_and_blacklist(args)
 
     # Treat each alignment independently
     for i, (in_fasta, out_tsv) in enumerate(zip(args.in_fasta, args.out_tsv)):
@@ -107,20 +116,8 @@ def design_for_id(args):
         seq_groups_per_input += [seq_groups]
         cover_frac_per_input += [cover_frac]
 
-    # Read required guides, if provided
-    num_aln = len(alns)
-    if args.required_guides:
-        required_guides = seq_io.read_required_guides(
-            args.required_guides, args.guide_length, num_aln)
-    else:
-        required_guides = [{} for _ in range(num_aln)]
-
-    # Read blacklisted ranges, if provided
-    if args.blacklisted_ranges:
-        blacklisted_ranges = seq_io.read_blacklisted_ranges(
-            args.blacklisted_ranges, num_aln)
-    else:
-        blacklisted_ranges = [{} for _ in range(num_aln)]
+    required_guides, blacklisted_ranges = \
+        parse_required_guides_and_blacklist(args)
 
     logger.info(("Constructing data structure to allow differential "
         "identification"))
