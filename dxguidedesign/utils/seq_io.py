@@ -179,3 +179,29 @@ def read_blacklisted_ranges(fn, num_alignments):
             blacklisted_ranges[aln_id].add((start, end))
 
     return blacklisted_ranges
+
+
+def read_blacklisted_kmers(fn, min_len_warning=5, max_len_warning=28):
+    """Read file of blacklisted k-mers.
+
+    Args:
+        fn: path to FASTA file, where each sequence is a k-mer (names
+            of sequences are ignored)
+        min_len_warning/max_len_warning: log a warning if the k-mer
+            length is outside this range
+
+    Returns:
+        set of k-mers
+    """
+    seqs = read_fasta(fn)
+    kmers = set()
+    for name, kmer in seqs.items():
+        if len(kmer) < min_len_warning:
+            logger.warning(("Blacklisted k-mer '%s' might be shorter than "
+                "desired and may lead to many guides being treated as "
+                "unsuitable") % kmer)
+        if len(kmer) > max_len_warning:
+            logger.warning(("Blacklisted k-mer '%s' might be longer than "
+                "desired") % kmer)
+        kmers.add(kmer)
+    return kmers
