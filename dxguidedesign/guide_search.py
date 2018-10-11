@@ -536,27 +536,38 @@ class GuideSearcher:
                 outf.write('\t'.join([str(x) for x in line]) + '\n')
 
         if print_analysis:
-            min_count = min(x[1] for x in guide_collections)
-            num_with_min_count = sum(1 for x in guide_collections
-                if x[1] == min_count)
-            max_score_for_count = max(x[2] for x in guide_collections
-                if x[1] == min_count)
-            num_with_max_score = sum(1 for x in guide_collections if
-                x[1] == min_count and x[2] == max_score_for_count)
+            num_windows_scanned = len(
+                range(0, self.aln.seq_length - self.window_size + 1))
+            num_windows_with_guides = len(guide_collections)
 
-            min_count_str = (str(min_count) + " guide" + 
-                             ("s" if min_count > 1 else ""))
+            if num_windows_with_guides == 0:
+                stat_display = [
+                    ("Number of windows scanned", num_windows_scanned),
+                    ("Number of windows with guides", num_windows_with_guides)
+                ]
+            else:
+                min_count = min(x[1] for x in guide_collections)
+                num_with_min_count = sum(1 for x in guide_collections
+                    if x[1] == min_count)
+                max_score_for_count = max(x[2] for x in guide_collections
+                    if x[1] == min_count)
+                num_with_max_score = sum(1 for x in guide_collections if
+                    x[1] == min_count and x[2] == max_score_for_count)
 
-            stat_display = [
-                ("Number of windows scanned", len(guide_collections)),
-                ("Minimum number of guides required in a window", min_count),
-                ("Number of windows with " + min_count_str,
-                    num_with_min_count),
-                ("Maximum score across windows with " + min_count_str,
-                    max_score_for_count),
-                ("Number of windows with " + min_count_str + " and this score",
-                    num_with_max_score)
-            ]
+                min_count_str = (str(min_count) + " guide" + 
+                                 ("s" if min_count > 1 else ""))
+
+                stat_display = [
+                    ("Number of windows scanned", num_windows_scanned),
+                    ("Number of windows with guides", num_windows_with_guides),
+                    ("Minimum number of guides required in a window", min_count),
+                    ("Number of windows with " + min_count_str,
+                        num_with_min_count),
+                    ("Maximum score across windows with " + min_count_str,
+                        max_score_for_count),
+                    ("Number of windows with " + min_count_str + " and this score",
+                        num_with_max_score)
+                ]
 
             # Print the above statistics, with padding on the left
             # so that the statistic names are right-justified in a
