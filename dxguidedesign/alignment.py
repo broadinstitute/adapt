@@ -144,6 +144,21 @@ class Alignment:
             (Note that it is possible that x binds to no sequences and that
             y will be empty.)
         """
+        # TODO: There are several optimizations that can be made to
+        # this function that take advantage of G-U pairing in order
+        # to lower the number of guides that need to be designed.
+        # Two are:
+        #  1) The function SequenceClusterer.cluster(..), which is
+        #     used here, can cluster accounting for G-U pairing (e.g.,
+        #     such that 'A' hashes to 'G' and 'C' hashes to 'T',
+        #     so that similar guide sequences hash to the same
+        #     value tolerating G-U similarity).
+        #  2) Instead of taking a consensus sequence across a
+        #     cluster, this can take a pseudo-consensus that
+        #     accounts for G-U pairing (e.g., in which 'A' is
+        #     treated as 'G' and 'C' is treated as 'T' for
+        #     the purposes of generating a consensus sequence).
+
         assert start + guide_length <= self.seq_length
         assert len(seqs_to_consider) > 0
 
