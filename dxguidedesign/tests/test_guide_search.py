@@ -6,6 +6,7 @@ import unittest
 
 from dxguidedesign import alignment
 from dxguidedesign import guide_search
+from dxguidedesign.utils import guide
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -17,6 +18,9 @@ class TestGuideSearch(unittest.TestCase):
     def setUp(self):
         # Set a random seed so hash functions are always the same
         random.seed(0)
+
+        # For most of these tests, do not allow G-U pairing
+        guide.set_allow_gu_pairs_to_no()
 
         self.a_seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
@@ -299,3 +303,35 @@ class TestGuideSearch(unittest.TestCase):
         # The average of these fractions (the score) is 1/3
         self.assertEqual(gs._score_collection_of_guides(guides), 1/3.0)
 
+    def test_find_optimal_guide_with_gu_pairing(self):
+        seqs = ['GTATTAACACTTCGGCTACCCCCTCTAC',
+                'CTACCAACACACCTGCTAGGGGGCGTAC',
+                'ATAGCAACACAACGTCCTCCCCCTGTAC',
+                'TTAGGGGTGTGGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        allow_gu_pairs = guide.get_allow_gu_pairs()
+        # Make sure G-U pairing is not allowed
+        guide.set_allow_gu_pairs_to_no()
+
+        # Two guides are needed for coverage
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+        self.assertEqual(len(gs._find_guides_that_cover_in_window(0)), 2)
+
+        # Now allow G-U pairing
+        guide.set_allow_gu_pairs_to_yes()
+
+        # Only one guide is needed for coverage: 'AACAC'
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['AACAC']))
+
+        # Return G-U pairing to initial setting
+        if allow_gu_pairs:
+            guide.set_allow_gu_pairs_to_yes()
+        else:
+            guide.set_allow_gu_pairs_to_no()
+
+    def tearDown(self):
+        # Return G-U pairing setting to default
+        guide.set_allow_gu_pairs_to_default()

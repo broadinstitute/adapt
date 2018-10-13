@@ -5,6 +5,7 @@ import random
 import unittest
 
 from dxguidedesign import alignment
+from dxguidedesign.utils import guide
 from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -17,6 +18,9 @@ class TestAlignment(unittest.TestCase):
     def setUp(self):
         # Set a random seed so hash functions are always the same
         random.seed(0)
+
+        # For most of these tests, do not allow G-U pairing
+        guide.set_allow_gu_pairs_to_no()
 
         self.a_seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.a = alignment.Alignment.from_list_of_seqs(self.a_seqs)
@@ -167,6 +171,10 @@ class TestAlignment(unittest.TestCase):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 1),
                          [0,1,2,3,4])
 
+    def tearDown(self):
+        # Return G-U pairing setting to default
+        guide.set_allow_gu_pairs_to_default()
+
 
 class TestSequenceClusterer(unittest.TestCase):
     """Tests the SequenceClusterer class.
@@ -208,6 +216,9 @@ class TestAlignmentQuerier(unittest.TestCase):
     def setUp(self):
         # Set a random seed so hash functions are always the same
         random.seed(0)
+
+        # For these tests, do not allow G-U pairing
+        guide.set_allow_gu_pairs_to_no()
 
         aln_a_seqs = ['ATCGAAATAAACC',
                       'ATCGATATAATGG',
@@ -260,3 +271,6 @@ class TestAlignmentQuerier(unittest.TestCase):
         assert_is_specific('CCTTC', 0.5, [1])
         assert_is_specific('TTACA', 0.5, [1])
 
+    def tearDown(self):
+        # Return G-U pairing setting to default
+        guide.set_allow_gu_pairs_to_default()

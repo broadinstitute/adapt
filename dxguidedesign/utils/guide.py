@@ -129,4 +129,23 @@ def guide_binds(guide_seq, target_seq, mismatches=0):
       assert '-' not in guide_seq
       return False
 
-    return seq_mismatches(guide_seq, target_seq) <= mismatches
+    if get_allow_gu_pairs():
+        m = seq_mismatches_with_gu_pairs(guide_seq, target_seq)
+    else:
+        m = seq_mismatches(guide_seq, target_seq)
+    return m <= mismatches
+
+
+# Accessing and updating (module-level) global variables on binding
+def set_allow_gu_pairs_to_yes():
+    global _allow_gu_pairs
+    _allow_gu_pairs = True
+def set_allow_gu_pairs_to_no():
+    global _allow_gu_pairs
+    _allow_gu_pairs = False
+def set_allow_gu_pairs_to_default():
+    set_allow_gu_pairs_to_yes()
+def get_allow_gu_pairs():
+    global _allow_gu_pairs
+    return _allow_gu_pairs
+set_allow_gu_pairs_to_default()

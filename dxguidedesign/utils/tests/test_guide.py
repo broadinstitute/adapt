@@ -105,6 +105,10 @@ class TestGuideBindsWithoutGUPairing(unittest.TestCase):
     """Tests the guide_binds function without allowing G-U pairs.
     """
 
+    def setUp(self):
+        # Don't allow G-U pairs
+        guide.set_allow_gu_pairs_to_no()
+
     def test_guide_does_bind(self):
         self.assertTrue(guide.guide_binds('ATCG', 'ATCG', 0))
         self.assertTrue(guide.guide_binds('ATCG', 'AYCG', 0))
@@ -119,5 +123,49 @@ class TestGuideBindsWithoutGUPairing(unittest.TestCase):
         self.assertFalse(guide.guide_binds('ATCG', 'AACG', 0))
         self.assertFalse(guide.guide_binds('ATCG', 'ASCG', 0))
         self.assertFalse(guide.guide_binds('ATCG', 'AYNG', 0))
+        self.assertFalse(guide.guide_binds('ATCG', 'ATTG', 0))
         self.assertFalse(guide.guide_binds('ATCG', 'ATAA', 1))
         self.assertFalse(guide.guide_binds('ATCG', 'ATNN', 1))
+
+    def tearDown(self):
+        guide.set_allow_gu_pairs_to_default()
+
+
+class TestGuideBindsWithGUPairing(unittest.TestCase):
+    """Tests the guide_binds function while allowing G-U pairs.
+    """
+
+    def setUp(self):
+        # Make sure we allow G-U pairs
+        guide.set_allow_gu_pairs_to_yes()
+
+    def test_guide_does_bind(self):
+        self.assertTrue(guide.guide_binds('ATCG', 'ATCG', 0))
+        self.assertTrue(guide.guide_binds('ATCG', 'AYCG', 0))
+        self.assertTrue(guide.guide_binds('ATCG', 'AYCB', 0))
+        self.assertTrue(guide.guide_binds('ATCG', 'ATCA', 1))
+        self.assertTrue(guide.guide_binds('ATCG', 'ARCS', 1))
+        self.assertTrue(guide.guide_binds('ATCG', 'AYCA', 1))
+        self.assertTrue(guide.guide_binds('ATCG', 'AYCN', 1))
+        self.assertTrue(guide.guide_binds('ATCG', 'AYNN', 2))
+        self.assertTrue(guide.guide_binds('AACG', 'AGCG', 0))
+        self.assertTrue(guide.guide_binds('AACG', 'AGCT', 1))
+        self.assertTrue(guide.guide_binds('ACGG', 'ATGG', 0))
+        self.assertTrue(guide.guide_binds('ACGG', 'ATGT', 1))
+        self.assertTrue(guide.guide_binds('AACC', 'GGTT', 0))
+        self.assertTrue(guide.guide_binds('ATCG', 'GCTA', 2))
+        self.assertTrue(guide.guide_binds('MTCG', 'RCTA', 2))
+
+    def test_guide_does_not_bind(self):
+        self.assertFalse(guide.guide_binds('ATCG', 'AACG', 0))
+        self.assertFalse(guide.guide_binds('ATCG', 'ASCG', 0))
+        self.assertFalse(guide.guide_binds('ATCG', 'AYNG', 0))
+        self.assertFalse(guide.guide_binds('WTCG', 'CTCG', 0))
+        self.assertFalse(guide.guide_binds('ATCG', 'ATAA', 1))
+        self.assertFalse(guide.guide_binds('ATCG', 'ATNN', 1))
+        self.assertFalse(guide.guide_binds('ATCG', 'GCTA', 1))
+        self.assertFalse(guide.guide_binds('CTCG', 'GCTA', 2))
+        self.assertFalse(guide.guide_binds('WTCG', 'CTCG', 0))
+
+    def tearDown(self):
+        guide.set_allow_gu_pairs_to_default()
