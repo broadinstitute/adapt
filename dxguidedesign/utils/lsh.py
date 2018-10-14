@@ -69,6 +69,124 @@ class HammingDistanceFamily:
         return 1.0 - float(dist) / float(self.dim)
 
 
+class HammingWithGUPairsDistanceFamily:
+    """An LSH family that works with a pseudo-Hamming distance, which
+    tolerates G-U base pairs, by sampling and transforming bases.
+
+    This family can be used with near-neighbor queries if the goal
+    is to tolerate G-U pairing between guide and target sequence,
+    assuming there are subsequent checks using a distance function
+    more conservative (and accurate) than the relaxed one used here.
+    However, it should be used with caution with clustering, as the
+    distance function used here is relaxed (see below for explanation).
+
+    This family hashes sequences such that similar sequences hash
+    to the same value, while tolerating G-U differences. This is
+    meant to accommodate G-U base pairing:
+    An RNA guide with U can bind to target RNA with G, and vice-versa.
+    Note that a guide sequence that ends up being synthesized to RNA
+    is the reverse-complement of the guide sequence constructed here, so
+    that it will hybridize to the target (here, the guide sequences
+    are designed to match the target). If the RNA guide were to have U and
+    the RNA target were to have G, then the guide sequence here would be
+    A and the target would be G. If the RNA guide were to have G
+    and the RNA target were to have U, then the guide sequence here were
+    would be C and the target would be T. Thus, to allow G-U pairing,
+    we count a base X in the guide sequence as matching a base Y in
+    the target if either of the following is true:
+      - X == 'A' and Y == 'G'
+      - X == 'C' and Y == 'T'
+
+    This is tricky here because the distance function should have
+    symmetry -- i.e., the distance between x and y should be equal
+    to the distance between y and x. But, given how we defined the
+    distance above (in terms of how to count which bases match), this
+    would be violated: the distance would depend on whether x is
+    a guide sequence or a target sequence (and whether y is a guide
+    sequence or target). To solve this, the family of hash functions
+    defined here is meant to work with the following distance metric:
+      The distance between sequence x and sequence y is the number
+      of mismatched bases between x and y after transforming all
+      'A' bases in each sequence to 'G' and all 'C' bases in each
+      sequence to 'T'. This is equivalent to Hamming distance after
+      the 'A'->'G' and 'C'->'T' transformations.
+
+    For example, we will treat the sequences 'AA' and 'GG' as identical
+    and ensure they hash to the same value. Likewise, 'CC' and 'TT'
+    must hash to the same value. That is, the distance between them
+    should be treated as 0 (regardless of which represents a guide
+    sequence and which a target).
+
+    This is a more relaxed distance function than what we might need.
+    That is, it may report two sequences x and y as being closer to
+    each other than we ought to be considering them to be. For example,
+    if x represents a guide sequence and x='GG' and y represents a
+    target sequence and y='AA', then the distance between x and y
+    will be 0 even though we would not want to think of x as binding
+    to y. However, this is OK for the purposes of LSH for near-neighbor
+    lookups between guide and target sequence, assuming the queries
+    have subsequent checks using a more conservative and accurate
+    (albeit asymmetric) distance function; the hash family will
+    simply lead to more false positive near neighbor results than
+    otherwise, but these will still subsequently be pruned by the
+    query function.
+
+    The value of P1 is identical to the value defined above for
+    (regular) Hamming distance. To see this, let two sequences x
+    and y be within distance d of each other, where d is an 'accurate'
+    asymmetric distance that accounts for whether x is a guide
+    sequence or target (and likewise for y). Let d' be a corresponding
+    upper bound on the distance between x and y according to the
+    distance function defined above (i.e., after 'A'->'G' and
+    'C'->'T' transformations of x and y). Note that d' <= d. The
+    probability that x and y hash to different values is <= d'/dim.
+    So the probability of collision for x and y, P1(d'), is
+    P1(d') >= 1.0 - d'/dim. Since d' <= d, P1(d') >= P1(d). Hence,
+    even if d is used as a substitute for d' (as d is the value
+    by which we ultimately want to compare x and y), then P1(d)
+    is still a valid lower bound on the probability of collision.
+    """
+
+    def __init__(self, dim):
+        self.dim = dim
+
+    def make_h(self):
+        """Construct a random hash function for this family.
+
+        Returns:
+            hash function
+        """
+        i = random.randint(0, self.dim - 1)
+        def h(x):
+            assert len(x) == self.dim
+            b = x[i]
+            # Perform 'A'->'G'and 'C'->'T' transformations, as
+            # described above; ignore ambiguity codes (for now) and
+            # treat them as mismatches
+            if b == 'A':
+                b = 'G'
+            if b == 'C':
+                b = 'T'
+            return b
+        return h
+
+    def P1(self, dist):
+        """Calculate lower bound on probability of collision for nearby sequences.
+
+        Args:
+            dist: suppose two sequences are within this distance of each other.
+                The distance can be either a Hamming distance that does not
+                account for G-U pairing, or a Hamming distance after 'A'->'G'
+                and 'C'->'T' transformations (see above for explanation of
+                why the value returned will be a valid lower bound regardless)
+
+        Returns:
+            lower bound on probability that two sequences (e.g., guides) hash
+            to the same value if they are within dist of each other
+        """
+        return 1.0 - float(dist) / float(self.dim)
+
+
 class MinHashFamily:
     """An LSH family that works by taking the minimum permutation of
     k-mers in a string/sequence (MinHash).
