@@ -17,6 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 def seqs_grouped_by_year(seqs, args):
+    """Group sequences according to their year and assigned partial covers.
+
+    Args:
+        seqs: dict mapping sequence name to sequence, as read from a FASTA
+        args: namespace of arguments provided to this executable
+
+    Returns:
+        tuple (aln, years_idx, cover_frac) where aln is an
+        alignment.Alignment object from seqs; years_idx is a dict
+        mapping each year to the set of indices in aln representing
+        sequences for that year; and cover_frac is a dict mapping each
+        year to the desired partial cover of sequences from that year,
+        as determined by args.cover_by_year_decay
+    """
     years_fn, year_highest_cover, year_cover_decay = args.cover_by_year_decay
 
     # Map sequence names to index in alignment, and construct alignment
@@ -49,9 +63,66 @@ def seqs_grouped_by_year(seqs, args):
 
     return aln, years_idx, cover_frac
 
+
+def parse_required_guides_and_blacklist(args):
+    """Parse files giving required guides and blacklisted sequence.
+
+    Args:
+        args: namespace of arguments provided to this executable
+
+    Returns:
+        tuple (required_guides, blacklisted_ranges) where required_guides
+        is a representation of data in the args.required_guides file;
+        blacklisted_ranges is a representation of data in the
+        args.blacklisted_ranges file; and blacklisted_kmers is a
+        representation of data in the args.blacklisted_kmers file
+    """
+    num_aln = len(args.in_fasta)
+
+    # Read required guides, if provided
+    if args.required_guides:
+        required_guides = seq_io.read_required_guides(
+            args.required_guides, args.guide_length, num_aln)
+    else:
+        required_guides = [{} for _ in range(num_aln)]
+
+    # Read blacklisted ranges, if provided
+    if args.blacklisted_ranges:
+        blacklisted_ranges = seq_io.read_blacklisted_ranges(
+            args.blacklisted_ranges, num_aln)
+    else:
+        blacklisted_ranges = [set() for _ in range(num_aln)]
+
+    # Read blacklisted kmers, if provided
+    if args.blacklisted_kmers:
+        blacklisted_kmers = seq_io.read_blacklisted_kmers(
+            args.blacklisted_kmers,
+            min_len_warning=5,
+            max_len_warning=args.guide_length)
+    else:
+        blacklisted_kmers = set()
+
+    return required_guides, blacklisted_ranges, blacklisted_kmers
+
+
 def design_independently(args):
+    """Design guides, treating targets independently.
+
+    Args:
+        args: namespace of arguments provided to this executable
+    """
+    required_guides, blacklisted_ranges, blacklisted_kmers = \
+        parse_required_guides_and_blacklist(args)
+
+    def guide_is_suitable(guide):
+        # Return True iff the guide does not contain a blacklisted k-mer
+        for kmer in blacklisted_kmers:
+            if kmer in guide:
+                return False
+        return True
+
     # Treat each alignment independently
-    for in_fasta, out_tsv in zip(args.in_fasta, args.out_tsv):
+    for i, (in_fasta, out_tsv) in enumerate(zip(args.in_fasta, args.out_tsv)):
         # Read the sequences and make an Alignment object
         seqs = seq_io.read_fasta(in_fasta)
         if args.cover_by_year_decay:
@@ -61,16 +132,27 @@ def design_independently(args):
             seq_groups = None
             cover_frac = args.cover_frac
 
+        required_guides_for_aln = required_guides[i]
+        blacklisted_ranges_for_aln = blacklisted_ranges[i]
+
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
                                         args.window_size, cover_frac,
                                         args.missing_thres,
-                                        seq_groups=seq_groups)
+                                        guide_is_suitable_fn=guide_is_suitable,
+                                        seq_groups=seq_groups,
+                                        required_guides=required_guides_for_aln,
+                                        blacklisted_ranges=blacklisted_ranges_for_aln)
         gs.find_guides_that_cover(out_tsv, sort=args.sort_out)
 
 
 def design_for_id(args):
+    """Design guides for differential identification across targets.
+
+    Args:
+        args: namespace of arguments provided to this executable
+    """
     # Create an alignment object for each input
     alns = []
     seq_groups_per_input = []
@@ -87,6 +169,9 @@ def design_for_id(args):
         seq_groups_per_input += [seq_groups]
         cover_frac_per_input += [cover_frac]
 
+    required_guides, blacklisted_ranges, blacklisted_kmers = \
+        parse_required_guides_and_blacklist(args)
+
     logger.info(("Constructing data structure to allow differential "
         "identification"))
     aq = alignment.AlignmentQuerier(alns, args.guide_length,
@@ -96,9 +181,19 @@ def design_for_id(args):
     for i, aln in enumerate(alns):
         seq_groups = seq_groups_per_input[i]
         cover_frac = cover_frac_per_input[i]
+        required_guides_for_aln = required_guides[i]
+        blacklisted_ranges_for_aln = blacklisted_ranges[i]
 
-        def guide_is_specific(guide):
-            # Returns True iff guide does not hit too many sequences in
+        def guide_is_suitable(guide):
+            # Return True iff the guide does not contain a blacklisted
+            # k-mer and is specific to aln
+
+            # Return False if the guide contains a blacklisted k-mer
+            for kmer in blacklisted_kmers:
+                if kmer in guide:
+                    return False
+
+            # Return True if guide does not hit too many sequences in
             # alignments other than aln
             return aq.guide_is_specific_to_aln(guide, i, args.diff_id_frac)
 
@@ -116,8 +211,10 @@ def design_for_id(args):
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
                                         args.window_size, cover_frac,
                                         args.missing_thres,
-                                        guide_is_suitable_fn=guide_is_specific,
-                                        seq_groups=seq_groups)
+                                        guide_is_suitable_fn=guide_is_suitable,
+                                        seq_groups=seq_groups,
+                                        required_guides=required_guides_for_aln,
+                                        blacklisted_ranges=blacklisted_ranges_for_aln)
         gs.find_guides_that_cover(args.out_tsv[i], sort=args.sort_out)
 
         # i should no longer be masked from queries
@@ -150,6 +247,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+
+    # Input/output
     parser.add_argument('in_fasta', nargs='+',
         help=("Path to input FASTA. More than one can be "
               "given; without --id specified, this just "
@@ -160,6 +259,7 @@ if __name__ == "__main__":
               "must be given; each output TSV corresponds to "
               "an input FASTA."))
 
+    # Parameters on guide length, mismatches, and window size
     parser.add_argument('-l', '--guide-length', type=int, default=28,
         help="Length of guide to construct")
     parser.add_argument('-m', '--mismatches', type=int, default=0,
@@ -169,6 +269,7 @@ if __name__ == "__main__":
         help=("Ensure that selected guides are all within a "
               "window of this size"))
 
+    # Desired coverage of target sequences
     def check_cover_frac(val):
         fval = float(val)
         if fval > 0 and fval <= 1:
@@ -180,6 +281,8 @@ if __name__ == "__main__":
         help=("The fraction of sequences that must be covered "
               "by the selected guides"))
 
+    # Automatically setting desired coverage of target sequences based
+    # on their year
     class ParseCoverDecay(argparse.Action):
         # This is needed because --cover-by-year-decay has multiple args
         # of different types
@@ -209,11 +312,13 @@ if __name__ == "__main__":
               "receives a desired cover fraction that decays by C -- i.e., "
               "year n is given C*(desired cover fraction of year n+1)"))
 
+    # Sort output windows by optimality
     parser.add_argument('--sort', dest='sort_out', action='store_true',
         help=("If set, sort output TSV by number of guides "
               "(ascending) then by score (descending); "
               "default is to sort by window position"))
 
+    # Handling missing data
     parser.add_argument('--missing-thres', nargs=3, type=float, default=[0.5, 0.05, 1.5],
         help=("<A> <B> <C>; parameters governing the threshold on which sites "
               "to ignore due to too much missing data. The 3 values specify "
@@ -223,6 +328,7 @@ if __name__ == "__main__":
               "over the alignment. Set a=1 and b=1 to not ignore sites due "
               "to missing data."))
 
+    # Differential identification
     parser.add_argument('--id', dest="diff_id", action='store_true',
         help=("Design guides to perform differential "
               "identification, where each input FASTA is a "
@@ -239,6 +345,35 @@ if __name__ == "__main__":
               "value; lower values correspond to more specificity. Ignored "
               "when --id is not set."))
 
+    # Requiring guides in the cover, and blacklisting ranges and/or k-mers
+    parser.add_argument('--required-guides',
+        help=("Path to a file that gives guide sequences that will be "
+              "included in the guide cover and output for the windows "
+              "in which they belong, e.g., if certain guide sequences are "
+              "shown experimentally to perform well. The file must have "
+              "3 columns: col 1 gives an identifier for the alignment "
+              "that the guide covers, such that i represents the i'th "
+              "FASTA given as input (0-based); col 2 gives a guide sequence; "
+              "col 3 gives the start position of the guide (0-based) in "
+              "the alignment"))
+    parser.add_argument('--blacklisted-ranges',
+        help=("Path to a file that gives ranges in alignments from which "
+              "guides will not be constructed. The file must have 3 columns: "
+              "col 1 gives an identifier for the alignment that the range "
+              "corresponds to, such that i represents the i'th FASTA "
+              "given as input (0-based); col 2 gives the start position of "
+              "the range (inclusive); col 3 gives the end position of the "
+              "range (exclusive)"))
+    parser.add_argument('--blacklisted-kmers',
+        help=("Path to a FASTA file that gives k-mers to blacklisted from "
+              "guide sequences. No guide sequences will be constructed that "
+              "contain these k-mers. The k-mers make up the sequences in "
+              "the FASTA file; the sequence names are ignored. k-mers "
+              "should be long enough so that not too many guide sequences "
+              "are deemed to be unsuitable, and should be at most the "
+              "length of the guide"))
+
+    # Log levels
     parser.add_argument("--debug",
                         dest="log_level",
                         action="store_const",

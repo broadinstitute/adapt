@@ -373,10 +373,10 @@ class Alignment:
         assert gd_start + len(gd_seq) <= self.seq_length
 
         aln_for_guide = self.extract_range(gd_start, gd_start + len(gd_seq))
-        seq_rows = aln_for_guide.make_list_of_seqs()
+        seq_rows = aln_for_guide.make_list_of_seqs(include_idx=True)
 
         binding_seqs = []
-        for seq_idx, seq in enumerate(seq_rows):
+        for seq, seq_idx in seq_rows:
             if guide.guide_binds(gd_seq, seq, mismatches):
                 binding_seqs += [seq_idx]
         return binding_seqs
