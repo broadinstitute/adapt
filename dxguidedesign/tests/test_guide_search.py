@@ -1,6 +1,7 @@
 """Tests for guide_search module.
 """
 
+import logging
 import random
 import unittest
 
@@ -16,6 +17,9 @@ class TestGuideSearch(unittest.TestCase):
     """
 
     def setUp(self):
+        # Disable logging
+        logging.disable(logging.WARNING)
+
         # Set a random seed so hash functions are always the same
         random.seed(0)
 
@@ -332,6 +336,105 @@ class TestGuideSearch(unittest.TestCase):
         else:
             guide.set_allow_gu_pairs_to_no()
 
+    def test_with_required_guides_full_coverage(self):
+        seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
+                'ATCTAATCGATGCTCTGGTTAGCCATCT',
+                'ATCCAATCGCAGTACTCGTAAGGCACCT',
+                'ATCAAATCGGTGAGCTTGTGAGACAGCT',
+                'TAGAAATCGAACTAGTATGGTACTTATC',
+                'TAGAAATCGTGGCAGTTTGGTTCTTGTC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        # First 5 listed guides are from the alignment and the
+        # positions given are correct; last guide ('AAAAA') is made up
+        # but should still be in the output
+        required_guides = {'ATGCC': 9, 'ATGCT': 9, 'TCGAA': 6, 'ATCGT': 5,
+                           'TTGTC': 23, 'AAAAA': 5}
+
+        # Search with 0 mismatches and 100% coverage
+        gs = guide_search.GuideSearcher(aln, 5, 0, 11, 1.0, (1, 1, 100),
+            required_guides=required_guides)
+
+        # Search in window starting at position 3
+        guides_in_cover = gs._find_guides_that_cover_in_window(3)
+        # required_guides account for all sequences except the 3rd and 4th,
+        # which can be both covered by 'AATCG'; the position of 'TTGTC' is
+        # outside the window, so it should not be in the output
+        self.assertEqual(guides_in_cover,
+                         {'ATGCC', 'ATGCT', 'TCGAA', 'ATCGT', 'AAAAA', 'AATCG'})
+
+        # Search in window starting at position 4; results should be the
+        # same as above, but now use memoized values
+        guides_in_cover = gs._find_guides_that_cover_in_window(4)
+        self.assertEqual(guides_in_cover,
+                         {'ATGCC', 'ATGCT', 'TCGAA', 'ATCGT', 'AAAAA', 'AATCG'})
+
+    def test_with_required_guides_partial_coverage(self):
+        seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
+                'ATCTAATCGATGCTCTGGTTAGCCATCT',
+                'ATCCAATCGCAGTACTCGTAAGGCACCT',
+                'ATCAAATCGGTGAGCTTGTGAGACAGCT',
+                'TAGAAATCGAACTAGTATGGTACTTATC',
+                'TAGAAATCGTGGCAGTTTGGTTCTTGTC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        # First 3 listed guides are from the alignment and the
+        # positions given are correct; last guide ('AAAAA') is made up
+        # but should still be in the output
+        required_guides = {'ATGCC': 9, 'TCGAA': 6, 'TTGTC': 23,
+                           'AAAAA': 5}
+
+        # Search with 1 mismatch and 50% coverage
+        gs = guide_search.GuideSearcher(aln, 5, 1, 11, 0.5, (1, 1, 100),
+            required_guides=required_guides)
+
+        # Search in window starting at position 3
+        guides_in_cover = gs._find_guides_that_cover_in_window(3)
+        # required_guides can account for 3 of the 6 sequences
+        # the position of 'TTGTC' is outside the window, so it should not be
+        # in the output
+        self.assertEqual(guides_in_cover,
+                         {'ATGCC', 'TCGAA', 'AAAAA'})
+
+    def test_guide_overlaps_blacklisted_range(self):
+        seqs = ['AAAAAAAAAAAAAAAAAAAA']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        blacklisted_ranges = {(3, 8), (14, 18)}
+
+        gs = guide_search.GuideSearcher(aln, 3, 0, 10, 1.0, (1, 1, 100),
+            blacklisted_ranges=blacklisted_ranges)
+
+        # For each position i, encode 1 if the guide (of length 3)
+        # starting at i overlaps a blacklisted range, and 0 otherwise
+        does_overlap = '01111111000011111100'
+        for i in range(len(does_overlap)):
+            if does_overlap[i] == '0':
+                self.assertFalse(gs._guide_overlaps_blacklisted_range(i))
+            elif does_overlap[i] == '1':
+                self.assertTrue(gs._guide_overlaps_blacklisted_range(i))
+
+    def test_optimal_guide_with_blacklisted_range(self):
+        seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
+                'CTACCAAAAAACCTGCTAGGGGGCGTAC',
+                'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
+                'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100))
+
+        # The best guide is 'AAAAA'
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['AAAAA']))
+
+        # Do not allow guides overlapping (5, 9)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 28, 1.0, (1, 1, 100),
+            blacklisted_ranges={(5, 9)})
+        self.assertEqual(gs._find_guides_that_cover_in_window(0),
+                         set(['CCCCC', 'GGGGG']))
+
     def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
+        
         # Return G-U pairing setting to default
         guide.set_allow_gu_pairs_to_default()

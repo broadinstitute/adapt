@@ -165,6 +165,48 @@ class TestAlignment(unittest.TestCase):
                             self.gc, num_needed=num_needed),
                          ('GGGC', [2, 6]))
 
+    def test_construct_guide_with_suitable_fn(self):
+        seqs = ['GTATCAAAT',
+                'CTACCAAAA',
+                'GTATCAAAT',
+                'GTATCAAAT']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        guide_length = 6
+        seqs_to_consider = {0: {0, 1, 2, 3}}
+        guide_clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length),
+            k=3)
+
+        # The best guide is 'GTATCA'
+        p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, guide_clusterer)
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'GTATCA')
+        self.assertEqual(covered_seqs, [0, 2, 3])
+
+        # Do not allow guides with 'TAT' in them
+        def f(guide):
+            if 'TAT' in guide:
+                return False
+            else:
+                return True
+        # Now the best guide is 'CTACCA'
+        p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, guide_clusterer,
+            guide_is_suitable_fn=f)
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'CTACCA')
+        self.assertEqual(covered_seqs, [1])
+
+        # Do not allow guides with 'A' in them
+        def f(guide):
+            if 'A' in guide:
+                return False
+            else:
+                return True
+        # Now there is no suitable guide
+        with self.assertRaises(alignment.CannotConstructGuideError):
+            aln.construct_guide(0, guide_length, seqs_to_consider, 1, guide_clusterer,
+                guide_is_suitable_fn=f)
+
     def test_sequences_bound_by_guide(self):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 0),
                          [0,1,2,3])
