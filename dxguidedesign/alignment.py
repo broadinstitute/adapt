@@ -108,7 +108,8 @@ class Alignment:
         return has_gap
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
-            guide_clusterer, num_needed=None, missing_threshold=1):
+            guide_clusterer, num_needed=None, missing_threshold=1,
+            guide_is_suitable_fn=None):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -134,6 +135,8 @@ class Alignment:
             missing_threshold: do not construct a guide if the fraction of
                 sequences with missing data, at any position in the target
                 range, exceeds this threshold
+            guide_is_suitable_fn: if set, a function f(x) such that this
+                will only construct a guide x for which f(x) is True
 
         Returns:
             tuple (x, y) where:
@@ -178,34 +181,67 @@ class Alignment:
         # do the following: cluster the sequences (just the portion with
         # potential guides) with LSH, pick a cluster (the "best" cluster)
         # according to some heuristic, and take the consensus of that cluster.
+        # In particular, we'll do this by sorting the clusters (from best
+        # to worst) and taking the consensus until it yields a suitable
+        # guide.
         if guide_clusterer is None:
             # Don't cluster; instead, draw the consensus from all the
-            # sequences. Effectively, treat the best cluster as consisting
-            # of all sequences to consider
-            best_cluster_idxs = all_seqs_to_consider
-        elif num_needed is not None:
+            # sequences. Effectively, treat it as there being just one
+            # cluster, which consists of all sequences to consider
+            clusters_ordered = [all_seqs_to_consider]
+        else:
             # Cluster and pick the cluster that contains the highest number
             # of needed sequences to achieve the partial cover
+            # Cluster the sequences
             clusters = guide_clusterer.cluster(seq_rows)
-            best_cluster_idxs, best_score = None, -1
-            for cluster_idxs in clusters:
-                # Calculate a score for this cluster by summing over the
-                # number of needed sequences that it contains, taken across
-                # the groups in the universe
-                score = 0
-                for group_id, needed in num_needed.items():
-                    contained_in_cluster = cluster_idxs & seqs_to_consider[group_id]
-                    score += min(needed, len(contained_in_cluster))
-                if score > best_score:
-                    best_cluster_idxs = cluster_idxs
-                    best_score = score
-        else:
-            # Cluster and pick the largest cluster (most number of sequences)
-            best_cluster_idxs = guide_clusterer.largest_cluster(seq_rows)
 
-        consensus = aln_for_guide.determine_consensus_sequence(
-            best_cluster_idxs)
-        gd = consensus
+            # Define a score function for each cluster
+            if num_needed is not None:
+                # Score a cluster (higher is better) by the number of
+                # sequences it contains that are needed to achieve the
+                # partial cover; do this by summing over the number
+                # of needed sequences it contains, taken across the
+                # groups in the universe
+                # Memoize the scores because this computation might be
+                # expensive
+                cluster_scores = {}
+                def cluster_score(cluster_idxs):
+                    tc = tuple(cluster_idxs)
+                    if tc in cluster_scores:
+                        return cluster_scores[tc]
+                    score = 0
+                    for group_id, needed in num_needed.items():
+                        contained_in_cluster = cluster_idxs & seqs_to_consider[group_id]
+                        score += min(needed, len(contained_in_cluster))
+                    cluster_scores[tc] = score
+                    return score
+            else:
+                # Score a cluster by the number of sequences it contains
+                def cluster_score(cluster_idxs):
+                    return len(cluster_idxs)
+
+            # Sort the clusters by score, from highest to lowest
+            clusters_ordered = sorted(clusters, key=cluster_score, reverse=True)
+
+        # Create a guide from each cluster, until one is suitable
+        selected_cluster_idxs = None
+        if guide_is_suitable_fn is None:
+            # Create a guide from the best cluster (first in the list)
+            selected_cluster_idxs = clusters_ordered[0]
+            consensus = aln_for_guide.determine_consensus_sequence(
+                selected_cluster_idxs)
+            gd = consensus
+        else:
+            gd = None
+            for cluster_idxs in clusters_ordered:
+                consensus = aln_for_guide.determine_consensus_sequence(
+                    cluster_idxs)
+                if guide_is_suitable_fn(consensus) is True:
+                    gd = consensus
+                    selected_cluster_idxs = cluster_idxs
+                    break
+            if gd is None:
+                raise CannotConstructGuideError("No guides are suitable")
 
         # If all that exists at a position in the alignment is 'N', then do
         # not attempt to cover the sequences because we do not know which
@@ -225,7 +261,7 @@ class Alignment:
 
         # It's possible that the consensus sequence (guide) of a cluster does
         # not bind to any of the sequences. In this case, simply select the first
-        # sequence from the largest cluster that has no ambiguity and make this
+        # sequence from the selected cluster that has no ambiguity and make this
         # the guide; this is guaranteed to have at least one binding sequence
         # (itself)
         if len(binding_seqs) == 0:
@@ -233,7 +269,7 @@ class Alignment:
             for s, idx in seq_rows:
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
                     # s has no ambiguity and is a suitable guide
-                    if idx in best_cluster_idxs:
+                    if idx in selected_cluster_idxs:
                         # Pick s as the guide
                         gd = s
                         binding_seqs = determine_binding_seqs(gd)
@@ -241,7 +277,7 @@ class Alignment:
                     else:
                         suitable_guides += [s]
             if len(binding_seqs) == 0:
-                # All sequences in the largest cluster have ambiguity, so now
+                # All sequences in the selected cluster have ambiguity, so now
                 # simply pick any suitable guide
                 if len(suitable_guides) > 0:
                     gd = suitable_guides[0]
