@@ -48,6 +48,64 @@ def seq_mismatches(seq_a, seq_b):
                    not (FASTA_CODES[seq_a[i]] & FASTA_CODES[seq_b[i]])))
 
 
+def seq_mismatches_with_gu_pairs(guide_seq, target_seq):
+    """Count number of mismatches between a guide and target, allowing G-U
+    pairs, and tolerating ambiguity.
+
+    As in seq_mismatches(..), this considers 'N' with any other base to
+    be a mismatch.
+
+    This also tolerates G-U base pairing:
+    An RNA guide with U can bind to target RNA with G, and vice-versa.
+    Note that a guide sequence that ends up being synthesized to RNA
+    is the reverse-complement of the guide sequence constructed here, so
+    that it will hybridize to the target (here, the guide sequences
+    are designed to match the target). If the RNA guide were to have U and
+    the RNA target were to have G, then the guide sequence here would be
+    A and the target would be G. If the RNA guide were to have G
+    and the RNA target were to have U, then the guide sequence here were
+    would be C and the target would be T. Thus, to allow G-U pairing,
+    we count a base X in the guide sequence as matching a base Y in
+    the target if either of the following is true:
+      - X == 'A' and Y == 'G'
+      - X == 'C' and Y == 'T'
+
+    Unlike in seq_mismatches(..), it is important to know which sequence
+    here represents the guide and which represents the target, so we
+    cannot just refer to them interchangeably as seq_a and seq_b.
+
+    Args:
+        guide_seq: str of a guide sequence
+        target_seq: str of target sequence, same length as guide_seq
+
+    Returns:
+        number of mismatches between guide and target sequence, counting
+        G-U pairs as matching, and tolerating ambiguity between them
+    """
+    assert len(guide_seq) == len(target_seq)
+
+    # Since this function is low-level and called so often, it
+    # may be better to ensure it is efficient by keeping all
+    # conditionals inside the sum(..), even if it is messy, rather
+    # than defining and using subfunctions
+    return sum(1 for i in range(len(guide_seq)) if (
+                   # mismatch if either guide or target is 'N'
+                   (guide_seq[i] == 'N' or target_seq[i] == 'N') or
+                   # mismatch if not a match
+                   not (
+                       # both bases match
+                       (FASTA_CODES[guide_seq[i]] & FASTA_CODES[target_seq[i]]) or
+                       # guide is 'A' and target is 'G'
+                       ('A' in FASTA_CODES[guide_seq[i]] and
+                        'G' in FASTA_CODES[target_seq[i]]) or
+                       # guide is 'C' and target is 'T'
+                       ('C' in FASTA_CODES[guide_seq[i]] and
+                        'T' in FASTA_CODES[target_seq[i]])
+                   )
+               )
+           )
+
+
 def guide_binds(guide_seq, target_seq, mismatches=0):
     """Determine whether a guide binds to a target sequence.
 
@@ -71,4 +129,23 @@ def guide_binds(guide_seq, target_seq, mismatches=0):
       assert '-' not in guide_seq
       return False
 
-    return seq_mismatches(guide_seq, target_seq) <= mismatches
+    if get_allow_gu_pairs():
+        m = seq_mismatches_with_gu_pairs(guide_seq, target_seq)
+    else:
+        m = seq_mismatches(guide_seq, target_seq)
+    return m <= mismatches
+
+
+# Accessing and updating (module-level) global variables on binding
+def set_allow_gu_pairs_to_yes():
+    global _allow_gu_pairs
+    _allow_gu_pairs = True
+def set_allow_gu_pairs_to_no():
+    global _allow_gu_pairs
+    _allow_gu_pairs = False
+def set_allow_gu_pairs_to_default():
+    set_allow_gu_pairs_to_yes()
+def get_allow_gu_pairs():
+    global _allow_gu_pairs
+    return _allow_gu_pairs
+set_allow_gu_pairs_to_default()

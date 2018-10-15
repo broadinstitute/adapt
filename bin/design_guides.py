@@ -7,6 +7,7 @@ import re
 
 from dxguidedesign import alignment
 from dxguidedesign import guide_search
+from dxguidedesign.utils import guide
 from dxguidedesign.utils import log
 from dxguidedesign.utils import seq_io
 from dxguidedesign.utils import year_cover
@@ -240,6 +241,11 @@ def main(args):
         if not args.diff_id_frac:
             args.diff_id_frac = 0.05
 
+    # Allow G-U base pairing, unless it is explicitly disallowed
+    guide.set_allow_gu_pairs_to_yes()
+    if args.do_not_allow_gu_pairing:
+        guide.set_allow_gu_pairs_to_no()
+
     if args.diff_id:
         design_for_id(args)
     else:
@@ -344,6 +350,16 @@ if __name__ == "__main__":
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity. Ignored "
               "when --id is not set."))
+
+    # G-U pairing options
+    parser.add_argument('--do-not-allow-gu-pairing', action='store_true',
+        help=("When determining whether a guide binds to a region of "
+              "target sequence, do not count G-U (wobble) base pairs as "
+              "matching. Default is to tolerate G-U pairing: namely, "
+              "A in an output guide sequence matches G in the "
+              "target and C in an output guide sequence matches T "
+              "in the target (since the synthesized guide is the reverse "
+              "complement of the output guide sequence)"))
 
     # Requiring guides in the cover, and blacklisting ranges and/or k-mers
     parser.add_argument('--required-guides',

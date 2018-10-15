@@ -29,6 +29,7 @@ SOFTWARE.
 import random
 import unittest
 
+from dxguidedesign.utils import guide
 from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -49,14 +50,73 @@ class TestHammingDistanceFamily(unittest.TestCase):
         b = str(a)
 
         # Identical strings should hash to the same value
-        h1 = self.family.make_h()
-        self.assertEqual(h1(a), h1(b))
-        h2 = self.family.make_h()
-        self.assertEqual(h2(a), h2(b))
+        for i in range(30):
+            h = self.family.make_h()
+            self.assertEqual(h(a), h(b))
 
     def test_similar(self):
         a = 'ATCGATATGGGCACTGCTAT'
         b = 'ATCGACATGGGCACTGGTAT'
+
+        # a and b should probably collide
+        collision_count = 0
+        for i in range(10):
+            h = self.family.make_h()
+            if h(a) == h(b):
+                collision_count += 1
+        self.assertGreater(collision_count, 8)
+
+    def test_not_similar(self):
+        a = 'ATCGATATGGGCACTGCTAT'
+        b = 'AGTTGTCACCCTTGACGATA'
+
+        # a and b should rarely collide
+        collision_count = 0
+        for i in range(10):
+            h = self.family.make_h()
+            if h(a) == h(b):
+                collision_count += 1
+        self.assertLess(collision_count, 2)
+
+    def test_collision_prob(self):
+        # Collision probability for 2 mismatches should be
+        # 1 - 2/20
+        self.assertEqual(self.family.P1(2), 0.9)
+
+
+class TestHammingWithGUPairsDistanceFamily(unittest.TestCase):
+    """Tests family of hash functions for Hamming distance after
+    transformations that account for G-U pairing.
+    """
+
+    def setUp(self):
+        # Set a random seed so hash functions are always the same
+        random.seed(0)
+
+        self.family = lsh.HammingWithGUPairsDistanceFamily(20)
+
+    def test_identical(self):
+        a = 'ATCGATATGGGCACTGCTAT'
+        b = str(a)
+
+        # Identical strings should hash to the same value
+        for i in range(30):
+            h = self.family.make_h()
+            self.assertEqual(h(a), h(b))
+
+    def test_identical_gu(self):
+        a = 'ATCGATATGGGCACTGCTAT'
+        b = 'GCCAATGTGGACGTTACTGC'
+
+        # Identical strings, after 'A'->'G' and 'C'->'T' transformations,
+        # should hash to the same value
+        for i in range(30):
+            h = self.family.make_h()
+            self.assertEqual(h(a), h(b))
+
+    def test_similar(self):
+        a = 'ATCGATATGGGCACTGCTAT'
+        b = 'GTCGGTATGAGCATCGGTGG'
 
         # a and b should probably collide
         collision_count = 0
@@ -253,6 +313,104 @@ class TestHammingNearNeighborLookup(unittest.TestCase):
             # Now the same results as above (before masking) should hold
             self.assertCountEqual(nnl.query(a[0]), {a, b, c})
             self.assertCountEqual(nnl.query(e[0]), {d})
+
+
+class TestHammingWithGUPairsNearNeighborLookup(unittest.TestCase):
+    """Tests approximate near neighbor lookups with Hamming distance
+    that supports G-U pairing."""
+
+    def setUp(self):
+        # Set a random seed so hash functions are always the same
+        random.seed(0)
+
+        self.family = lsh.HammingWithGUPairsDistanceFamily(20)
+        self.dist_thres = 5
+        self.dist_fn = guide.seq_mismatches_with_gu_pairs
+
+    def test_varied_k_without_gu_pairs(self):
+        a = 'ATCGATATGGGCACTGCTAT'
+        b = str(a)  # identical to a
+        c = 'ATCGACATGGGCACTGGTAT'  # similar to a
+        d = 'AGTTGTCACCCTTGACGATA'  # not similar to a
+        e = 'AGTAGTCACCCTTGACGCTA'  # similar to d
+
+        for k in [2, 5, 10]:
+            nnl = lsh.NearNeighborLookup(self.family, k, self.dist_thres,
+                self.dist_fn, 0.95)
+            nnl.add([a, b, c, d])
+
+            # b and c are within self.dist_thres of a, so only these
+            # should be returned (along with a); note that since
+            # a==b, {a,b,c}=={a,c}=={b,c} and nnl.query(a) returns
+            # a set, which will be {a,c} or {b,c}
+            self.assertCountEqual(nnl.query(a), {a, b, c})
+
+            # Although e was not added, a query for it should return d
+            self.assertCountEqual(nnl.query(e), {d})
+
+    def test_varied_k_with_gu_pairs(self):
+        a = 'ATCGATATGGGCACTGCTAT'
+        b = str(a)  # identical to a
+        c = 'ACCAACACAAACACCACCAC'  # identical to a in {G,T} space
+        d = 'AGTTGTCACCCTTGACGATA'  # not similar to a
+        e = 'AGTAGTCACCCTTGACGCTA'  # similar to d
+        f = 'AACCACCACGCCCACCACGA'  # similar to d in {G,T} space
+        g = 'GGGGGGGGGGTTTTTTTTTT'  # not similar to anything else
+        h = 'AAAAAAAAAACCCCCCCCCC'  # similar to g in {G,T} space
+
+        for k in [2, 5, 10]:
+            nnl1 = lsh.NearNeighborLookup(self.family, k, self.dist_thres,
+                self.dist_fn, 0.95)
+            nnl1.add([a, b, c, d, g])
+
+            # b is within self.dist_thres of a, so it should be in the
+            # output
+            # Although c is similar to a in {G,T} space, it is *not*
+            # within self.dist_thres of a according to self.dist_fn(a, c),
+            # which is what a query for a would compute, so c should not
+            # be in the output
+            # Note that since a==b, {a,b}=={a}=={b} and nnl.query(a) returns a
+            # set, which will be {a} or {b}
+            self.assertCountEqual(nnl1.query(a), {a, b})
+
+            # c is within self.dist_thres of a according to self.dist_fn(c, a),
+            # which is what a query for c would compute
+            # Since a==b, it is also within self.dist_thres of b
+            self.assertCountEqual(nnl1.query(c), {a, b, c})
+
+            # Although e was not added, a query for it should return d because
+            # they are so similar
+            # f is similar to d according to self.dist_fn(f, d), so a
+            # query for f should return d
+            self.assertCountEqual(nnl1.query(e), {d})
+            self.assertCountEqual(nnl1.query(f), {d})
+
+            # h is similar to g according to self.dist_fn(h, g), so a
+            # query for h should return g
+            self.assertCountEqual(nnl1.query(h), {g})
+
+            # Now make a few changes to what is included in the data
+            # structure, and re-test
+            nnl2 = lsh.NearNeighborLookup(self.family, k, self.dist_thres,
+                self.dist_fn, 0.95)
+            nnl2.add([a, b, c, d, e, f, h])
+
+            # Since e is now included in the data structure, and f is
+            # similar to d according to self.dist_fn(f, d) (as well as to
+            # e), a query for f should return both; it should also
+            # of course return f since f is included now too
+            self.assertCountEqual(nnl2.query(f), {d, e, f})
+
+            # d is *not* similar to f according to self.dist_fn(d, f), so
+            # a query for d should not return f (but should return e,
+            # and of course d, now that e is included in the data structure)
+            self.assertCountEqual(nnl2.query(d), {d, e})
+
+            # Although h is similar to g in {G,T} space, it is *not*
+            # similar according to self.dist_fn(g, h), so a query for g
+            # should not return h (note that, above, in nnl1, where g is
+            # included but not h, a query for h should return g)
+            self.assertCountEqual(nnl2.query(g), {})
 
 
 class TestMinHashNearNeighborLookup(unittest.TestCase):

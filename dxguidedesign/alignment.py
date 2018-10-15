@@ -147,6 +147,21 @@ class Alignment:
             (Note that it is possible that x binds to no sequences and that
             y will be empty.)
         """
+        # TODO: There are several optimizations that can be made to
+        # this function that take advantage of G-U pairing in order
+        # to lower the number of guides that need to be designed.
+        # Two are:
+        #  1) The function SequenceClusterer.cluster(..), which is
+        #     used here, can cluster accounting for G-U pairing (e.g.,
+        #     such that 'A' hashes to 'G' and 'C' hashes to 'T',
+        #     so that similar guide sequences hash to the same
+        #     value tolerating G-U similarity).
+        #  2) Instead of taking a consensus sequence across a
+        #     cluster, this can take a pseudo-consensus that
+        #     accounts for G-U pairing (e.g., in which 'A' is
+        #     treated as 'G' and 'C' is treated as 'T' for
+        #     the purposes of generating a consensus sequence).
+
         assert start + guide_length <= self.seq_length
         assert len(seqs_to_consider) > 0
 
@@ -502,8 +517,12 @@ class AlignmentQuerier:
             alns: list of Alignment objects
             guide_length: length of guide sequences
             dist_thres: detect a queried guide sequence as hitting a
-                sequence in an alignment if it is within a Hamming distance
-                of dist_thres
+                sequence in an alignment if it is within a distance
+                of dist_thres (where the distance is measured with
+                guide.seq_mismatches if G-U base pairing is disabled, and
+                guide.seq_mismatches_with_gu_pairs is G-U base pairing
+                is enabled; effectively these are Hamming distance either
+                tolerating or not tolerating G-U base pairing)
             k: number of hash functions to draw from a family of
                 hash functions for amplification; each hash function is then
                 the concatenation (h_1, h_2, ..., h_k)
@@ -516,11 +535,27 @@ class AlignmentQuerier:
         self.alns = alns
         self.guide_length = guide_length
 
-        def hamming_dist(a, b):
-            return sum(1 if a[i] != b[i] else 0 for i in range(len(a)))
-        family = lsh.HammingDistanceFamily(guide_length)
-        self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, hamming_dist,
+        if guide.get_allow_gu_pairs():
+            # Measure distance while tolerating G-U base pairing, and
+            # use an appropriate LSH family
+            # Note that guide.seq_mismatches_with_gu_pairs is appropriate
+            # for the distance function here (although it is asymmetric)
+            # because it takes the arguments (guide_seq, target_seq), in
+            # that order. This will work with near neighbor queries
+            # because lsh.NearNeighborLookup.query(q) calls the dist_fn
+            # as dist_fn(q, possible-hit); here, q always represents a
+            # potential guide sequence and possible-hit is always a
+            # potential target sequence
+            dist_fn = guide.seq_mismatches_with_gu_pairs
+            family = lsh.HammingWithGUPairsDistanceFamily(guide_length)
+        else:
+            # Do not tolerate G-U base pairing when measure distance,
+            # and use a standard Hamming distance LSH family
+            dist_fn = guide.seq_mismatches
+            family = lsh.HammingDistanceFamily(guide_length)
+        self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, dist_fn,
             reporting_prob, hash_idx=0, join_concat_as_str=True)
+
         self.is_setup = False
 
     def setup(self):
