@@ -585,6 +585,10 @@ class AlignmentQuerier:
             seqs = aln.make_list_of_seqs(remove_gaps=True)
 
             for seq_idx, seq in enumerate(seqs):
+                logger.debug(("Indexing for queries: alignment %d of %d, "
+                    "sequence %d of %d"),
+                    aln_idx + 1, len(self.alns), seq_idx + 1, len(seqs))
+
                 # Add all possible guide sequences g as:
                 #   (g, aln_idx, seq_idx)
                 pts = []
@@ -607,6 +611,9 @@ class AlignmentQuerier:
         Args:
             aln_idx: index of alignment in self.alns to mask from lookups
         """
+        logger.debug("Masking alignment with index %d from alignment queries",
+            aln_idx)
+
         # The alignment index is stored in index 1 of the tuple
         mask_idx = 1
 
@@ -616,6 +623,8 @@ class AlignmentQuerier:
         """Unmask all alignments that may have been masked in the near neighbor
         lookup.
         """
+        logger.debug("Unmasking all alignments from alignment queries")
+
         self.nnr.unmask_all()
 
     def frac_of_aln_hit_by_guide(self, guide):

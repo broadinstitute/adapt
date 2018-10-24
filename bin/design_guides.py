@@ -173,13 +173,15 @@ def design_for_id(args):
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
 
-    logger.info(("Constructing data structure to allow differential "
-        "identification"))
+    logger.info(("Constructing data structure to permit guide queries for "
+        "differential identification"))
     aq = alignment.AlignmentQuerier(alns, args.guide_length,
         args.diff_id_mismatches)
     aq.setup()
 
     for i, aln in enumerate(alns):
+        logger.info("Finding guides for alignment %d (of %d)", i + 1, len(alns))
+
         seq_groups = seq_groups_per_input[i]
         cover_frac = cover_frac_per_input[i]
         required_guides_for_aln = required_guides[i]
@@ -201,14 +203,11 @@ def design_for_id(args):
         # Mask alignment with index i (aln) from being reported in queries
         # because we will likely get many guide sequences that hit aln, but we
         # do not care about these for checking specificity
-        logger.info("Masking alignment %d (of %d) from alignment queries",
-            i + 1, len(alns))
         aq.mask_aln(i)
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
         # specific to this alignment
-        logger.info("Finding guides for alignment %d (of %d)", i + 1, len(alns))
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
                                         args.window_size, cover_frac,
                                         args.missing_thres,
@@ -219,8 +218,6 @@ def design_for_id(args):
         gs.find_guides_that_cover(args.out_tsv[i], sort=args.sort_out)
 
         # i should no longer be masked from queries
-        logger.info("Unmasking alignment %d (of %d) from alignment queries",
-            i + 1, len(alns))
         aq.unmask_all_aln()
 
 
