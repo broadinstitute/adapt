@@ -49,6 +49,10 @@ class TestAlignment(unittest.TestCase):
         self.assertEqual(self.c.make_list_of_seqs(),
                          self.c_seqs)
 
+    def test_make_list_of_seqs_c_with_no_gaps(self):
+        self.assertEqual(self.c.make_list_of_seqs(remove_gaps=True),
+                         ['ATCGAA', 'ATCAA'])
+
     def test_determine_consensus_sequence_a(self):
         self.assertEqual(self.a.determine_consensus_sequence(), 'ATCGAA')
         self.assertEqual(self.a.determine_consensus_sequence([0]), 'ATCGAA')
@@ -312,6 +316,34 @@ class TestAlignmentQuerier(unittest.TestCase):
         assert_is_specific('GGGGG', 0.5, [0, 1, 2])
         assert_is_specific('CCTTC', 0.5, [1])
         assert_is_specific('TTACA', 0.5, [1])
+
+    def test_hit_with_gaps(self):
+        gappy_aln_seqs = ['ATCGACGTAAACC',
+                          'ATCGA--TAATGG',
+                          'ATGGA--TAATGG']
+        gappy_aln = alignment.Alignment.from_list_of_seqs(gappy_aln_seqs)
+        gappy_aq = alignment.AlignmentQuerier([gappy_aln], 5, 1, k=3,
+            reporting_prob=0.95)
+        gappy_aq.setup()
+
+        # GGGGG should hit no sequences
+        self.assertEqual(gappy_aq.frac_of_aln_hit_by_guide('GGGGG'),
+                         [0.0])
+
+        # GACGT should only hit the first sequence
+        self.assertEqual(gappy_aq.frac_of_aln_hit_by_guide('GACGT'),
+                         [1.0/3.0])
+
+        # GATAA should hit the second and third sequence (since their
+        # gaps are removed)
+        self.assertEqual(gappy_aq.frac_of_aln_hit_by_guide('GATAA'),
+                         [2.0/3.0])
+
+        # CATAA should hit all 3 alignments (tolerating a mismatch
+        # to CGTAA in the first, and with perfect match in the second
+        # and third after their gaps are removed
+        self.assertEqual(gappy_aq.frac_of_aln_hit_by_guide('CATAA'),
+                         [1.0])
 
     def tearDown(self):
         # Return G-U pairing setting to default

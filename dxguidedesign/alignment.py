@@ -304,7 +304,8 @@ class Alignment:
 
         return (gd, binding_seqs)
 
-    def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False):
+    def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False,
+                          remove_gaps=False):
         """Construct list of sequences from the alignment.
 
         Args:
@@ -314,6 +315,10 @@ class Alignment:
                 the alignment, return a list of tuples (seq, idx) where seq
                 is a str giving a sequence and idx is the index in the
                 alignment
+            remove_gaps: if True, remove gaps ('-') from the returned
+                sequences (i.e., so the sequences are as they appeared
+                prior to alignment); in this case, the returned sequences
+                may be of differing lengths
 
         Returns:
             list of str giving the sequences in the alignment (or, list of
@@ -321,12 +326,18 @@ class Alignment:
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
+
+        def seq_str(i):
+            # Construct the str of the sequence with index i
+            s = ''.join(self.seqs[j][i] for j in range(self.seq_length))
+            if remove_gaps:
+                s = s.replace('-', '')
+            return s
+
         if include_idx:
-            return [(''.join(self.seqs[j][i] for j in range(self.seq_length)), i)
-                    for i in seqs_to_consider]
+            return [(seq_str(i), i) for i in seqs_to_consider]
         else:
-            return [''.join(self.seqs[j][i] for j in range(self.seq_length))
-                    for i in seqs_to_consider]
+            return [seq_str(i) for i in seqs_to_consider]
 
     def determine_consensus_sequence(self, seqs_to_consider=None):
         """Determine consensus sequence from the alignment.
@@ -500,6 +511,11 @@ class AlignmentQuerier:
     and calculates the fraction of sequences in each alignment that are
     hit by the queried guide.
 
+    Note that, when building the data structure, this removes all gaps
+    from sequences in the alignment. Thus, all subsequences stored are
+    gapless. In terms of querying for potential hits, this is more
+    realistic because the actual sequences do not have gaps.
+
     This might use considerable memory, depending on the guide length,
     reporting probability, etc. It currently stores in the data structure
     a tuple (subsequence string s, index i of alignment with s, index j of
@@ -563,13 +579,16 @@ class AlignmentQuerier:
         """
         for aln_idx, aln in enumerate(self.alns):
             # Convert aln.seqs from column-major order to row-major order
-            seqs = aln.make_list_of_seqs()
+            # Also, remove all gaps from guide sequences because the
+            # true sequences are gapless, so queries for potential hits
+            # should be against gapless sequence
+            seqs = aln.make_list_of_seqs(remove_gaps=True)
 
             for seq_idx, seq in enumerate(seqs):
                 # Add all possible guide sequences g as:
                 #   (g, aln_idx, seq_idx)
                 pts = []
-                for j in range(aln.seq_length - self.guide_length + 1):
+                for j in range(len(seq) - self.guide_length + 1):
                     g = seq[j:(j + self.guide_length)]
                     pts += [(g, aln_idx, seq_idx)]
                 self.nnr.add(pts)
