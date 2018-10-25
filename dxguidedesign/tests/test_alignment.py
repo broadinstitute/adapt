@@ -217,6 +217,11 @@ class TestAlignment(unittest.TestCase):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 1),
                          [0,1,2,3,4])
 
+    def test_construct_from_0_seqs(self):
+        with self.assertRaises(Exception):
+            seqs = []
+            alignment.Alignment.from_list_of_seqs(seqs)
+
     def tearDown(self):
         # Return G-U pairing setting to default
         guide.set_allow_gu_pairs_to_default()

@@ -422,6 +422,11 @@ class Alignment:
             object of type Alignment
         """
         num_sequences = len(seqs)
+
+        if num_sequences == 0:
+            raise Exception(("Trying to construct an alignment consisting "
+                "of 0 sequences"))
+
         seq_length = len(seqs[0])
         for s in seqs:
             if len(s) != seq_length:
