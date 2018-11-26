@@ -79,6 +79,13 @@ class TestGuideSearch(unittest.TestCase):
         self.h_aln = alignment.Alignment.from_list_of_seqs(self.h_seqs)
         self.h = guide_search.GuideSearcher(self.h_aln, 5, 1, 18, 1.0, (0.5, 0, 1))
 
+        self.i_seqs = ['GTATCAGCGGCCATCAACAA',
+                       'GT-TCACCTGCTACGAACTT',
+                       'GT-TCAATGCCCATGAACCC',
+                       'GTATCATCCACCATGAACGG']
+        self.i_aln = alignment.Alignment.from_list_of_seqs(self.i_seqs)
+        self.i = guide_search.GuideSearcher(self.i_aln, 5, 1, 5, 1.0, (0.5, 0, 1))
+
         # Skip guide clustering, which may not work well when the guides
         # are so short in these tests
         self.a.guide_clusterer = None
@@ -89,6 +96,7 @@ class TestGuideSearch(unittest.TestCase):
         self.f.guide_clusterer = None
         self.g.guide_clusterer = None
         self.h.guide_clusterer = None
+        self.i.guide_clusterer = None
 
     def test_construct_guide_memoized_a(self):
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}}),
@@ -211,6 +219,15 @@ class TestGuideSearch(unittest.TestCase):
         # guides in these regions
         self.assertEqual(self.h._find_guides_that_cover_in_window(0),
                          set(['CAACG', 'CACCC']))
+
+    def test_find_guides_with_gap(self):
+        # It should not be able to find a guide in a window where the only
+        # possible guides overlap sequences with a gap
+        with self.assertRaises(guide_search.CannotAchieveDesiredCoverageError):
+            self.i._find_guides_that_cover_in_window(1)
+
+        # It should be able to find a guide in a window without a gap
+        self.i._find_guides_that_cover_in_window(10)
 
     def test_guide_is_suitable_fn(self):
         seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',

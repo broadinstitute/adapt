@@ -172,6 +172,12 @@ class Alignment:
 
         aln_for_guide = self.extract_range(start, start + guide_length)
 
+        # Before modifying seqs_to_consider, make a copy of it
+        seqs_to_consider_cp = {}
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider_cp[group_id] = set(seqs_to_consider[group_id])
+        seqs_to_consider = seqs_to_consider_cp
+
         all_seqs_to_consider = set.union(*seqs_to_consider.values())
 
         # Ignore any sequences in the alignment that have a gap in
