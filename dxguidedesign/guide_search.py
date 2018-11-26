@@ -550,6 +550,31 @@ class GuideSearcher:
         score = sum_of_frac_of_seqs_bound / float(len(guides))
         return score
 
+    def _total_frac_bound_by_guides(self, guides):
+        """Calculate the total fraction of sequences in the alignment
+        bound by the guides.
+
+        Note that if the sequences are grouped (e.g., by year), this
+        might be small because many sequences might be from a group
+        (e.g., year) with a low desired coverage.
+
+        Args:
+            guides: collection of str representing guide sequences
+
+        Returns:
+            total fraction of all sequences bound by a guide
+        """
+        seqs_bound = set()
+        for gd_seq in guides:
+            # Determine all sequences covered by gd_seq
+            for pos in self._selected_guide_positions[gd_seq]:
+                seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
+                    pos, self.mismatches))
+
+        num_bound = len(seqs_bound)
+        frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
+        return frac_bound
+
     def _find_guides_that_cover_for_each_window(self):
         """Find the smallest collection of guides that cover sequences
         in each window.
@@ -573,7 +598,9 @@ class GuideSearcher:
               3) score corresponding to the guides in the window, which can
                  be used to break ties across windows that have the same
                  number of minimal guides (higher is better)
-              4) set of guides that achieve the desired coverage and is
+              4) total fraction of all sequences in the alignment bound
+                 by a guide
+              5) set of guides that achieve the desired coverage and is
                  minimal for the window
         """
         min_guides_in_cover = set()
@@ -596,7 +623,8 @@ class GuideSearcher:
 
             num_guides = len(guides_in_cover)
             score = self._score_collection_of_guides(guides_in_cover)
-            guides += [ [start, num_guides, score, guides_in_cover] ]
+            frac_bound = self._total_frac_bound_by_guides(guides_in_cover)
+            guides += [ [start, num_guides, score, frac_bound, guides_in_cover] ]
 
             # We no longer need to memoize results for guides that start at
             # this position
@@ -631,18 +659,18 @@ class GuideSearcher:
         with open(out_fn, 'w') as outf:
             # Write a header
             outf.write('\t'.join(['window-start', 'window-end',
-                'count', 'score', 'target-sequences',
+                'count', 'score', 'total-frac-bound', 'target-sequences',
                 'target-sequence-positions']) + '\n')
 
             for guides_in_window in guide_collections:
-                start, count, score, guide_seqs = guides_in_window
+                start, count, score, frac_bound, guide_seqs = guides_in_window
                 end = start + self.window_size
                 guide_seqs_sorted = sorted(list(guide_seqs))
                 guide_seqs_str = ' '.join(guide_seqs_sorted)
                 positions = [self._selected_guide_positions[gd_seq]
                              for gd_seq in guide_seqs_sorted]
                 positions_str = ' '.join(str(p) for p in positions)
-                line = [start, end, count, score, guide_seqs_str,
+                line = [start, end, count, score, frac_bound, guide_seqs_str,
                         positions_str]
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')

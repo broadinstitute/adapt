@@ -100,6 +100,7 @@ The columns are:
 * `window-start`/`window-end`: Start (inclusive) and end (exclusive) positions of this window in the alignment.
 * `count`: The number of guide sequences for this window.
 * `score`: A statistic between 0 and 1 that describes the redundancy of the guide sequences in capturing the input sequences (higher is better); it is meant to break ties between windows that have the same number of guide sequences, and is not intended to be compared between windows with different numbers of guide sequences.
+* `total-frac-bound`: The total fraction of all sequences in the alignment that are bound by a guide. Note that if `--cover-by-year-decay` is provided, this might be considerably less than COVER_FRAC.
 * `target-sequences`: The sequences of the targets for this window from which to construct guides, separated by spaces (guides should be reverse complements of these sequences).
 * `target-sequence-positions`: The positions of the guide sequences in the alignment, in the same order as the sequences are reported; since a guide may come from >1 position, positions are reported in set notation (e.g., \{100\}).
 
