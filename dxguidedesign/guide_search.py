@@ -411,6 +411,11 @@ class GuideSearcher:
             # The set representing gd goes into the set cover, and all of the
             # sequences it hybridizes to are removed from their group in the
             # universe
+            logger.debug(("Adding guide '%s' (at %d) to cover; it covers "
+                "%d sequences") % (gd, gd_pos, len(gd_covered_seqs)))
+            logger.debug(("Before adding, there are %s left to cover "
+                "per-group") % ([num_left_to_cover[gid] for gid in universe.keys()]))
+
             guides_in_cover.add(gd)
             for group_id in universe.keys():
                 universe[group_id].difference_update(gd_covered_seqs)
@@ -420,8 +425,12 @@ class GuideSearcher:
             # revisited
             self._selected_guide_positions[gd].add(gd_pos)
 
+            logger.debug(("After adding, there are %s left to cover "
+                "per-group") % ([num_left_to_cover[gid] for gid in universe.keys()]))
+
         # Place all guides from self.required_guides that fall within this
         # window into guides_in_cover
+        logger.debug("Adding required covers to cover")
         for gd, gd_pos in self.required_guides.items():
             if (gd_pos < start or
                     gd_pos + self.guide_length > start + self.window_size):
@@ -448,6 +457,10 @@ class GuideSearcher:
 
         # Keep iterating until desired partial cover is obtained for all
         # groups
+        logger.debug(("Iterating to achieve coverage; universe has %s "
+            "elements per-group, with %s that can be uncovered per-group") %
+            ([len(universe[gid]) for gid in universe.keys()],
+             [num_that_can_be_uncovered for gid in universe.keys()]))
         while [True for group_id in universe.keys()
                if num_left_to_cover[group_id] > 0]:
             # Find the guide that hybridizes to the most sequences, among
