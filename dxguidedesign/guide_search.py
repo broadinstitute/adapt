@@ -571,7 +571,6 @@ class GuideSearcher:
                 seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
                     pos, self.mismatches))
 
-        num_bound = len(seqs_bound)
         frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
         return frac_bound
 
