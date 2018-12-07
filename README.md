@@ -85,6 +85,8 @@ dgd does not output guides that hit group/taxons other than the one for which th
 Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
 Note that `--id` must be set to perform differential identification (setting `--id-m` and/or `--id-frac` alone will not suffice).
 (Default: 2 for ID_M, 0.05 for ID_FRAC.)
+* `--specific-against [alignment] [alignment ...]`: Design guides to be specific against the provided alignments (in FASTA format).
+That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
 * `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs as matching.
 * `--required-guides REQUIRED_GUIDES`: Ensure that the guides provided in REQUIRED_GUIDES are included in the design, and perform the design with them already included.
 See `design_guides.py --help` for details on the REQUIRED_GUIDES file format.

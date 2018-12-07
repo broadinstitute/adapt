@@ -170,6 +170,14 @@ def design_for_id(args):
         seq_groups_per_input += [seq_groups]
         cover_frac_per_input += [cover_frac]
 
+    # Also add the specific_against alignments into alns, but keep
+    # track of how many use for design (the first N of them)
+    num_aln_for_design = len(args.in_fasta)
+    for specific_against_fasta in args.specific_against:
+        seqs = seq_io.read_fasta(specific_against_fasta)
+        aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+        alns += [aln]
+
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
 
@@ -179,9 +187,11 @@ def design_for_id(args):
         args.diff_id_mismatches)
     aq.setup()
 
-    for i, aln in enumerate(alns):
-        logger.info("Finding guides for alignment %d (of %d)", i + 1, len(alns))
+    for i in range(num_aln_for_design):
+        logger.info("Finding guides for alignment %d (of %d)",
+            i + 1, num_aln_for_design)
 
+        aln = alns[i]
         seq_groups = seq_groups_per_input[i]
         cover_frac = cover_frac_per_input[i]
         required_guides_for_aln = required_guides[i]
@@ -230,6 +240,9 @@ def main(args):
     if (args.diff_id_mismatches or args.diff_id_frac) and not args.diff_id:
         logger.warning(("--id-m or --id-frac is useless without also "
             "specifying --id"))
+    if args.specific_against and not args.diff_id:
+        raise Exception(("To use --specific-against, you must also specify "
+            "--id"))
     if args.diff_id:
         # Specify default values for --id-m and --id-frac (to allow the above
         # check, do not do this with argparse directly)
@@ -347,6 +360,13 @@ if __name__ == "__main__":
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity. Ignored "
               "when --id is not set."))
+    parser.add_argument('--specific-against', nargs='+',
+        help=("Path to one or more FASTA files giving alignments, such that "
+              "guides are designed to be specific against (i.e., not hit) "
+              "these alignments, according to --id-m and --id-frac. This "
+              "is equivalent to specifying the FASTAs in the main input "
+              "(as positional inputs), except that, when provided here, "
+              "guides are not designed for these alignments."))
 
     # G-U pairing options
     parser.add_argument('--do-not-allow-gu-pairing', action='store_true',
