@@ -76,7 +76,8 @@ def write_fasta(seqs, out_fn, chars_per_line=70):
     with open(out_fn, 'w') as f:
         for seq_name, seq in seqs.items():
             f.write('>' + seq_name + '\n')
-            seq_wrapped = textwrap.wrap(seq, chars_per_line)
+            seq_wrapped = textwrap.wrap(seq, chars_per_line,
+                break_on_hyphens=False)
             for seq_line in seq_wrapped:
                 f.write(seq_line + '\n')
             f.write('\n')
