@@ -42,6 +42,58 @@ def fetch_neighbors_table(taxid):
             yield line_rstrip
 
 
+def ncbi_download_url(accessions):
+    """Construct URL for downloading FASTA sequence.
+
+    Args:
+        accessions: collection of accessions to download sequences for
+
+    Returns:
+        str representing download URL
+    """
+    ids = ','.join(accessions)
+    # Use safe=',' to not encode ',' as '%2'
+    params = urllib.parse.urlencode({'id': ids, 'db': 'nuccore',
+        'rettype': 'fasta', 'retmode': 'text'}, safe=',')
+    url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params
+    return url
+
+
+def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
+    """Download sequences for accessions.
+
+    Entrez enforces a limit of ~3 requests per second (or else it
+    will return a 'Too many requests' error); to avoid this, this
+    aims for ~2 requests per second. To use up to 10 requests per second,
+    request an API key from Entrez.
+
+    Args:
+        taxids: collection of accessions to download sequences for
+        batch_size: number of accessions to download in each batch
+        reqs_per_sec: number of requests per second to allow
+
+    Returns:
+        tempfile object containing the sequences in fasta format
+    """
+    # Make temp file
+    fp = tempfile.NamedTemporaryFile()
+
+    # Download sequences in batches
+    for i in range(0, len(accessions), batch_size):
+        batch = accessions[i:(i + batch_size)]
+        url = ncbi_download_url(batch)
+        r = urllib.request.urlopen(url)
+        raw_data = r.read()
+        for line in raw_data.decode('utf-8').split('\n'):
+            fp.write((line + '\n').encode())
+        time.sleep(1.0/reqs_per_sec)
+
+    # Set position to 0 so it can be re-read
+    fp.seek(0)
+
+    return fp
+
+
 class Neighbor:
     """Immutable representation of a genome neighbor."""
 
