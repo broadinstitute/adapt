@@ -21,26 +21,25 @@ def read_unaligned_seqs(tmp):
             (tempfile.NamedTemporaryFile object)
 
     Returns:
-        dict mapping accessions (without version) to sequences
-        (as str)
+        dict mapping accession.version to sequences (as str)
     """
-    # TODO: Use accession.version instead of just accession
     # Each sequence header is in the format '[accession].[version] [name, etc.]'
-    # Parse them to extract the accession
-    acc_p = re.compile("(.+?)(?:\.| )")
+    # Parse them to extract the accession.version (everything before the
+    # first space)
+    accver_p = re.compile('([^\s]+)')
 
     seqs = seq_io.read_fasta(tmp.name)
-    seqs_by_acc = OrderedDict()
+    seqs_by_accver = OrderedDict()
     for name, seq in seqs.items():
-        acc = acc_p.match(name).group(1)
-        seqs_by_acc[acc] = seq
-    return seqs_by_acc
+        accver = accver_p.match(name).group(1)
+        seqs_by_accver[accver] = seq
+    return seqs_by_accver
 
 
 class AlignmentMemoizer:
     """Memoizer for alignments.
 
-    This stores an alignment using a hash of the accessions
+    This stores an alignment using a hash of the accession.version
     in the alignments.
 
     This stores alignments as fasta files named by the hash.
@@ -57,35 +56,35 @@ class AlignmentMemoizer:
         if not os.path.exists(self.path):
             os.makedirs(self.path)
 
-    def _hash_accs_filepath(self, accs):
+    def _hash_accvers_filepath(self, accvers):
         """Generate a path to use as the filename for an alignment.
 
         Args:
-            accs: collection of accessions in an alignment
+            accvers: collection of accession.version in an alignment
 
         Returns:
             path to file that should store accs
         """
-        h = hashlib.md5(str(sorted(set(accs))).encode('utf-8')).hexdigest()
+        h = hashlib.md5(str(sorted(set(accvers))).encode('utf-8')).hexdigest()
         return os.path.join(self.path, h)
 
-    def get(self, accs):
+    def get(self, accvers):
         """Get memoized alignment.
 
         Args:
-            accs: collection of accessions in an alignment
+            accvers: collection of accession.version in an alignment
 
         Returns:
-            OrderedDict mapping accessions to sequences; or None
-            if accs is not memoized
+            OrderedDict mapping accession.version to sequences; or None
+            if accvers is not memoized
         """
-        p = self._hash_accs_filepath(accs)
+        p = self._hash_accvers_filepath(accvers)
 
         if os.path.exists(p):
             # Read the fasta, and verify that the accessions in it
             # match accs (i.e., that there is not a collision)
             seqs = seq_io.read_fasta(p)
-            if set(accs) == set(seqs.keys()):
+            if set(accvers) == set(seqs.keys()):
                 return seqs
             else:
                 return None
@@ -96,9 +95,9 @@ class AlignmentMemoizer:
         """Memoize alignment by saving it to a file.
 
         Args:
-            seqs: dict mapping accessions to sequences
+            seqs: dict mapping accession.version to sequences
         """
-        p = self._hash_accs_filepath(seqs.keys())
+        p = self._hash_accvers_filepath(seqs.keys())
         seq_io.write_fasta(seqs, p)
         
 
@@ -122,43 +121,43 @@ class AlignmentStatMemoizer:
             with open(self.path) as f:
                 for line in f:
                     ls = line.split('\t')
-                    accs = tuple(ls[0].split(','))
+                    accvers = tuple(ls[0].split(','))
                     stats = float(ls[1]), float(ls[2])
-                    self.memoized[accs] = stats
+                    self.memoized[accvers] = stats
 
-    def get(self, accs):
+    def get(self, accvers):
         """Get memoized stats for alignment.
 
         Args:
-            accs: collection of accessions in an alignment
+            accvers: collection of accession.version in an alignment
 
         Returns:
             (aln_identity, aln_identity_ccg) for alignment of
-            accs; or None if accs is not memoized
+            accvers; or None if accs is not memoized
         """
-        accs_sorted = tuple(sorted(accs))
-        if accs_sorted in self.memoized:
-            return self.memoized[accs_sorted]
+        accvers_sorted = tuple(sorted(accvers))
+        if accvers_sorted in self.memoized:
+            return self.memoized[accvers_sorted]
         else:
             return None
 
-    def add(self, accs, stats):
+    def add(self, accvers, stats):
         """Memoize statistics for an alignment.
 
         Args:
-            accs: collection of accessions in an alignment
+            accvers: collection of accessions in an alignment
             stats: tuple (aln_identity, aln_identity_ccg)
         """
         assert len(stats) == 2
-        accs_sorted = tuple(sorted(accs))
-        self.memoized[accs_sorted] = stats
+        accvers_sorted = tuple(sorted(accvers))
+        self.memoized[accvers_sorted] = stats
 
     def save(self):
         """Save memoized values to file."""
         with open(self.path + '.tmp', 'w') as f:
-            for accs, stats in self.memoized.items():
-                accs_str = ','.join(accs)
-                f.write(('\t'.join([accs_str, str(stats[0]), str(stats[1])]) +
+            for accvers, stats in self.memoized.items():
+                accvers_str = ','.join(accvers)
+                f.write(('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
                     '\n'))
         os.rename(self.path + '.tmp', self.path)
 
@@ -294,7 +293,8 @@ def _collapse_consecutive_gaps(a, b):
 
 
 def curate_against_ref(seqs, ref_acc, asm=None,
-        aln_identity_thres=0.5, aln_identity_ccg_thres=0.6):
+        aln_identity_thres=0.5, aln_identity_ccg_thres=0.6,
+        remove_ref_acc=False):
     """Curate sequences by aligning pairwise with a reference sequence.
 
     This can make use of an object of AlignmentStatMemoizer to
@@ -302,8 +302,9 @@ def curate_against_ref(seqs, ref_acc, asm=None,
 
     Args:
         seqs: dict mapping sequence accession to sequences
-        ref_acc: accession of reference sequence to use for curation; must
-            be a key in seqs
+        ref_acc: accession of reference sequence to use for curation; either
+            itself or ref_acc.[version] for some version must be a key
+            in seqs
         asm: AlignmentStatMemoizer to use for memoization of values; or
             None to not memoize
         aln_identity_thres: filter out any sequences with less than
@@ -312,53 +313,69 @@ def curate_against_ref(seqs, ref_acc, asm=None,
             this fraction identity to ref_acc, after collapsing
             consecutive gaps to a single gap; this should be at least
             aln_identity_thres
+        remove_ref_acc: do not include ref_acc in the output
 
     Returns:
-        dict mapping sequence accession to sequences, filtered by
+        dict mapping sequence accession.version to sequences, filtered by
         ones that can align reasonably well with ref_acc
     """
-    if ref_acc not in seqs:
-        raise Exception("ref_acc must be in seqs")
+    # Find ref_acc in seqs
+    if ref_acc in seqs:
+        ref_acc_key = ref_acc
+    else:
+        # Look for a key in seqs that is ref_acc.[version] for some version
+        ref_acc_key = None
+        for k in seqs.keys():
+            if k.split('.')[0] == ref_acc:
+                ref_acc_key = k
+                break
+        if ref_acc_key is None:
+            raise Exception("ref_acc must be in seqs")
 
     seqs_filtered = OrderedDict()
-    for acc, seq in seqs.items():
-        if acc == ref_acc:
-            # ref_acc will align well with ref_acc, so include it automatically
-            seqs_filtered[acc] = seq
+    for accver, seq in seqs.items():
+        if accver == ref_acc_key:
+            # ref_acc_key will align well with ref_acc_key, so include it
+            # automatically
+            seqs_filtered[accver] = seq
             continue
 
-        stats = asm.get((ref_acc, acc)) if asm is not None else None
+        stats = asm.get((ref_acc_key, accver)) if asm is not None else None
         if stats is not None:
             aln_identity, aln_identity_ccg = stats
         else:
-            # Align ref_acc with acc
-            to_align = {ref_acc: seqs[ref_acc], acc: seq}
+            # Align ref_acc_key with accver
+            to_align = {ref_acc_key: seqs[ref_acc_key], accver: seq}
             aligned = align(to_align)
-            ref_acc_aln = aligned[ref_acc]
-            acc_aln = aligned[acc]
-            assert len(ref_acc_aln) == len(acc_aln)
+            ref_acc_aln = aligned[ref_acc_key]
+            accver_aln = aligned[accver]
+            assert len(ref_acc_aln) == len(accver_aln)
 
             # Compute the identity of the alignment
-            aln_identity = _aln_identity(ref_acc_aln, acc_aln)
+            aln_identity = _aln_identity(ref_acc_aln, accver_aln)
 
             # Compute the identity of the alignment, after collapsing
             # consecutive gaps (ccg) to a single gap
-            ref_acc_aln_ccg, acc_aln_ccg = _collapse_consecutive_gaps(
-                ref_acc_aln, acc_aln)
-            aln_identity_ccg = _aln_identity(ref_acc_aln_ccg, acc_aln_ccg)
+            ref_acc_aln_ccg, accver_aln_ccg = _collapse_consecutive_gaps(
+                ref_acc_aln, accver_aln)
+            aln_identity_ccg = _aln_identity(ref_acc_aln_ccg, accver_aln_ccg)
 
             if asm is not None:
                 # Memoize these statistics, so the alignment does not need
                 # to be performed again
                 stats = (aln_identity, aln_identity_ccg)
-                asm.add((ref_acc, acc), stats)
+                asm.add((ref_acc_key, accver), stats)
 
         if (aln_identity >= aln_identity_thres and
                 aln_identity_ccg >= aln_identity_ccg_thres):
-            seqs_filtered[acc] = seq
+            seqs_filtered[accver] = seq
 
     if asm is not None:
         # Save the new memoized values
         asm.save()
+
+    if remove_ref_acc:
+        # Do not include ref_acc_key in the output
+        del seqs_filtered[ref_acc_key]
 
     return seqs_filtered

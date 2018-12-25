@@ -41,6 +41,8 @@ def prepare_for(taxid, segment, ref_acc, out,
 
     # Fetch FASTAs for the neighbors; also do so for ref_acc if it
     # is not included
+    # Keep track of whether it was added, so that it can be removed
+    # later on
     acc_to_fetch = [n.acc for n in neighbors]
     if ref_acc not in acc_to_fetch:
         acc_to_fetch += [ref_acc]
@@ -52,12 +54,8 @@ def prepare_for(taxid, segment, ref_acc, out,
     seqs_unaligned_fp.close()
 
     seqs_unaligned_curated = align.curate_against_ref(
-        seqs_unaligned, ref_acc, asm=aln_stat_memoizer)
-
-    # If ref_acc was added to seqs_unaligned (because it needed
-    # to be fetched), remove it
-    if added_ref_acc_to_fetch:
-        del seqs_unaligned_curated[ref_acc]
+        seqs_unaligned, ref_acc, asm=aln_stat_memoizer,
+        remove_ref_acc=added_ref_acc_to_fetch)
 
     # TODO: warn if too many (>25%) are filtered out
     # Note that len(accessions) may be >> len(seqs_unaligned) because
