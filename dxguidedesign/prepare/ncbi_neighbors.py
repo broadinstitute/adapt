@@ -68,7 +68,7 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
     request an API key from Entrez.
 
     Args:
-        taxids: collection of accessions to download sequences for
+        accessions: collection of accessions to download sequences for
         batch_size: number of accessions to download in each batch
         reqs_per_sec: number of requests per second to allow
 
