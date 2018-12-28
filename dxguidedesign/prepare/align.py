@@ -267,7 +267,7 @@ def _collapse_consecutive_gaps(a, b):
     """
     assert len(a) == len(b)
     a_ccg, b_ccg = a[0], b[0]
-    for i in range(len(a)):
+    for i in range(1, len(a)):
         if a[i-1] == '-':
             if a[i] == '-':
                 # Skip this position; we are already in a gap
