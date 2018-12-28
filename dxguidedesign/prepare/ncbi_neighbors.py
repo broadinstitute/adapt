@@ -110,6 +110,14 @@ class Neighbor:
         return [self.refseq_acc, self.hosts, self.lineage, self.tax_name,
             self.segment]
 
+    def __eq__(self, other):
+        return (self.acc == other.acc and
+                self.refseq_acc == other.refseq_acc and
+                sorted(self.hosts) == sorted(other.hosts) and
+                self.lineage == other.lineage and
+                self.tax_name == other.tax_name and
+                self.segment == other.segment)
+
     def __repr__(self):
         return ';'.join('"' + str(s) + '"' for s in
             [self.acc] + self._list_of_attrs())
