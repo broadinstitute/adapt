@@ -141,6 +141,9 @@ def construct_neighbors(taxid):
 
     neighbors = []
     for line in fetch_neighbors_table(taxid):
+        if len(line.strip()) == 0:
+            continue
+
         ls = line.split('\t')
 
         if line.startswith('##'):
