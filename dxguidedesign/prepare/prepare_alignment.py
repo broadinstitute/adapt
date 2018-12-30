@@ -3,15 +3,19 @@
 This includes downloading, curating, and aligning sequences.
 """
 
+import logging
+
 from dxguidedesign.prepare import align
 from dxguidedesign.prepare import ncbi_neighbors
 from dxguidedesign.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
+logger = logging.getLogger(__name__)
+
 
 def prepare_for(taxid, segment, ref_acc, out,
-        aln_memoizer=None, aln_stat_memoizer=None):
+        aln_memoizer=None, aln_stat_memoizer=None, filter_warn=0.25):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -31,7 +35,13 @@ def prepare_for(taxid, segment, ref_acc, out,
             or None to not memoize
         aln_stat_memoizer: AlignmentStatMemoizer to use for memoization
             of alignment statistic values; or None to not memoize
+        filter_warn: raise a warning if the fraction of sequences that
+            are filtered out during curation is greater than or equal to
+            this float
     """
+    logger.info(("Preparing an alignment for tax %d (segment: %s) with "
+        "reference %s") % (taxid, segment, ref_acc))
+
     # Download neighbors for taxid
     neighbors = ncbi_neighbors.construct_neighbors(taxid)
 
@@ -57,11 +67,15 @@ def prepare_for(taxid, segment, ref_acc, out,
         seqs_unaligned, ref_acc, asm=aln_stat_memoizer,
         remove_ref_acc=added_ref_acc_to_fetch)
 
-    # TODO: warn if too many (>25%) are filtered out
-    # Note that len(accessions) may be >> len(seqs_unaligned) because
-    # an accession can show up multiple times (as separate neighbors)
+    # An accession can show up multiple times (as separate neighbors)
     # for different RefSeq entries, but seqs_unaligned only stores
-    # unique accessions. So compare against len(seq_unaligned)
+    # unique accessions; when determining how many were filtered out,
+    # compared against seqs_unaligned rather than neighbors
+    frac_filtered = 1.0 - float(len(seqs_unaligned_curated)) / len(seqs_unaligned)
+    if frac_filtered >= filter_warn:
+        logger.warning(("A fraction %f of sequences were filtered out "
+            "during curation for tax %d (segment: %s) using reference %s") %
+            (frac_filtered, taxid, segment, ref_acc))
 
     # Align the curated sequences
     seqs_aligned = align.align(seqs_unaligned_curated, am=aln_memoizer)

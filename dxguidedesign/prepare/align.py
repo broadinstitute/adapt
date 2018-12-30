@@ -3,6 +3,7 @@
 
 from collections import OrderedDict
 import hashlib
+import logging
 import os
 import re
 import subprocess
@@ -11,6 +12,8 @@ import tempfile
 from dxguidedesign.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
+
+logger = logging.getLogger(__name__)
 
 
 def read_unaligned_seqs(tmp):
@@ -23,6 +26,9 @@ def read_unaligned_seqs(tmp):
     Returns:
         dict mapping accession.version to sequences (as str)
     """
+    logger.debug(("Reading and parsing unaligned sequences from "
+        "tmp file at %s") % tmp.name)
+
     # Each sequence header is in the format '[accession].[version] [name, etc.]'
     # Parse them to extract the accession.version (everything before the
     # first space)
@@ -319,6 +325,9 @@ def curate_against_ref(seqs, ref_acc, asm=None,
         dict mapping sequence accession.version to sequences, filtered by
         ones that can align reasonably well with ref_acc
     """
+    logger.debug(("Curating %d sequences against reference %s") %
+        (len(seqs), ref_acc))
+
     # Find ref_acc in seqs
     if ref_acc in seqs:
         ref_acc_key = ref_acc
@@ -365,6 +374,10 @@ def curate_against_ref(seqs, ref_acc, asm=None,
                 # to be performed again
                 stats = (aln_identity, aln_identity_ccg)
                 asm.add((ref_acc_key, accver), stats)
+
+        logger.debug(("Alignment between %s and reference %s has identity "
+            "%f and identity (after collapsing consecutive gaps) %f") %
+            (accver, ref_acc_key, aln_identity, aln_identity_ccg))
 
         if (aln_identity >= aln_identity_thres and
                 aln_identity_ccg >= aln_identity_ccg_thres):

@@ -1,12 +1,15 @@
 """Utilities for working with genome neighbors (complete genomes) from NCBI.
 """
 
+import logging
 import tempfile
 import time
 import urllib.parse
 import urllib.request
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
+
+logger = logging.getLogger(__name__)
 
 
 def ncbi_neighbors_url(taxid):
@@ -33,6 +36,8 @@ def fetch_neighbors_table(taxid):
         lines, where each line is from the genome neighbors
         table and each line is a str
     """
+    logger.debug(("Fetching table of neighbors for tax %d") % taxid)
+
     url = ncbi_neighbors_url(taxid)
     r = urllib.request.urlopen(url)
     raw_data = r.read()
@@ -75,6 +80,8 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
     Returns:
         tempfile object containing the sequences in fasta format
     """
+    logger.debug(("Fetching fasta files for %d accessions") % len(accessions))
+
     # Make temp file
     fp = tempfile.NamedTemporaryFile()
 
@@ -136,6 +143,8 @@ def construct_neighbors(taxid):
     Returns:
         list of Neighbor objects
     """
+    logger.info(("Constructing a list of neighbors for tax %d") % taxid)
+
     expected_col_order = ['Representative', 'Neighbor', 'Host',
         'Selected lineage', 'Taxonomy name', 'Segment name']
 
