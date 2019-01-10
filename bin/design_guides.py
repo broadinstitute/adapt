@@ -139,13 +139,13 @@ def design_independently(args):
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
-                                        args.window_size, cover_frac,
-                                        args.missing_thres,
+                                        cover_frac, args.missing_thres,
                                         guide_is_suitable_fn=guide_is_suitable,
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
                                         blacklisted_ranges=blacklisted_ranges_for_aln)
-        gs.find_guides_that_cover(out_tsv, sort=args.sort_out)
+        gs.find_guides_that_cover(args.window_size,
+            out_tsv, sort=args.sort_out)
 
 
 def design_for_id(args):
@@ -219,13 +219,13 @@ def design_for_id(args):
         # and write them to a file; ensure that the selected guides are
         # specific to this alignment
         gs = guide_search.GuideSearcher(aln, args.guide_length, args.mismatches,
-                                        args.window_size, cover_frac,
-                                        args.missing_thres,
+                                        cover_frac, args.missing_thres,
                                         guide_is_suitable_fn=guide_is_suitable,
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
                                         blacklisted_ranges=blacklisted_ranges_for_aln)
-        gs.find_guides_that_cover(args.out_tsv[i], sort=args.sort_out)
+        gs.find_guides_that_cover(args.window_size,
+            args.out_tsv[i], sort=args.sort_out)
 
         # i should no longer be masked from queries
         aq.unmask_all_aln()
