@@ -41,7 +41,8 @@ class PrimerSearcher(guide_search.GuideSearcher):
                 alignment
         """
         super().__init__(aln, primer_length, mismatches,
-                         cover_frac, missing_data_params)
+                         cover_frac, missing_data_params,
+                         allow_gu_pairs=False)
 
     def find_primers(self, max_at_site=None):
         """Find primers across the alignment.

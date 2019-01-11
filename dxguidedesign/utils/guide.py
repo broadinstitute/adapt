@@ -106,7 +106,7 @@ def seq_mismatches_with_gu_pairs(guide_seq, target_seq):
            )
 
 
-def guide_binds(guide_seq, target_seq, mismatches=0):
+def guide_binds(guide_seq, target_seq, mismatches, allow_gu_pairs):
     """Determine whether a guide binds to a target sequence.
 
     This tolerates ambiguity and decides whether a guide binds based on
@@ -120,6 +120,8 @@ def guide_binds(guide_seq, target_seq, mismatches=0):
         guide_seq: str of a guide sequence
         target_seq: str of a target sequence, same length as guide_seq
         mismatches: int giving threshold on number of mismatches for binding
+        allow_gu_pairs: if True, tolerate G-U base pairs when
+            counting mismatches between guide_seq and target_seq
 
     Returns:
         True iff the number of mismatches between guide_seq and target_seq
@@ -129,23 +131,8 @@ def guide_binds(guide_seq, target_seq, mismatches=0):
       assert '-' not in guide_seq
       return False
 
-    if get_allow_gu_pairs():
+    if allow_gu_pairs:
         m = seq_mismatches_with_gu_pairs(guide_seq, target_seq)
     else:
         m = seq_mismatches(guide_seq, target_seq)
     return m <= mismatches
-
-
-# Accessing and updating (module-level) global variables on binding
-def set_allow_gu_pairs_to_yes():
-    global _allow_gu_pairs
-    _allow_gu_pairs = True
-def set_allow_gu_pairs_to_no():
-    global _allow_gu_pairs
-    _allow_gu_pairs = False
-def set_allow_gu_pairs_to_default():
-    set_allow_gu_pairs_to_yes()
-def get_allow_gu_pairs():
-    global _allow_gu_pairs
-    return _allow_gu_pairs
-set_allow_gu_pairs_to_default()

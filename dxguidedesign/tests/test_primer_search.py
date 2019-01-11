@@ -23,9 +23,6 @@ class TestPrimerSearch(unittest.TestCase):
         # Set a random seed so hash functions are always the same
         random.seed(0)
 
-        # For these tests, do not allow G-U pairing
-        guide.set_allow_gu_pairs_to_no()
-
         self.a_seqs = ['ATCGAA',
                        'ATCGAT',
                        'TTCGAA',
@@ -50,6 +47,3 @@ class TestPrimerSearch(unittest.TestCase):
     def tearDown(self):
         # Re-enable logging
         logging.disable(logging.NOTSET)
-        
-        # Return G-U pairing setting to default
-        guide.set_allow_gu_pairs_to_default()

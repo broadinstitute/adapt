@@ -108,8 +108,8 @@ class Alignment:
         return has_gap
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
-            guide_clusterer, num_needed=None, missing_threshold=1,
-            guide_is_suitable_fn=None):
+            allow_gu_pairs, guide_clusterer, num_needed=None,
+            missing_threshold=1, guide_is_suitable_fn=None):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -123,6 +123,8 @@ class Alignment:
                 indices to use when constructing the guide
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
+            allow_gu_pairs: if True, tolerate G-U base pairs between a guide
+                and target when computing whether a guide binds
             guide_clusterer: object of SequenceClusterer to use for clustering
                 potential guide sequences; it must have been initialized with
                 a family suitable for guides of length guide_length; if None,
@@ -274,7 +276,8 @@ class Alignment:
         def determine_binding_seqs(gd_sequence):
             binding_seqs = []
             for seq, seq_idx in seq_rows:
-                if guide.guide_binds(gd_sequence, seq, mismatches):
+                if guide.guide_binds(gd_sequence, seq, mismatches,
+                        allow_gu_pairs):
                     binding_seqs += [seq_idx]
             return binding_seqs
 
@@ -389,7 +392,8 @@ class Alignment:
 
         return consensus
 
-    def sequences_bound_by_guide(self, gd_seq, gd_start, mismatches):
+    def sequences_bound_by_guide(self, gd_seq, gd_start, mismatches,
+            allow_gu_pairs):
         """Determine the sequences to which a guide hybridizes.
 
         Args:
@@ -397,6 +401,8 @@ class Alignment:
             gd_start: start position of the guide in the alignment
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
+            allow_gu_pairs: if True, tolerate G-U base pairs between a
+                guide and target when computing whether a guide binds
 
         Returns:
             collection of indices of sequences to which the guide will
@@ -409,7 +415,7 @@ class Alignment:
 
         binding_seqs = []
         for seq, seq_idx in seq_rows:
-            if guide.guide_binds(gd_seq, seq, mismatches):
+            if guide.guide_binds(gd_seq, seq, mismatches, allow_gu_pairs):
                 binding_seqs += [seq_idx]
         return binding_seqs
 
@@ -537,7 +543,7 @@ class AlignmentQuerier:
     can be found as: self.alns[i].seqs[x:(x + guide_length)][j].
     """
 
-    def __init__(self, alns, guide_length, dist_thres, k=15,
+    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=15,
                  reporting_prob=0.95):
         """
         Args:
@@ -550,6 +556,8 @@ class AlignmentQuerier:
                 guide.seq_mismatches_with_gu_pairs is G-U base pairing
                 is enabled; effectively these are Hamming distance either
                 tolerating or not tolerating G-U base pairing)
+            allow_gu_pairs: if True, tolerate G-U base pairs when computing
+                whether a guide binds to a target
             k: number of hash functions to draw from a family of
                 hash functions for amplification; each hash function is then
                 the concatenation (h_1, h_2, ..., h_k)
@@ -562,7 +570,7 @@ class AlignmentQuerier:
         self.alns = alns
         self.guide_length = guide_length
 
-        if guide.get_allow_gu_pairs():
+        if allow_gu_pairs:
             # Measure distance while tolerating G-U base pairing, and
             # use an appropriate LSH family
             # Note that guide.seq_mismatches_with_gu_pairs is appropriate

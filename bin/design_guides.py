@@ -143,7 +143,8 @@ def design_independently(args):
                                         guide_is_suitable_fn=guide_is_suitable,
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
-                                        blacklisted_ranges=blacklisted_ranges_for_aln)
+                                        blacklisted_ranges=blacklisted_ranges_for_aln,
+                                        allow_gu_pairs=args.allow_gu_pairs)
         gs.find_guides_that_cover(args.window_size,
             out_tsv, sort=args.sort_out)
 
@@ -184,7 +185,7 @@ def design_for_id(args):
     logger.info(("Constructing data structure to permit guide queries for "
         "differential identification"))
     aq = alignment.AlignmentQuerier(alns, args.guide_length,
-        args.diff_id_mismatches)
+        args.diff_id_mismatches, args.allow_gu_pairs)
     aq.setup()
 
     for i in range(num_aln_for_design):
@@ -223,7 +224,8 @@ def design_for_id(args):
                                         guide_is_suitable_fn=guide_is_suitable,
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
-                                        blacklisted_ranges=blacklisted_ranges_for_aln)
+                                        blacklisted_ranges=blacklisted_ranges_for_aln,
+                                        allow_gu_pairs=args.allow_gu_pairs)
         gs.find_guides_that_cover(args.window_size,
             args.out_tsv[i], sort=args.sort_out)
 
@@ -252,9 +254,7 @@ def main(args):
             args.diff_id_frac = 0.05
 
     # Allow G-U base pairing, unless it is explicitly disallowed
-    guide.set_allow_gu_pairs_to_yes()
-    if args.do_not_allow_gu_pairing:
-        guide.set_allow_gu_pairs_to_no()
+    args.allow_gu_pairs = not args.do_not_allow_gu_pairing
 
     if args.diff_id:
         design_for_id(args)
