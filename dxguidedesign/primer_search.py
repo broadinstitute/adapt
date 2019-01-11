@@ -63,7 +63,7 @@ class PrimerSearcher(guide_search.GuideSearcher):
         """
         window_size = self.guide_length # primer length
         for cover in self._find_guides_that_cover_for_each_window(
-                window_size, yield_output=True, hide_warnings=True):
+                window_size, hide_warnings=True):
             start, end, num_primers, score, frac_bound, primers_in_cover = cover
             if max_at_site is None or num_primers <= max_at_site:
                 yield (start, num_primers, frac_bound, primers_in_cover) 
