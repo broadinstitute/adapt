@@ -577,8 +577,8 @@ class GuideSearcher:
         frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
         return frac_bound
 
-    def _find_guides_that_cover_for_each_window(self, window_size):
-        # TODO: add option to mask warning and option to yield results
+    def _find_guides_that_cover_for_each_window(self, window_size,
+            yield_output=False, hide_warnings=False):
         """Find the smallest collection of guides that cover sequences
         in each window.
 
@@ -595,6 +595,10 @@ class GuideSearcher:
         Args:
             window_size: length of the window to use when sliding across
                 alignment
+            yield_output: instead of returning a list of elements x_i,
+                when set, this yields each x_i
+            hide_warnings: when set, this does not provide log warnings
+                when no more suitable guides can be constructed
 
         Returns:
             list of elements x_i in which each x_i corresponds to a window;
@@ -617,8 +621,6 @@ class GuideSearcher:
         if window_size < self.guide_length:
             raise ValueError("window size must be >= guide length") 
 
-        min_guides_in_cover = set()
-        min_guides_in_cover_count = None
         guides = []
         for start in range(0, self.aln.seq_length - window_size + 1):
             end = start + window_size
@@ -631,23 +633,29 @@ class GuideSearcher:
             except CannotAchieveDesiredCoverageError:
                 # Cannot achieve the desired coverage in this window; log and
                 # skip it
-                logger.warning(("No more suitable guides could be constructed "
-                    "in the window [%d, %d), but more are needed to "
-                    "achieve the desired coverage") % (start, end))
+                if not hide_warnings:
+                    logger.warning(("No more suitable guides could be constructed "
+                        "in the window [%d, %d), but more are needed to "
+                        "achieve the desired coverage") % (start, end))
                 self._cleanup_memoized_guides(start)
                 continue
 
             num_guides = len(guides_in_cover)
             score = self._score_collection_of_guides(guides_in_cover)
             frac_bound = self._total_frac_bound_by_guides(guides_in_cover)
-            guides += [ [start, end, num_guides, score,
-                         frac_bound, guides_in_cover] ]
+            cover = (start, end, num_guides, score, frac_bound, guides_in_cover)
+
+            if yield_output:
+                yield cover
+            else:
+                guides += [cover]
 
             # We no longer need to memoize results for guides that start at
             # this position
             self._cleanup_memoized_guides(start)
 
-        return guides
+        if not yield_output:
+            return guides
 
     def find_guides_that_cover(self, window_size, out_fn,
                                sort=False, print_analysis=True):
