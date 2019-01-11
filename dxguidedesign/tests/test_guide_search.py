@@ -472,6 +472,22 @@ class TestGuideSearch(unittest.TestCase):
         self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
                          set(['CCCCC', 'GGGGG']))
 
+    def test_with_windows_of_varying_size(self):
+        seqs = ['GTTCCAAAAAATCGGCTACCCCCTCTAC',
+                'CTACCAAAAAACCTGCTAGGGGGCGTAC',
+                'ATCGGAAAAAAACGTCCTCCCCCTGTAC',
+                'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100))
+
+        # The best guides in [1, 8) are 'CCAAA' and 'GGAAA'
+        self.assertEqual(gs._find_guides_that_cover_in_window(1, 8),
+                         set(['CCAAA', 'GGAAA']))
+
+        # The best guide in [1, 15) is 'AAAAA'
+        self.assertEqual(gs._find_guides_that_cover_in_window(1, 15),
+                         set(['AAAAA']))
+
     def tearDown(self):
         # Re-enable logging
         logging.disable(logging.NOTSET)
