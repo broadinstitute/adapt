@@ -404,14 +404,12 @@ class GuideSearcher:
         universe = {}
         for group_id, seq_ids in self.seq_groups.items():
             universe[group_id] = set(seq_ids)
+            if only_consider is not None:
+                universe[group_id] = universe[group_id] & only_consider
 
         num_that_can_be_uncovered = {}
         num_left_to_cover = {}
         for group_id, seq_ids in universe.items():
-            if only_consider is not None:
-                # Only use the seq_ids that should be considered
-                seq_ids = seq_ids & only_consider
-
             num_that_can_be_uncovered[group_id] = int(len(seq_ids) -
                 self.cover_frac[group_id] * len(seq_ids))
             # Above, use int(..) to take the floor. Also, expand out

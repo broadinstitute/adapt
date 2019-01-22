@@ -138,6 +138,12 @@ class TargetSearcher:
                 # No more suitable guides; skip this window
                 continue
 
+            if len(guides) == 0:
+                # This can happen, for example, if primer_bound_seqs is
+                # empty; then no guides are required
+                # Skip this window
+                continue
+
             # Calculate fraction of sequences bound by the guides
             guides_frac_bound = self.gs._total_frac_bound_by_guides(guides)
 
