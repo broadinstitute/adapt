@@ -64,9 +64,10 @@ class TargetSearcher:
 
         Returns:
             list of tuples (cost, target) where target is a tuple
-            ((p1, p2), guides); (p1, p2) is a pair of PrimerResult
-            objects and guides is a list of guides that achieve the
-            desired coverage in the window bound by (p1, p2)
+            ((p1, p2), (guides_frac_bound, guides)); (p1, p2) is a pair
+            of PrimerResult objects, and guides is a list of guides that
+            achieve the desired coverage (with guides_frac_bound fraction
+            of the sequences covered) in the window bound by (p1, p2)
         """
 
         # Store a heap containing the best_n primer/guide targets;
@@ -137,6 +138,9 @@ class TargetSearcher:
                 # No more suitable guides; skip this window
                 continue
 
+            # Calculate fraction of sequences bound by the guides
+            guides_frac_bound = self.gs._total_frac_bound_by_guides(guides)
+
             # Calculate a cost of the guides, and a total cost
             cost_guides = self._cost_weight_guides * len(guides)
             cost_total = cost_primers + cost_window + cost_guides
@@ -144,7 +148,7 @@ class TargetSearcher:
             # Add target to the heap (but only keep it if there are not
             # yet best_n targets or it has one of the best_n smallest
             # costs)
-            target = ((p1, p2), guides)
+            target = ((p1, p2), (guides_frac_bound, guides))
             entry = (-cost_total, next(push_id_counter), target)
             if len(target_heap) < best_n:
                 heapq.heappush(target_heap, entry)
