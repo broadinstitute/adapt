@@ -88,6 +88,18 @@ class PrimerSearcher(guide_search.GuideSearcher):
                          cover_frac, missing_data_params,
                          allow_gu_pairs=False)
 
+    def seqs_bound_by_primers(self, primers):
+        """Determine the sequences in the alignment bound by the primers.
+
+        Args:
+            primers: collection of str representing primer sequences
+
+        Returns:
+            set of sequence identifiers (index in alignment) bound by
+            a primer
+        """
+        return super()._seqs_bound_by_guides(primers)
+
     def find_primers(self, max_at_site=None):
         """Find primers across the alignment.
 

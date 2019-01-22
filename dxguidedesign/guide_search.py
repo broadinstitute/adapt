@@ -299,7 +299,8 @@ class GuideSearcher:
                         max_guide_cover = (gd, covered_seqs, pos, score)
         return max_guide_cover
 
-    def _find_guides_that_cover_in_window(self, start, end):
+    def _find_guides_that_cover_in_window(self, start, end,
+            only_consider=None):
         """Find a collection of guides that cover sequences in a given window.
 
         This attempts to find the smallest number of guides such that, within
@@ -382,6 +383,11 @@ class GuideSearcher:
 
         Args:
             start/end: boundaries of the window; the window spans [start, end)
+            only_consider: set giving list of sequence IDs (index in
+                alignment) from which to construct universe -- i.e.,
+                only consider these sequences. The desired coverage
+                (self.cover_frac) is achieved only for the sequences
+                in this set. If None (default), consider all sequences
 
         Returns:
             collection of str representing guide sequences that were selected
@@ -402,6 +408,10 @@ class GuideSearcher:
         num_that_can_be_uncovered = {}
         num_left_to_cover = {}
         for group_id, seq_ids in universe.items():
+            if only_consider is not None:
+                # Only use the seq_ids that should be considered
+                seq_ids = seq_ids & only_consider
+
             num_that_can_be_uncovered[group_id] = int(len(seq_ids) -
                 self.cover_frac[group_id] * len(seq_ids))
             # Above, use int(..) to take the floor. Also, expand out
@@ -459,6 +469,9 @@ class GuideSearcher:
                         "any sequences but is being required in the cover") %
                         (gd, gd_pos))
                 self._memoized_seqs_covered_by_required_guides[r] = gd_covered_seqs
+            if only_consider is not None:
+                # Only cover the sequences that should be considered
+                gd_covered_seqs = gd_covered_seqs & only_consider
             # Add gd to the cover, and update the universe
             add_guide_to_cover(gd, gd_covered_seqs, gd_pos)
 
@@ -558,6 +571,24 @@ class GuideSearcher:
         score = sum_of_frac_of_seqs_bound / float(len(guides))
         return score
 
+    def _seqs_bound_by_guides(self, guides):
+        """Determine the sequences in the alignment bound by the guides.
+
+        Args:
+            guides: collection of str representing guide sequences
+
+        Returns:
+            set of sequence identifiers (index in alignment) bound by
+            a guide
+        """
+        seqs_bound = set()
+        for gd_seq in guides:
+            # Determine all sequences covered by gd_seq
+            for pos in self._selected_guide_positions[gd_seq]:
+                seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
+                    pos, self.mismatches, self.allow_gu_pairs))
+        return seqs_bound
+
     def _total_frac_bound_by_guides(self, guides):
         """Calculate the total fraction of sequences in the alignment
         bound by the guides.
@@ -572,13 +603,7 @@ class GuideSearcher:
         Returns:
             total fraction of all sequences bound by a guide
         """
-        seqs_bound = set()
-        for gd_seq in guides:
-            # Determine all sequences covered by gd_seq
-            for pos in self._selected_guide_positions[gd_seq]:
-                seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
-                    pos, self.mismatches, self.allow_gu_pairs))
-
+        seqs_bound = self._seqs_bound_by_guides(guides)
         frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
         return frac_bound
 

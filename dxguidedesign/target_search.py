@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class TargetSearcher:
     """Methods to search for targets over a genome."""
 
-    def __init__(self, ps, gs, max_primers_at_site=3):
+    def __init__(self, ps, gs, max_primers_at_site=2):
         """
         Args:
             ps: PrimerSearcher object
@@ -121,18 +121,18 @@ class TargetSearcher:
                     # window
                     continue
 
-            # TODO: Find sequences covered by p1 and those covered by
-            # p2, take the intersection, and only find guides over those
-            # sequences (i.e., the ones that will be amplified); this
-            # better ensures that we achieve cover_frac coverage (otherwise
-            # sequences could be covered that, based on p1/p2, will not
-            # be amplified; if cover_frac is low, many amplified sequences
-            # may go uncovered)
+            # Find the sequences that are bound by some primer in p1 AND
+            # some primer in p2
+            p1_bound_seqs = self.ps.seqs_bound_by_primers(p1.primers_in_cover)
+            p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
+            primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
 
-            # Find guides in the window
+            # Find guides in the window, only searching across
+            # the sequences in primer_bound_seqs
             try:
                 guides = self.gs._find_guides_that_cover_in_window(
-                    window_start, window_end)
+                    window_start, window_end,
+                    only_consider=primer_bound_seqs)
             except guide_search.CannotAchieveDesiredCoverageError:
                 # No more suitable guides; skip this window
                 continue
