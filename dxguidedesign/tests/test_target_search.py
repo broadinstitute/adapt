@@ -71,7 +71,7 @@ class TestTargetSearch(unittest.TestCase):
             self.assertEqual(len(targets), best_n)
 
             for cost, target in targets:
-                (p1, p2), guides = target
+                (p1, p2), (guides_frac_bound, guides) = target
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
                 window_length = window_end - window_start
@@ -84,6 +84,9 @@ class TestTargetSearch(unittest.TestCase):
                 self.assertEqual(p1.num_primers, 1)
                 self.assertEqual(p2.num_primers, 1)
                 self.assertEqual(len(guides), 1)
+
+                # The guides should cover all sequences
+                self.assertEqual(guides_frac_bound, 1.0)
 
     def tearDown(self):
         # Re-enable logging
