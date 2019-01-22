@@ -31,17 +31,22 @@ class TestPrimerSearch(unittest.TestCase):
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
         self.a = primer_search.PrimerSearcher(self.a_aln, 4, 0, 1.0, (1, 1, 100))
 
+    def _pr(self, start, num_primers, frac_bound, primers_in_cover):
+        # Construct a PrimerResult object
+        return primer_search.PrimerResult(start, num_primers, frac_bound,
+            primers_in_cover)
+
     def test_find_primers_simple(self):
         covers = list(self.a.find_primers())
-        expected = [(0, 4, 1.0, set(['ATCG', 'TTCG', 'CTCG', 'GGCG'])),
-                    (1, 2, 1.0, set(['TCGA', 'GCGA'])),
-                    (2, 2, 1.0, set(['CGAA', 'CGAT']))]
+        expected = [self._pr(0, 4, 1.0, set(['ATCG', 'TTCG', 'CTCG', 'GGCG'])),
+                    self._pr(1, 2, 1.0, set(['TCGA', 'GCGA'])),
+                    self._pr(2, 2, 1.0, set(['CGAA', 'CGAT']))]
         self.assertEqual(covers, expected)
 
     def test_find_primers_with_max(self):
         covers = list(self.a.find_primers(max_at_site=2))
-        expected = [(1, 2, 1.0, set(['TCGA', 'GCGA'])),
-                    (2, 2, 1.0, set(['CGAA', 'CGAT']))]
+        expected = [self._pr(1, 2, 1.0, set(['TCGA', 'GCGA'])),
+                    self._pr(2, 2, 1.0, set(['CGAA', 'CGAT']))]
         self.assertEqual(covers, expected)
 
     def tearDown(self):
