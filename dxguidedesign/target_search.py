@@ -82,8 +82,11 @@ class TargetSearcher:
         target_heap = []
         push_id_counter = itertools.count()
 
+        num_primer_pairs = 0
         last_window_start = -1
         for p1, p2 in self._find_primer_pairs():
+            num_primer_pairs += 1
+
             # Determine a window between the two primers
             window_start = p1.start + p1.primer_length
             window_end = p2.start
@@ -121,6 +124,10 @@ class TargetSearcher:
                     # so there is no reason to continue considering this
                     # window
                     continue
+
+            logger.info(("Found window [%d, %d) bound by primers that could "
+                "be in the best %d targets; looking for guides within this"),
+                window_start, window_end, best_n)
 
             # Find the sequences that are bound by some primer in p1 AND
             # some primer in p2
@@ -161,9 +168,68 @@ class TargetSearcher:
             else:
                 heapq.heappushpop(target_heap, entry)
 
+        if num_primer_pairs == 0:
+            logger.warning(("Zero suitable primer pairs were found, so "
+                "no targets could be found"))
+
         # Invert the costs (target_heap had been storing the negative
         # of each cost), toss push_id, and sort by cost
         r = [(-cost, target) for cost, push_id, target in target_heap]
         r = sorted(r, key=lambda x: x[0])
 
         return r
+
+    def find_and_write_targets(self, out_fn, best_n=10):
+        """Find targets across an alignment, and write them to a file.
+
+        This writes a table of the targets to a file, in which each
+        row corresponds to a target in the genome (primer and guide
+        sets).
+
+        Args:
+            out_fn: output TSV file to write targets
+            best_n: only store and output the best_n targets with the
+                lowest cost
+        """
+        targets = self.find_targets(best_n=best_n)
+
+        with open(out_fn, 'w') as outf:
+            # Write a header
+            outf.write('\t'.join(['cost', 'target-start', 'target-end',
+                'target-length',
+                'left-primer-start', 'left-primer-num-primers',
+                'left-primer-frac-bound', 'left-primer-target-sequences',
+                'right-primer-start', 'right-primer-num-primers',
+                'right-primer-frac-bound', 'right-primer-target-sequences',
+                'num-guides', 'total-frac-bound-by-guides',
+                'guide-target-sequences', 'guide-target-sequence-positions']) +
+                '\n')
+
+            for (cost, target) in targets:
+                ((p1, p2), (guides_frac_bound, guides)) = target
+
+                # Determine the target endpoints
+                target_start = p1.start
+                target_end = p2.start + p2.primer_length
+                target_length = target_end - target_start
+
+                # Construct string of primers and guides
+                p1_seqs_sorted = sorted(list(p1.primers_in_cover))
+                p1_seqs_str = ' '.join(p1_seqs_sorted)
+                p2_seqs_sorted = sorted(list(p2.primers_in_cover))
+                p2_seqs_str = ' '.join(p2_seqs_sorted)
+                guides_seqs_sorted = sorted(list(guides))
+                guides_seqs_str = ' '.join(guides_seqs_sorted)
+
+                # Find positions of the guides
+                guides_positions = [self.gs._selected_guide_positions[gd_seq]
+                                    for gd_seq in guides_seqs_sorted]
+                guides_positions_str = ' '.join(str(p) for p in guides_positions)
+
+                line = [cost, target_start, target_end, target_length,
+                    p1.start, p1.num_primers, p1.frac_bound, p1_seqs_str,
+                    p2.start, p2.num_primers, p2.frac_bound, p2_seqs_str,
+                    len(guides), guides_frac_bound, guides_seqs_str,
+                    guides_positions_str]
+
+                outf.write('\t'.join([str(x) for x in line]) + '\n')
