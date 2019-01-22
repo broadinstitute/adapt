@@ -33,7 +33,7 @@ class TestPrimerSearch(unittest.TestCase):
 
     def _pr(self, start, num_primers, frac_bound, primers_in_cover):
         # Construct a PrimerResult object
-        return primer_search.PrimerResult(start, num_primers, frac_bound,
+        return primer_search.PrimerResult(start, num_primers, 4, frac_bound,
             primers_in_cover)
 
     def test_find_primers_simple(self):

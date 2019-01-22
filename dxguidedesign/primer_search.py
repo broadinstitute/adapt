@@ -15,19 +15,30 @@ logger = logging.getLogger(__name__)
 class PrimerResult:
     """Store results of a primer cover at a site."""
 
-    def __init__(self, start, num_primers, frac_bound, primers_in_cover):
+    def __init__(self, start, num_primers, primer_length,
+                 frac_bound, primers_in_cover):
         """
         Args:
             start: start position of the primer
             num_primers: number of primers designed at the site
+            primer_length: length of each primer
             frac_bound: total fraction of all sequences bound by the primers
             primers_in_cover: set of primers that achieve the desired coverage
                  and is minimal at the site
         """
         self.start = start
         self.num_primers = num_primers
+        self.primer_length = primer_length
         self.frac_bound = frac_bound
         self.primers_in_cover = primers_in_cover
+
+    def __str__(self):
+        return str((self.start, self.num_primers, self.primer_length,
+            self.frac_bound, self.primers_in_cover))
+
+    def __repr__(self):
+        return str((self.start, self.num_primers, self.primer_length,
+            self.frac_bound, self.primers_in_cover))
 
     def __eq__(self, other):
         """Determine equality of self and other.
@@ -40,6 +51,7 @@ class PrimerResult:
         """
         return (self.start == other.start and
                 self.num_primers == other.num_primers and
+                self.primer_length == other.primer_length and
                 self.frac_bound == other.frac_bound and
                 self.primers_in_cover == other.primers_in_cover)
 
@@ -100,4 +112,5 @@ class PrimerSearcher(guide_search.GuideSearcher):
             start, end, num_primers, score, frac_bound, primers_in_cover = cover
             if max_at_site is None or num_primers <= max_at_site:
                 yield PrimerResult(
-                    start, num_primers, frac_bound, primers_in_cover)
+                    start, num_primers, window_size,
+                    frac_bound, primers_in_cover)
