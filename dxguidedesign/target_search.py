@@ -55,12 +55,19 @@ class TargetSearcher:
                 p2 = primers[j]
                 yield (p1, p2)
 
-    def find_targets(self, best_n=10):
+    def find_targets(self, best_n=10, no_overlap=True):
         """Find targets across an alignment.
 
         Args:
             best_n: only store and output the best_n targets with the
                 lowest cost
+            no_overlap: if True, do not allow targets in the output
+                whose primers overlap on both ends. When True, if a
+                target overlaps with a target already in the output,
+                this *replaces* the overlapping one with the new one
+                if the new one has a smaller cost (if it has a greater
+                cost, it ignores the new one). When False,
+                many targets in the best_n may be very similar
 
         Returns:
             list of tuples (cost, target) where target is a tuple
@@ -126,6 +133,31 @@ class TargetSearcher:
                     # this window
                     continue
 
+            # If targets should not overlap and this overlaps a target
+            # already in target_heap, check if we should bother trying to
+            # find guides in this window
+            overlapping_i = None
+            if no_overlap:
+                # Check if any targets already in target_heap have
+                # primer pairs overlapping with (p1, p2)
+                for i in range(len(target_heap)):
+                    _, _, target_i = target_heap[i]
+                    (p1_i, p2_i), _ = target_i
+                    if p1.overlaps(p1_i) and p2.overlaps(p2_i):
+                        # Replace target_i
+                        overlapping_i = i
+                        break
+            if overlapping_i is not None:
+                # target overlaps with an entry already in target_heap
+                cost_i = -1 * target_heap[overlapping_i][0]
+                if cost_primers + cost_window > cost_i:
+                    # We will try to replace overlapping_i with a new
+                    # entry, but the cost is already greater than what it
+                    # is for overlapping_i, and will only get bigger
+                    # after adding the term for guides, so there is no
+                    # reason to continue considering this window
+                    continue
+
             logger.info(("Found window [%d, %d) bound by primers that could "
                 "be in the best %d targets; looking for guides within this"),
                 window_start, window_end, best_n)
@@ -168,10 +200,23 @@ class TargetSearcher:
                 heapq.heappush(target_heap, entry)
             else:
                 curr_highest_cost = -1 * target_heap[0][0]
-                if cost_total < curr_highest_cost:
+                if cost_total > curr_highest_cost:
+                    # Do not bother with this entry; its cost is too high
+                    # and it will not wind up in the target_heap
+                    continue
+
+                if overlapping_i is not None:
+                    # target overlaps with an entry already in target_heap;
+                    # consider replacing overlapping_i with new entry
+                    cost_i = -1 * target_heap[overlapping_i][0]
+                    if cost_total < cost_i:
+                        # Replace overlapping_i with entry
+                        target_heap[overlapping_i] = entry
+                        heapq.heapify(target_heap)
+                else:
+                    # Push the entry into target_heap, and pop out the
+                    # one with the highest cost
                     heapq.heappushpop(target_heap, entry)
-                # Else, do not bother doing a heappushpop with this entry;
-                # it will be pushed and then popped
 
         if num_primer_pairs == 0:
             logger.warning(("Zero suitable primer pairs were found, so "

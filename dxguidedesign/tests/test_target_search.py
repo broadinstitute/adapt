@@ -65,9 +65,9 @@ class TestTargetSearch(unittest.TestCase):
                             break
                     self.assertTrue(in_aln)
 
-    def test_find_targets_simple(self):
+    def test_find_targets_allowing_overlap(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = self.a.find_targets(best_n=best_n)
+            targets = self.a.find_targets(best_n=best_n, no_overlap=False)
             self.assertEqual(len(targets), best_n)
 
             for cost, target in targets:
@@ -84,6 +84,31 @@ class TestTargetSearch(unittest.TestCase):
                 self.assertEqual(p1.num_primers, 1)
                 self.assertEqual(p2.num_primers, 1)
                 self.assertEqual(len(guides), 1)
+
+                # The guides should cover all sequences
+                self.assertEqual(guides_frac_bound, 1.0)
+
+    def test_find_targets_without_overlap(self):
+        for best_n in [1, 2, 3, 4, 5, 6]:
+            targets = self.a.find_targets(best_n=best_n, no_overlap=True)
+            self.assertEqual(len(targets), best_n)
+
+            for cost, target in targets:
+                (p1, p2), (guides_frac_bound, guides) = target
+                window_start = p1.start + p1.primer_length
+                window_end = p2.start
+                window_length = window_end - window_start
+
+                # All windows are at least 10 nt long; verify this
+                # Since here targets cannot overlap, some may be
+                # shorter than 10, but all must be at least the
+                # guide length (6)
+                self.assertGreaterEqual(window_length, 6)
+
+                # For up to the top 6 targets, only 1 primer on each
+                # end is needed
+                self.assertEqual(p1.num_primers, 1)
+                self.assertEqual(p2.num_primers, 1)
 
                 # The guides should cover all sequences
                 self.assertEqual(guides_frac_bound, 1.0)
