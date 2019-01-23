@@ -20,17 +20,16 @@ class GuideSearcher:
     parameters defining the space of acceptable guides.
     """
 
-    def __init__(self, aln, guide_length, mismatches, window_size, cover_frac,
+    def __init__(self, aln, guide_length, mismatches, cover_frac,
                  missing_data_params, guide_is_suitable_fn=None,
-                 seq_groups=None, required_guides={}, blacklisted_ranges={}):
+                 seq_groups=None, required_guides={}, blacklisted_ranges={},
+                 allow_gu_pairs=False):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
             guide_length: length of the guide to construct
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
-            window_size: length of window such that a set of guides are only selected
-                if they are all within a window of this length
             cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
                  a guide; see group_seqs
             missing_data_params: tuple (a, b, c) specifying to not attempt to
@@ -57,18 +56,15 @@ class GuideSearcher:
                 constructed. No guide that might overlap these ranges is
                 constructed. Note that start is inclusive and end is
                 exclusive.
+            allow_gu_pairs: if True, tolerate G-U base pairs between a
+                guide and target when computing whether a guide binds
         """
-        if window_size > aln.seq_length:
-            raise ValueError("window_size must be less than the length of the alignment")
-        if guide_length > window_size:
-            raise ValueError("guide_length must be less than the window size")
         if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
 
         self.aln = aln
         self.guide_length = guide_length
         self.mismatches = mismatches
-        self.window_size = window_size
 
         if seq_groups is not None:
             # Check that each group has a valid cover fraction
@@ -139,6 +135,8 @@ class GuideSearcher:
                     "for a given alignment; ranges must fall within the "
                     "alignment: [0, %d)") % (start, end, self.aln.seq_length))
 
+        self.allow_gu_pairs = allow_gu_pairs
+
         self.guide_clusterer = alignment.SequenceClusterer(
             lsh.HammingDistanceFamily(guide_length),
             k=min(10, int(guide_length/2)))
@@ -176,7 +174,7 @@ class GuideSearcher:
         else:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
-                        seqs_to_consider, self.mismatches,
+                        seqs_to_consider, self.mismatches, self.allow_gu_pairs,
                         self.guide_clusterer, num_needed=num_needed,
                         missing_threshold=self.missing_threshold,
                         guide_is_suitable_fn=self.guide_is_suitable_fn)
@@ -215,7 +213,7 @@ class GuideSearcher:
                 return True
         return False
 
-    def _find_optimal_guide_in_window(self, start, seqs_to_consider,
+    def _find_optimal_guide_in_window(self, start, end, seqs_to_consider,
             num_needed):
         """Find the guide that hybridizes to the most sequences in a given window.
 
@@ -226,8 +224,7 @@ class GuideSearcher:
         breaks ties arbitrarily.
 
         Args:
-            start: starting position of the window; the window spans [start,
-                start + self.window_size)
+            start/end: boundaries of the window; the window spans [start, end)
             seqs_to_consider: dict mapping universe group ID to collection of
                 indices of sequences to use when selecting a guide
             num_needed: dict mapping universe group ID to the number of
@@ -244,13 +241,17 @@ class GuideSearcher:
                 z is a score representing the amount of the remaining
                     universe that w covers
         """
-        assert start >= 0
-        assert start + self.window_size <= self.aln.seq_length
+        if start < 0:
+            raise ValueError("window start must be >= 0")
+        if end <= start:
+            raise ValueError("window end must be > start")
+        if end > self.aln.seq_length:
+            raise ValueError("window end must be <= alignment length")
 
         # Calculate the end of the search (exclusive), which is the last
         # position in the window at which a guide can start; a guide needs to
         # fit completely within the window
-        search_end = start + self.window_size - self.guide_length + 1
+        search_end = end - self.guide_length + 1
 
         max_guide_cover = None
         for pos in range(start, search_end):
@@ -298,7 +299,8 @@ class GuideSearcher:
                         max_guide_cover = (gd, covered_seqs, pos, score)
         return max_guide_cover
 
-    def _find_guides_that_cover_in_window(self, start):
+    def _find_guides_that_cover_in_window(self, start, end,
+            only_consider=None):
         """Find a collection of guides that cover sequences in a given window.
 
         This attempts to find the smallest number of guides such that, within
@@ -380,17 +382,30 @@ class GuideSearcher:
         and the universe is initialized accordingly.
 
         Args:
-            start: starting position of the window; the window spans [start,
-                start + self.window_size)
+            start/end: boundaries of the window; the window spans [start, end)
+            only_consider: set giving list of sequence IDs (index in
+                alignment) from which to construct universe -- i.e.,
+                only consider these sequences. The desired coverage
+                (self.cover_frac) is achieved only for the sequences
+                in this set. If None (default), consider all sequences
 
         Returns:
             collection of str representing guide sequences that were selected
         """
+        if start < 0:
+            raise ValueError("window start must be >= 0")
+        if end <= start:
+            raise ValueError("window end must be > start")
+        if end > self.aln.seq_length:
+            raise ValueError("window end must be <= alignment length")
+
         # Create the universe, which is all the input sequences for each
         # group
         universe = {}
         for group_id, seq_ids in self.seq_groups.items():
             universe[group_id] = set(seq_ids)
+            if only_consider is not None:
+                universe[group_id] = universe[group_id] & only_consider
 
         num_that_can_be_uncovered = {}
         num_left_to_cover = {}
@@ -433,7 +448,7 @@ class GuideSearcher:
         logger.debug("Adding required covers to cover")
         for gd, gd_pos in self.required_guides.items():
             if (gd_pos < start or
-                    gd_pos + self.guide_length > start + self.window_size):
+                    gd_pos + self.guide_length > end):
                 # gd is not fully within this window
                 continue
             # Find the sequences in the alignment that are bound by gd
@@ -444,7 +459,7 @@ class GuideSearcher:
                 # Determine which sequences are bound by gd, and memoize
                 # them
                 gd_covered_seqs = self.aln.sequences_bound_by_guide(
-                    gd, gd_pos, self.mismatches)
+                    gd, gd_pos, self.mismatches, self.allow_gu_pairs)
                 if len(gd_covered_seqs) == 0:
                     # gd covers no sequences at gd_pos; still initialize with it
                     # but give a warning
@@ -452,6 +467,9 @@ class GuideSearcher:
                         "any sequences but is being required in the cover") %
                         (gd, gd_pos))
                 self._memoized_seqs_covered_by_required_guides[r] = gd_covered_seqs
+            if only_consider is not None:
+                # Only cover the sequences that should be considered
+                gd_covered_seqs = gd_covered_seqs & only_consider
             # Add gd to the cover, and update the universe
             add_guide_to_cover(gd, gd_covered_seqs, gd_pos)
 
@@ -466,13 +484,14 @@ class GuideSearcher:
             # Find the guide that hybridizes to the most sequences, among
             # those that are not in the cover
             gd, gd_covered_seqs, gd_pos, gd_score = self._find_optimal_guide_in_window(
-                start, universe, num_left_to_cover)
+                start, end, universe, num_left_to_cover)
 
             if gd is None or len(gd_covered_seqs) == 0:
                 # No suitable guides could be constructed within the window
                 raise CannotAchieveDesiredCoverageError(("No suitable guides "
-                    "could be constructed in the window starting at %d, but "
-                    "more are needed to achieve desired coverage") % start)
+                    "could be constructed in the window [%d, %d), but "
+                    "more are needed to achieve desired coverage") %
+                    (start, end))
 
             # Add gd to the set cover
             add_guide_to_cover(gd, gd_covered_seqs, gd_pos)
@@ -529,7 +548,7 @@ class GuideSearcher:
             seqs_bound = set()
             for pos in self._selected_guide_positions[gd_seq]:
                 seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
-                    pos, self.mismatches))
+                    pos, self.mismatches, self.allow_gu_pairs))
 
             # For each group, find the number of sequences that need to
             # be covered that are covered by gd_seq, and sum these over
@@ -550,6 +569,24 @@ class GuideSearcher:
         score = sum_of_frac_of_seqs_bound / float(len(guides))
         return score
 
+    def _seqs_bound_by_guides(self, guides):
+        """Determine the sequences in the alignment bound by the guides.
+
+        Args:
+            guides: collection of str representing guide sequences
+
+        Returns:
+            set of sequence identifiers (index in alignment) bound by
+            a guide
+        """
+        seqs_bound = set()
+        for gd_seq in guides:
+            # Determine all sequences covered by gd_seq
+            for pos in self._selected_guide_positions[gd_seq]:
+                seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
+                    pos, self.mismatches, self.allow_gu_pairs))
+        return seqs_bound
+
     def _total_frac_bound_by_guides(self, guides):
         """Calculate the total fraction of sequences in the alignment
         bound by the guides.
@@ -564,17 +601,12 @@ class GuideSearcher:
         Returns:
             total fraction of all sequences bound by a guide
         """
-        seqs_bound = set()
-        for gd_seq in guides:
-            # Determine all sequences covered by gd_seq
-            for pos in self._selected_guide_positions[gd_seq]:
-                seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
-                    pos, self.mismatches))
-
+        seqs_bound = self._seqs_bound_by_guides(guides)
         frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
         return frac_bound
 
-    def _find_guides_that_cover_for_each_window(self):
+    def _find_guides_that_cover_for_each_window(self, window_size,
+            hide_warnings=False):
         """Find the smallest collection of guides that cover sequences
         in each window.
 
@@ -588,50 +620,63 @@ class GuideSearcher:
         This does not return guides for windows where it cannot achieve
         the desired coverage in the window (e.g., due to indels or ambiguity).
 
+        Args:
+            window_size: length of the window to use when sliding across
+                alignment
+            hide_warnings: when set, this does not provide log warnings
+                when no more suitable guides can be constructed
+
         Returns:
-            list of elements x_i in which each x_i corresponds to a window;
+            yields x_i in which each x_i corresponds to a window;
             x_i is a tuple consisting of the following values, in order:
               1) start position of the window
-              2) number of guides designed for the window (i.e., length of
+              2) end position of the window
+              3) number of guides designed for the window (i.e., length of
                  the set in (4))
-              3) score corresponding to the guides in the window, which can
+              4) score corresponding to the guides in the window, which can
                  be used to break ties across windows that have the same
                  number of minimal guides (higher is better)
-              4) total fraction of all sequences in the alignment bound
+              5) total fraction of all sequences in the alignment bound
                  by a guide
-              5) set of guides that achieve the desired coverage and is
+              6) set of guides that achieve the desired coverage and is
                  minimal for the window
         """
-        min_guides_in_cover = set()
-        min_guides_in_cover_count = None
-        guides = []
-        for start in range(0, self.aln.seq_length - self.window_size + 1):
-            logger.info(("Searching for guides within window starting "
-                         "at %d") % start)
+        if window_size > self.aln.seq_length:
+            raise ValueError(("window size must be < the length of the "
+                              "alignment"))
+        if window_size < self.guide_length:
+            raise ValueError("window size must be >= guide length") 
+
+        for start in range(0, self.aln.seq_length - window_size + 1):
+            end = start + window_size
+            logger.info("Searching for guides within window [%d, %d)" %
+                        (start, end))
 
             try:
-                guides_in_cover = self._find_guides_that_cover_in_window(start)
+                guides_in_cover = self._find_guides_that_cover_in_window(
+                    start, end)
             except CannotAchieveDesiredCoverageError:
                 # Cannot achieve the desired coverage in this window; log and
                 # skip it
-                logger.warning(("No more suitable guides could be constructed "
-                    "in the window starting at %d, but more are needed to "
-                    "achieve the desired coverage") % start)
+                if not hide_warnings:
+                    logger.warning(("No more suitable guides could be constructed "
+                        "in the window [%d, %d), but more are needed to "
+                        "achieve the desired coverage") % (start, end))
                 self._cleanup_memoized_guides(start)
                 continue
 
             num_guides = len(guides_in_cover)
             score = self._score_collection_of_guides(guides_in_cover)
             frac_bound = self._total_frac_bound_by_guides(guides_in_cover)
-            guides += [ [start, num_guides, score, frac_bound, guides_in_cover] ]
+            cover = (start, end, num_guides, score, frac_bound, guides_in_cover)
+            yield cover
 
             # We no longer need to memoize results for guides that start at
             # this position
             self._cleanup_memoized_guides(start)
 
-        return guides
-
-    def find_guides_that_cover(self, out_fn, sort=False, print_analysis=True):
+    def find_guides_that_cover(self, window_size, out_fn,
+                               sort=False, print_analysis=True):
         """Find the smallest collection of guides that cover sequences, across
         all windows.
 
@@ -640,6 +685,8 @@ class GuideSearcher:
         an analysis to stdout.
 
         Args:
+            window_size: length of the window to use when sliding across
+                alignment
             out_fn: output TSV file to write guide sequences by window
             sort: if set, sort output TSV by number of guides (ascending)
                 then by score (descending); when not set, default is to
@@ -648,7 +695,8 @@ class GuideSearcher:
                 the one(s) with the smallest number of guides and highest
                 score
         """
-        guide_collections = self._find_guides_that_cover_for_each_window()
+        guide_collections = list(self._find_guides_that_cover_for_each_window(
+            window_size))
 
         if sort:
             # Sort by number of guides ascending (x[1]), then by
@@ -662,8 +710,7 @@ class GuideSearcher:
                 'target-sequence-positions']) + '\n')
 
             for guides_in_window in guide_collections:
-                start, count, score, frac_bound, guide_seqs = guides_in_window
-                end = start + self.window_size
+                start, end, count, score, frac_bound, guide_seqs = guides_in_window
                 guide_seqs_sorted = sorted(list(guide_seqs))
                 guide_seqs_str = ' '.join(guide_seqs_sorted)
                 positions = [self._selected_guide_positions[gd_seq]
@@ -676,7 +723,7 @@ class GuideSearcher:
 
         if print_analysis:
             num_windows_scanned = len(
-                range(0, self.aln.seq_length - self.window_size + 1))
+                range(0, self.aln.seq_length - window_size + 1))
             num_windows_with_guides = len(guide_collections)
 
             if num_windows_with_guides == 0:
