@@ -12,6 +12,28 @@ from dxguidedesign.utils import guide
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
+class TestPrimerResult(unittest.TestCase):
+    """Tests methods in the PrimerResult class.
+    """
+
+    def test_does_overlap(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(a))
+
+        b = primer_search.PrimerResult(12, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(b))
+        self.assertTrue(b.overlaps(a))
+
+    def test_does_not_overlap(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        b = primer_search.PrimerResult(15, 1, 5, 1.0, {'AAAAA'})
+        c = primer_search.PrimerResult(16, 1, 5, 1.0, {'AAAAA'})
+        self.assertFalse(a.overlaps(b))
+        self.assertFalse(b.overlaps(a))
+        self.assertFalse(a.overlaps(c))
+        self.assertFalse(c.overlaps(a))
+
+
 class TestPrimerSearch(unittest.TestCase):
     """Tests methods in the PrimerSearch class.
     """
