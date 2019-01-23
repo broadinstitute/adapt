@@ -196,24 +196,22 @@ class TargetSearcher:
             # costs)
             target = ((p1, p2), (guides_frac_bound, guides))
             entry = (-cost_total, next(push_id_counter), target)
-            if len(target_heap) < best_n:
+            if overlapping_i is not None:
+                # target overlaps with an entry already in target_heap;
+                # consider replacing overlapping_i with new entry
+                cost_i = -1 * target_heap[overlapping_i][0]
+                if cost_total < cost_i:
+                    # Replace overlapping_i with entry
+                    target_heap[overlapping_i] = entry
+                    heapq.heapify(target_heap)
+            elif len(target_heap) < best_n:
+                # target_heap is not yet full, so push entry to it
                 heapq.heappush(target_heap, entry)
             else:
+                # target_heap is full; consider replacing the entry that has
+                # the highest cost with the new entry
                 curr_highest_cost = -1 * target_heap[0][0]
-                if cost_total > curr_highest_cost:
-                    # Do not bother with this entry; its cost is too high
-                    # and it will not wind up in the target_heap
-                    continue
-
-                if overlapping_i is not None:
-                    # target overlaps with an entry already in target_heap;
-                    # consider replacing overlapping_i with new entry
-                    cost_i = -1 * target_heap[overlapping_i][0]
-                    if cost_total < cost_i:
-                        # Replace overlapping_i with entry
-                        target_heap[overlapping_i] = entry
-                        heapq.heapify(target_heap)
-                else:
+                if cost_total < curr_highest_cost:
                     # Push the entry into target_heap, and pop out the
                     # one with the highest cost
                     heapq.heappushpop(target_heap, entry)
