@@ -108,65 +108,6 @@ def parse_required_guides_and_blacklist(args):
     return required_guides, blacklisted_ranges, blacklisted_kmers
 
 
-def design_independently(args):
-    """Design guides, treating targets independently.
-
-    Args:
-        args: namespace of arguments provided to this executable
-    """
-    required_guides, blacklisted_ranges, blacklisted_kmers = \
-        parse_required_guides_and_blacklist(args)
-
-    def guide_is_suitable(guide):
-        # Return True iff the guide does not contain a blacklisted k-mer
-        for kmer in blacklisted_kmers:
-            if kmer in guide:
-                return False
-        return True
-
-    # Treat each alignment independently
-    for i, (in_fasta, out_tsv) in enumerate(zip(args.in_fasta, args.out_tsv)):
-        # Read the sequences and make an Alignment object
-        seqs = seq_io.read_fasta(in_fasta)
-        if args.cover_by_year_decay:
-            aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args)
-        else:
-            aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
-            seq_groups = None
-            cover_frac = args.guide_cover_frac
-
-        required_guides_for_aln = required_guides[i]
-        blacklisted_ranges_for_aln = blacklisted_ranges[i]
-
-        gs = guide_search.GuideSearcher(aln, args.guide_length, args.guide_mismatches,
-                                        cover_frac, args.missing_thres,
-                                        guide_is_suitable_fn=guide_is_suitable,
-                                        seq_groups=seq_groups,
-                                        required_guides=required_guides_for_aln,
-                                        blacklisted_ranges=blacklisted_ranges_for_aln,
-                                        allow_gu_pairs=args.allow_gu_pairs)
-
-        if args.search_cmd == 'guides-from-sliding-window':
-            # Find an optimal set of guides for each window in the genome,
-            # and write them to a file
-            gs.find_guides_that_cover(args.window_size,
-                out_tsv, sort=args.sort_out)
-        elif args.search_cmd == 'complete-targets':
-            # Find optimal targets (primer and guide set combinations),
-            # and write them to a file
-            ps = primer_search.PrimerSearcher(aln, args.primer_length,
-                                              args.primer_mismatches,
-                                              args.primer_cover_frac,
-                                              args.missing_thres)
-            ts = target_search.TargetSearcher(ps, gs,
-                max_primers_at_site=args.max_primers_at_site,
-                max_target_length=args.max_target_length)
-            ts.find_and_write_targets(out_tsv,
-                best_n=args.best_n_targets)
-        else:
-            raise Exception("Unknown subcommand")
-
-
 def design_for_id(args):
     """Design guides for differential identification across targets.
 
@@ -200,11 +141,19 @@ def design_for_id(args):
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
 
-    logger.info(("Constructing data structure to permit guide queries for "
-        "differential identification"))
-    aq = alignment.AlignmentQuerier(alns, args.guide_length,
-        args.diff_id_mismatches, args.allow_gu_pairs)
-    aq.setup()
+    # Construct the data structure for guide queries to perform
+    # differential identification
+    if len(alns) > 1:
+        logger.info(("Constructing data structure to permit guide queries for "
+            "differential identification"))
+        aq = alignment.AlignmentQuerier(alns, args.guide_length,
+            args.diff_id_mismatches, args.allow_gu_pairs)
+        aq.setup()
+    else:
+        logger.info(("Only one alignment was provided, so not constructing "
+            "data structure to permit queries for differential "
+            "identification"))
+        aq = None
 
     for i in range(num_aln_for_design):
         logger.info("Finding guides for alignment %d (of %d)",
@@ -227,12 +176,16 @@ def design_for_id(args):
 
             # Return True if guide does not hit too many sequences in
             # alignments other than aln
-            return aq.guide_is_specific_to_aln(guide, i, args.diff_id_frac)
+            if aq is not None:
+                return aq.guide_is_specific_to_aln(guide, i, args.diff_id_frac)
+            else:
+                return True
 
         # Mask alignment with index i (aln) from being reported in queries
         # because we will likely get many guide sequences that hit aln, but we
         # do not care about these for checking specificity
-        aq.mask_aln(i)
+        if aq is not None:
+            aq.mask_aln(i)
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
@@ -267,7 +220,8 @@ def design_for_id(args):
             raise Exception("Unknown subcommand")
 
         # i should no longer be masked from queries
-        aq.unmask_all_aln()
+        if aq is not None:
+            aq.unmask_all_aln()
 
 
 def main(args):
@@ -276,27 +230,10 @@ def main(args):
     if len(args.in_fasta) != len(args.out_tsv):
         raise Exception("Number output TSVs must match number of input FASTAs")
 
-    if (args.diff_id_mismatches or args.diff_id_frac) and not args.diff_id:
-        logger.warning(("--id-m or --id-frac is useless without also "
-            "specifying --id"))
-    if args.specific_against and not args.diff_id:
-        raise Exception(("To use --specific-against, you must also specify "
-            "--id"))
-    if args.diff_id:
-        # Specify default values for --id-m and --id-frac (to allow the above
-        # check, do not do this with argparse directly)
-        if not args.diff_id_mismatches:
-            args.diff_id_mismatches = 2
-        if not args.diff_id_frac:
-            args.diff_id_frac = 0.05
-
     # Allow G-U base pairing, unless it is explicitly disallowed
     args.allow_gu_pairs = not args.do_not_allow_gu_pairing
 
-    if args.diff_id:
-        design_for_id(args)
-    else:
-        design_independently(args)
+    design_for_id(args)
 
 
 if __name__ == "__main__":
@@ -311,8 +248,7 @@ if __name__ == "__main__":
     # Input/output
     base_subparser.add_argument('in_fasta', nargs='+',
         help=("Path to input FASTA. More than one can be "
-              "given; without --id specified, this just "
-              "outputs guides independently for each alignment"))
+              "given for differential identification"))
     base_subparser.add_argument('-o', '--out-tsv', nargs='+', required=True,
         help=("Path to output TSV. If more than one input "
               "FASTA is given, the same number of output TSVs "
@@ -389,21 +325,17 @@ if __name__ == "__main__":
               "to missing data."))
 
     # Differential identification
-    base_subparser.add_argument('--id', dest="diff_id", action='store_true',
-        help=("Design guides to perform differential "
-              "identification, where each input FASTA is a "
-              "group/taxon to identify with specificity; see "
-              "--id-m and --id-thres for more"))
-    base_subparser.add_argument('--id-m', dest="diff_id_mismatches", type=int,
+    base_subparser.add_argument('--id-m', dest="diff_id_mismatches",
+        type=int, default=2,
         help=("Allow for this number of mismatches when determining whether "
               "a guide 'hits' a sequence in a group/taxon other than the "
               "for which it is being designed; higher values correspond to more "
-              "specificity. Ignored when --id is not set."))
-    base_subparser.add_argument('--id-frac', dest="diff_id_frac", type=float,
+              "specificity."))
+    base_subparser.add_argument('--id-frac', dest="diff_id_frac",
+        type=float, default=0.05,
         help=("Decide that a guide 'hits' a group/taxon if it 'hits' a "
               "fraction of sequences in that group/taxon that exceeds this "
-              "value; lower values correspond to more specificity. Ignored "
-              "when --id is not set."))
+              "value; lower values correspond to more specificity."))
     base_subparser.add_argument('--specific-against', nargs='+',
         default=[],
         help=("Path to one or more FASTA files giving alignments, such that "
