@@ -199,7 +199,7 @@ def design_for_id(args):
                                         blacklisted_ranges=blacklisted_ranges_for_aln,
                                         allow_gu_pairs=args.allow_gu_pairs)
 
-        if args.search_cmd == 'guides-from-sliding-window':
+        if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
             # and write them to a file
             gs.find_guides_that_cover(args.window_size,
@@ -240,16 +240,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    # Subcommands for how to search
-    subparsers = parser.add_subparsers(dest='search_cmd')
-
-    # Default options (across all subcommands)
+    ###########################################################################
+    # OPTIONS AVAILABLE ACROSS ALL SUBCOMMANDS
+    ###########################################################################
     base_subparser = argparse.ArgumentParser(add_help=False)
 
-    # Input/output
-    base_subparser.add_argument('in_fasta', nargs='+',
-        help=("Path to input FASTA. More than one can be "
-              "given for differential identification"))
+    # Output
     base_subparser.add_argument('-o', '--out-tsv', nargs='+', required=True,
         help=("Path to output TSV. If more than one input "
               "FASTA is given, the same number of output TSVs "
@@ -271,7 +267,7 @@ if __name__ == "__main__":
             return fval
         else:
             raise argparse.ArgumentTypeError("%s is an invalid -p value" % val)
-    base_subparser.add_argument('-p', '--guide-cover-frac',
+    base_subparser.add_argument('-gp', '--guide-cover-frac',
         type=check_cover_frac, default=1.0,
         help=("The fraction of sequences that must be covered "
               "by the selected guides. If complete-targets is used, then "
@@ -396,51 +392,113 @@ if __name__ == "__main__":
         action="store_const",
         const=logging.INFO,
         help=("Verbose output"))
+    ###########################################################################
 
-    # Subcommand: guides-from-sliding-window
-    parser_swg = subparsers.add_parser('guides-from-sliding-window',
-        parents=[base_subparser],
+    ###########################################################################
+    # SUBCOMMANDS FOR SEARCH TYPE
+    ###########################################################################
+    search_subparsers = parser.add_subparsers(dest='search_cmd')
+
+    # Subcommand: sliding-window
+    parser_sw = search_subparsers.add_parser('sliding-window',
         help=("Search for guides within a sliding window of a fixed size, "
               "and output the optimal guide set for each window"))
-    parser_swg.add_argument('-w', '--window-size', type=int, default=200,
+    parser_sw_args = argparse.ArgumentParser(add_help=False)
+    parser_sw_args.add_argument('-w', '--window-size', type=int, default=200,
         help=("Ensure that selected guides are all a "
               "window of this size"))
-    parser_swg.add_argument('--sort', dest='sort_out', action='store_true',
+    parser_sw_args.add_argument('--sort', dest='sort_out', action='store_true',
         help=("If set, sort output TSV by number of guides "
               "(ascending) then by score (descending); "
               "default is to sort by window position"))
 
     # Subcommand: complete-targets
-    parser_ct = subparsers.add_parser('complete-targets',
-        parents=[base_subparser],
+    parser_ct = search_subparsers.add_parser('complete-targets',
         help=("Search for primer pairs and guides between them. This "
               "outputs the best BEST_N_TARGETS according to a cost "
               "function, where each target contains primers that bound "
               "an amplicon and a guide set within that amplicon."))
-    parser_ct.add_argument('-pl', '--primer-length', type=int, default=30,
+    parser_ct_args = argparse.ArgumentParser(add_help=False)
+    parser_ct_args.add_argument('-pl', '--primer-length', type=int, default=30,
         help=("Length of primer in nt"))
-    parser_ct.add_argument('-pp', '--primer-cover-frac', type=check_cover_frac,
-        default=1.0,
+    parser_ct_args.add_argument('-pp', '--primer-cover-frac',
+        type=check_cover_frac, default=1.0,
         help=("Same as --cover-frac, except for the design of primers -- "
-              "i.e., the fraction of sequences that must be covered "
+              "i.e., the fract_argsion of sequences that must be covered "
               "by the primers, independently on each end"))
-    parser_ct.add_argument('-pm', '--primer-mismatches', type=int, default=0,
+    parser_ct_args.add_argument('-pm', '--primer-mismatches',
+        type=int, default=0,
         help=("Allow for this number of mismatches when determining "
               "whether a primer hybridizes to a sequence"))
-    parser_ct.add_argument('--max-primers-at-site', type=int,
+    parser_ct_args.add_argument('--max-primers-at-site', type=int,
         help=("Only use primer sites that contain at most this number "
               "of primers; if not set, there is no limit"))
-    parser_ct.add_argument('--max-target-length', type=int,
+    parser_ct_args.add_argument('--max-target-length', type=int,
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))
-    parser_ct.add_argument('--cost-fn-weights', type=float, nargs=3,
-        help=("Specify custom weights in the cost function; given as "
-              "3 weights (A B C), where the cost function is "
+    parser_ct_args.add_argument('--cost-fn-weights', type=float, nargs=3,
+        help=("Specify custom weights in the cost funct_argsion; given as "
+              "3 weights (A B C), where the cost funct_argsion is "
               "A*(total number of primers) + B*log2(amplicon length) + "
               "C*(number of guides)"))
-    parser_ct.add_argument('--best-n-targets', type=int, default=10,
+    parser_ct_args.add_argument('--best-n-targets', type=int, default=10,
         help=("Only compute and output up to this number of targets. Note "
               "that runtime will generally be longer for higher values"))
+    ###########################################################################
+
+    ###########################################################################
+    # SUBCOMMANDS FOR INPUT TYPE
+    ###########################################################################
+    search_cmd_parsers = [(parser_sw, parser_sw_args),
+                          (parser_ct, parser_ct_args)]
+
+    # FASTA input
+    input_fasta_subparser = argparse.ArgumentParser(add_help=False)
+    input_fasta_subparser.add_argument('in_fasta', nargs='+',
+        help=("Path to input FASTA. More than one can be "
+              "given for differential identification"))
+
+    # Auto prepare from file
+    input_autofile_subparser = argparse.ArgumentParser(add_help=False)
+    input_autofile_subparser.add_argument('in_tsv',
+        help=("Path to input TSV. Each row gives the following columns, "
+              "in order: (1) taxonomic (e.g., species) ID from NCBI; (2) "
+              "label of segment (e.g., 'S') if there is one, or 'None' if "
+              "unsegmented; (3) accession of reference sequence to use for "
+              "curation"))
+
+    # Auto prepare from arguments
+    input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
+    input_autoargs_subparser.add_argument('tax_id',
+        help=("Taxonomic (e.g., species) ID from NCBI"))
+    input_autoargs_subparser.add_argument('segment',
+        help=("Label of segment (e.g., 'S') if there is one, or 'None' if "
+              "unsegmented"))
+    input_autoargs_subparser.add_argument('ref_acc',
+        help=("Accession of reference sequence to use for curation"))
+
+    # Add parsers for subcommands
+    for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:
+        parents = [base_subparser, search_cmd_parser_args]
+
+        search_cmd_subparser = search_cmd_parser.add_subparsers(
+            dest='input_type')
+        search_cmd_subparser.add_parser('fasta',
+            parents=parents + [input_fasta_subparser],
+            help=("Search from a given alignment input as a FASTA file"))
+        search_cmd_subparser.add_parser('auto-from-file',
+            parents=parents + [input_autofile_subparser],
+            help=("Automatically fetch sequences for one or more "
+                  "taxonomies, then curate and align each; use these "
+                  "alignments as input. The information is provided in "
+                  "a TSV file. Differential identification is performed "
+                  "across the taxonomies."))
+        search_cmd_subparser.add_parser('auto-from-args',
+            parents=parents + [input_autoargs_subparser],
+            help=("Automatically fetch sequences for one taxonomy, then curate "
+                  "and align them; use this alignment as input. The "
+                  "taxonomy is provided as command-line arguments."))
+    ###########################################################################
 
     args = parser.parse_args()
 
