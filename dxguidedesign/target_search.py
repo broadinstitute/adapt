@@ -167,7 +167,11 @@ class TargetSearcher:
             if len(target_heap) < best_n:
                 heapq.heappush(target_heap, entry)
             else:
-                heapq.heappushpop(target_heap, entry)
+                curr_highest_cost = -1 * target_heap[0][0]
+                if cost_total < curr_highest_cost:
+                    heapq.heappushpop(target_heap, entry)
+                # Else, do not bother doing a heappushpop with this entry;
+                # it will be pushed and then popped
 
         if num_primer_pairs == 0:
             logger.warning(("Zero suitable primer pairs were found, so "
