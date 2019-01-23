@@ -213,7 +213,8 @@ def design_for_id(args):
                                               args.missing_thres)
             ts = target_search.TargetSearcher(ps, gs,
                 max_primers_at_site=args.max_primers_at_site,
-                max_target_length=args.max_target_length)
+                max_target_length=args.max_target_length,
+                cost_weights=args.cost_fn_weights)
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets)
         else:
@@ -432,6 +433,11 @@ if __name__ == "__main__":
     parser_ct.add_argument('--max-target-length', type=int,
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))
+    parser_ct.add_argument('--cost-fn-weights', type=float, nargs=3,
+        help=("Specify custom weights in the cost function; given as "
+              "3 weights (A B C), where the cost function is "
+              "A*(total number of primers) + B*log2(amplicon length) + "
+              "C*(number of guides)"))
     parser_ct.add_argument('--best-n-targets', type=int, default=10,
         help=("Only compute and output up to this number of targets. Note "
               "that runtime will generally be longer for higher values"))

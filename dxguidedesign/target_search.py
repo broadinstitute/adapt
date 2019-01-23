@@ -24,7 +24,7 @@ class TargetSearcher:
     """Methods to search for targets over a genome."""
 
     def __init__(self, ps, gs, max_primers_at_site=None,
-            max_target_length=None):
+            max_target_length=None, cost_weights=None):
         """
         Args:
             ps: PrimerSearcher object
@@ -34,16 +34,19 @@ class TargetSearcher:
                 no limit
             max_target_length: only allow amplicons whose length is at
                 most this; or None for no limit
+            cost_weights: a tuple giving weights in the cost function
+                in the order (primers, window, guides)
         """
         self.ps = ps
         self.gs = gs
         self.max_primers_at_site = max_primers_at_site
         self.max_target_length = max_target_length
 
-        # Define weights in the cost function
-        self._cost_weight_primers = 0.6667
-        self._cost_weight_window = 0.2222
-        self._cost_weight_guides = 0.1111
+        if cost_weights is None:
+            cost_weights = (0.6667, 0.2222, 0.1111)
+        self.cost_weight_primers = cost_weights[0]
+        self.cost_weight_window = cost_weights[1]
+        self.cost_weight_guides = cost_weights[2]
 
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.ps.
@@ -129,16 +132,16 @@ class TargetSearcher:
             # Calculate a cost of the primers
             p1_num = p1.num_primers
             p2_num = p2.num_primers
-            cost_primers = self._cost_weight_primers * (p1_num + p2_num)
+            cost_primers = self.cost_weight_primers * (p1_num + p2_num)
 
             # Calculate a cost of the window
-            cost_window = self._cost_weight_window * math.log2(window_length)
+            cost_window = self.cost_weight_window * math.log2(window_length)
 
             # Calculate a lower bound on the total cost of this target,
             # which can be done assuming >= 1 guide will be found; this
             # is useful for pruning the search
             cost_total_lo = (cost_primers + cost_window +
-                self._cost_weight_guides * 1)
+                self.cost_weight_guides * 1)
 
             # Check if we should bother trying to find guides in this window
             if len(target_heap) >= best_n:
@@ -206,7 +209,7 @@ class TargetSearcher:
             guides_frac_bound = self.gs._total_frac_bound_by_guides(guides)
 
             # Calculate a cost of the guides, and a total cost
-            cost_guides = self._cost_weight_guides * len(guides)
+            cost_guides = self.cost_weight_guides * len(guides)
             cost_total = cost_primers + cost_window + cost_guides
 
             # Add target to the heap (but only keep it if there are not
