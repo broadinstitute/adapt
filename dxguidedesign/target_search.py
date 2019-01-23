@@ -23,17 +23,22 @@ logger = logging.getLogger(__name__)
 class TargetSearcher:
     """Methods to search for targets over a genome."""
 
-    def __init__(self, ps, gs, max_primers_at_site=2):
+    def __init__(self, ps, gs, max_primers_at_site=None,
+            max_target_length=None):
         """
         Args:
             ps: PrimerSearcher object
             gs: GuideSearcher object
             max_primers_at_site: only allow amplicons in which each
-                end has at most this number of primers
+                end has at most this number of primers; or None for
+                no limit
+            max_target_length: only allow amplicons whose length is at
+                most this; or None for no limit
         """
         self.ps = ps
         self.gs = gs
         self.max_primers_at_site = max_primers_at_site
+        self.max_target_length = max_target_length
 
         # Define weights in the cost function
         self._cost_weight_primers = 0.6667
@@ -93,6 +98,12 @@ class TargetSearcher:
         last_window_start = -1
         for p1, p2 in self._find_primer_pairs():
             num_primer_pairs += 1
+
+            target_length = p2.start + p2.primer_length - p1.start
+            if (self.max_target_length is not None and
+                    target_length > self.max_target_length):
+                # This is longer than allowed, so skip it
+                continue
 
             # Determine a window between the two primers
             window_start = p1.start + p1.primer_length
