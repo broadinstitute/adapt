@@ -117,12 +117,13 @@ class TargetSearcher:
             cost_window = self._cost_weight_window * math.log2(window_length)
 
             # Check if we should bother trying to find guides in this window
-            if len(target_heap) > 0:
+            if len(target_heap) >= best_n:
                 curr_highest_cost = -1 * target_heap[0][0]
                 if cost_primers + cost_window > curr_highest_cost:
                     # The cost is already greater than the current best_n,
-                    # so there is no reason to continue considering this
-                    # window
+                    # and will only get bigger after adding the term for
+                    # guides, so there is no reason to continue considering
+                    # this window
                     continue
 
             logger.info(("Found window [%d, %d) bound by primers that could "
