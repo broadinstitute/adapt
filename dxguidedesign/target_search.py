@@ -36,7 +36,7 @@ class TargetSearcher:
         self.max_primers_at_site = max_primers_at_site
 
         # Define weights in the cost function
-        self._cost_weight_primer = 0.6667
+        self._cost_weight_primers = 0.6667
         self._cost_weight_window = 0.2222
         self._cost_weight_guides = 0.1111
 
@@ -118,19 +118,25 @@ class TargetSearcher:
             # Calculate a cost of the primers
             p1_num = p1.num_primers
             p2_num = p2.num_primers
-            cost_primers = self._cost_weight_primer * (p1_num + p2_num)
+            cost_primers = self._cost_weight_primers * (p1_num + p2_num)
 
             # Calculate a cost of the window
             cost_window = self._cost_weight_window * math.log2(window_length)
 
+            # Calculate a lower bound on the total cost of this target,
+            # which can be done assuming >= 1 guide will be found; this
+            # is useful for pruning the search
+            cost_total_lo = (cost_primers + cost_window +
+                self._cost_weight_guides * 1)
+
             # Check if we should bother trying to find guides in this window
             if len(target_heap) >= best_n:
                 curr_highest_cost = -1 * target_heap[0][0]
-                if cost_primers + cost_window > curr_highest_cost:
-                    # The cost is already greater than the current best_n,
-                    # and will only get bigger after adding the term for
-                    # guides, so there is no reason to continue considering
-                    # this window
+                if cost_total_lo >= curr_highest_cost:
+                    # The cost is already >= than all in the current best_n,
+                    # and will only stay the same or get bigger after adding
+                    # the term for guides, so there is no reason to continue
+                    # considering this window
                     continue
 
             # If targets should not overlap and this overlaps a target
@@ -150,12 +156,13 @@ class TargetSearcher:
             if overlapping_i is not None:
                 # target overlaps with an entry already in target_heap
                 cost_i = -1 * target_heap[overlapping_i][0]
-                if cost_primers + cost_window > cost_i:
+                if cost_total_lo >= cost_i:
                     # We will try to replace overlapping_i with a new
-                    # entry, but the cost is already greater than what it
-                    # is for overlapping_i, and will only get bigger
-                    # after adding the term for guides, so there is no
-                    # reason to continue considering this window
+                    # entry, but the cost is already >= than what it
+                    # is for overlapping_i, and will only stay the
+                    # same or get bigger after adding the term for guides,
+                    # so there is no reason for considering this window
+                    # (it will never replace overlapping_i)
                     continue
 
             logger.info(("Found window [%d, %d) bound by primers that could "
