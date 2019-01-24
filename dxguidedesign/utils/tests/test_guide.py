@@ -101,6 +101,33 @@ class TestSeqMismatchesWithGUPairing(unittest.TestCase):
         self.assertEqual(guide.seq_mismatches_with_gu_pairs('ACTG', 'ATCA'), 2)
 
 
+class TestQueryTargetEq(unittest.TestCase):
+    """Tests the query_target_eq function.
+    """
+
+    def test_is_equal(self):
+        self.assertTrue(guide.query_target_eq('N', 'A'))
+        self.assertTrue(guide.query_target_eq('H', 'A'))
+        self.assertTrue(guide.query_target_eq('A', 'A'))
+        self.assertTrue(guide.query_target_eq('ANN', 'AAA'))
+        self.assertTrue(guide.query_target_eq('HNN', 'AAA'))
+        self.assertTrue(guide.query_target_eq('HNA', 'TAA'))
+        self.assertTrue(guide.query_target_eq('HNA', 'TAR'))
+        self.assertTrue(guide.query_target_eq('HNT', 'TAH'))
+        self.assertTrue(guide.query_target_eq('HNT', 'YAH'))
+
+    def test_is_not_equal(self):
+        self.assertFalse(guide.query_target_eq('N', 'N'))
+        self.assertFalse(guide.query_target_eq('A', 'N'))
+        self.assertFalse(guide.query_target_eq('A', 'T'))
+        self.assertFalse(guide.query_target_eq('GAA', 'GAT'))
+        self.assertFalse(guide.query_target_eq('HNN', 'GAA'))
+        self.assertFalse(guide.query_target_eq('HNN', 'GAA'))
+        self.assertFalse(guide.query_target_eq('HNN', 'AAN'))
+        self.assertFalse(guide.query_target_eq('AAA', 'NNN'))
+        self.assertFalse(guide.query_target_eq('AAA', 'YAA'))
+
+
 class TestGuideBindsWithoutGUPairing(unittest.TestCase):
     """Tests the guide_binds function without allowing G-U pairs.
     """
