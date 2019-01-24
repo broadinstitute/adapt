@@ -542,7 +542,7 @@ class AlignmentQuerier:
     the queried guide.
     """
 
-    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=15,
+    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=22,
                  reporting_prob=0.95):
         """
         Args:
