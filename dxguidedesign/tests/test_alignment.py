@@ -329,7 +329,77 @@ class TestAlignment(unittest.TestCase):
             aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
                 guide_is_suitable_fn=f)
 
+    def test_construct_guide_with_required_flanking(self):
+        seqs = ['TCAAAT',
+                'CCAAAA',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'TCAAAT',
+                'TCAAAT']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        guide_length = 2
+        guide_clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length),
+            k=2)
+        seqs_to_consider = {0: set(range(len(seqs)))}
+
+        # The best guide at start=2 is 'TT', but if we require
+        # 'C' to flank on the 5' end, the best is 'AA'
+        p = aln.construct_guide(2, guide_length, seqs_to_consider, 1, False,
+            guide_clusterer, required_flanking_seqs=('C', None))
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'AA')
+        self.assertEqual(set(covered_seqs), {0,1,9,10})
+
+        # The best guide at start=2 is 'TT', but if we require
+        # 'C' to flank on the 5' end, the best is 'AA'
+        # Now if we require 'M' on the 5' end, 'TT' will be the best guide
+        p = aln.construct_guide(2, guide_length, seqs_to_consider, 1, False,
+            guide_clusterer, required_flanking_seqs=('M', None))
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'TT')
+        self.assertEqual(set(covered_seqs), {2,3,4,5,6,7,8})
+
     def test_sequences_bound_by_guide(self):
+        seqs = ['TCAAAT',
+                'CCAAAA',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CCTTGT',
+                'TCAAAT',
+                'TCAAAT']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, None)),
+                         [2,3,4,5,6,7,8,9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=('A', None)),
+                         [2,3,4,5,6,7,8])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=('C', None)),
+                         [9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, 'G')),
+                         [9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, 'GN')),
+                         [9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, 'N')),
+                         [2,3,4,5,6,7,8,9])
+
+    def test_sequences_bound_by_guide_with_required_flanking(self):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 0, False),
                          [0,1,2,3])
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 1, False),

@@ -149,12 +149,12 @@ class Alignment:
         required_flanking5, required_flanking3 = required_flanking_seqs
 
         seqs_with_required_flanking = set(seqs_to_consider)
-        if required_flanking5 is not None:
+        if required_flanking5 is not None and len(required_flanking5) > 0:
             query = required_flanking5
             seqs_with_required_flanking &= seqs_that_equal(
                 required_flanking5, guide_start - len(required_flanking5),
                 guide_start)
-        if required_flanking3 is not None:
+        if required_flanking3 is not None and len(required_flanking3) > 0:
             seqs_with_required_flanking &= seqs_that_equal(
                 required_flanking3, guide_start + guide_length,
                 guide_start + guide_length + len(required_flanking3))
@@ -243,15 +243,25 @@ class Alignment:
 
         # Ignore any sequences in the alignment that have a gap in
         # this region
-        seqs_to_ignore = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
+        seqs_with_gap = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
         for group_id in seqs_to_consider.keys():
-            seqs_to_consider[group_id].difference_update(seqs_to_ignore)
+            seqs_to_consider[group_id].difference_update(seqs_with_gap)
         all_seqs_to_consider = set.union(*seqs_to_consider.values())
 
-        # If every sequence in this region has a gap, then there are none
-        # left to consider
+        # Only consider sequences in the alignment that have the
+        # required flanking sequence(s)
+        seqs_with_flanking = self.seqs_with_required_flanking(
+            start, guide_length, required_flanking_seqs,
+            seqs_to_consider=all_seqs_to_consider)
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider[group_id].intersection_update(seqs_with_flanking)
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # If every sequence in this region has a gap or does not contain
+        # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise CannotConstructGuideError("All sequences in region have a gap")
+            raise CannotConstructGuideError(("All sequences in region have "
+                "a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
             include_idx=True)
@@ -456,7 +466,7 @@ class Alignment:
         return consensus
 
     def sequences_bound_by_guide(self, gd_seq, gd_start, mismatches,
-            allow_gu_pairs):
+            allow_gu_pairs, required_flanking_seqs=(None, None)):
         """Determine the sequences to which a guide hybridizes.
 
         Args:
@@ -466,6 +476,11 @@ class Alignment:
                 a guide would hybridize to a target sequence
             allow_gu_pairs: if True, tolerate G-U base pairs between a
                 guide and target when computing whether a guide binds
+            required_flanking_seqs: tuple (s5, s3) that specifies sequences
+                on the 5' (left; s5) end and 3' (right; s3) end flanking
+                the guide (in the target, not the guide) that must be
+                required for a guide to bind; if either is None, no
+                flanking sequence is required for that end
 
         Returns:
             collection of indices of sequences to which the guide will
@@ -476,9 +491,13 @@ class Alignment:
         aln_for_guide = self.extract_range(gd_start, gd_start + len(gd_seq))
         seq_rows = aln_for_guide.make_list_of_seqs(include_idx=True)
 
+        seqs_with_flanking = self.seqs_with_required_flanking(
+            gd_start, len(gd_seq), required_flanking_seqs)
+
         binding_seqs = []
         for seq, seq_idx in seq_rows:
-            if guide.guide_binds(gd_seq, seq, mismatches, allow_gu_pairs):
+            if (seq_idx in seqs_with_flanking and
+                    guide.guide_binds(gd_seq, seq, mismatches, allow_gu_pairs)):
                 binding_seqs += [seq_idx]
         return binding_seqs
 
