@@ -3,10 +3,14 @@
 
 import argparse
 import logging
+import os
 import re
+import tempfile
 
 from dxguidedesign import alignment
 from dxguidedesign import guide_search
+from dxguidedesign.prepare import align
+from dxguidedesign.prepare import prepare_alignment
 from dxguidedesign import primer_search
 from dxguidedesign import target_search
 from dxguidedesign.utils import guide
@@ -108,6 +112,66 @@ def parse_required_guides_and_blacklist(args):
     return required_guides, blacklisted_ranges, blacklisted_kmers
 
 
+def prepare_alignments(args):
+    """Download, curate, and align sequences for input.
+
+    Args:
+        args: namespace of arguments provided to this executable
+
+    Returns:
+        tuple (in_fasta, out_tsv) in which in_fasta is a list of
+        tempfile objects that contain an input alignment and out_tsv
+        is a list of paths to files at which to write output
+        (out_tsv[i] is the output for in_tsv[i])
+    """
+    logger.info(("Setting up to prepare alignments"))
+
+    # Set the path to mafft
+    align.set_mafft_exec(args.mafft_path)
+
+    # Setup alignment and alignment stat memoizers
+    if args.prep_memoize_dir:
+        if not os.path.isdir(args.prep_memoize_dir):
+            raise Exception(("Path '%s' does not exist") %
+                args.prep_memoize_dir)
+        align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
+        if not os.path.exists(align_memoize_dir):
+            os.makedirs(align_memoize_dir)
+        align_memoize_stat_file = os.path.join(args.prep_memoize_dir, 'stats')
+
+        am = align.AlignmentMemoizer(align_memoize_dir)
+        asm = align.AlignmentStatMemoizer(align_memoize_stat_file)
+    else:
+        am = None
+        asm = None
+
+    # Read list of taxonomies
+    if args.input_type == 'auto-from-args':
+        s = None if args.segment == 'None' else args.segment
+        taxs = [(None, args.tax_id, s, args.ref_acc)]
+    elif args.input_type == 'auto-from-file':
+        taxs = seq_io.read_taxonomies(args.in_tsv)
+    else:
+        raise Exception(("Unknown input type '%s'") % args.input_type)
+
+    # Construct alignments for each taxonomy
+    in_fasta = []
+    out_tsv = []
+    for label, tax_id, segment, ref_acc in taxs:
+        aln_file = tempfile.NamedTemporaryFile()
+        prepare_alignment.prepare_for(tax_id, segment, ref_acc,
+            aln_file.name, aln_memoizer=am, aln_stat_memoizer=asm)
+        in_fasta += [aln_file]
+
+        if label is None:
+            out_tsv += [args.out_tsv]
+        else:
+            out_name = label + '.tsv'
+            out_tsv += [os.path.join(args.out_tsv_dir, out_name)]
+
+    return in_fasta, out_tsv
+
+
 def design_for_id(args):
     """Design guides for differential identification across targets.
 
@@ -141,13 +205,16 @@ def design_for_id(args):
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
 
+    # Allow G-U base pairing, unless it is explicitly disallowed
+    allow_gu_pairs = not args.do_not_allow_gu_pairing
+
     # Construct the data structure for guide queries to perform
     # differential identification
     if len(alns) > 1:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
         aq = alignment.AlignmentQuerier(alns, args.guide_length,
-            args.diff_id_mismatches, args.allow_gu_pairs)
+            args.diff_id_mismatches, allow_gu_pairs)
         aq.setup()
     else:
         logger.info(("Only one alignment was provided, so not constructing "
@@ -197,7 +264,7 @@ def design_for_id(args):
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
                                         blacklisted_ranges=blacklisted_ranges_for_aln,
-                                        allow_gu_pairs=args.allow_gu_pairs)
+                                        allow_gu_pairs=allow_gu_pairs)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -218,7 +285,7 @@ def design_for_id(args):
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets)
         else:
-            raise Exception("Unknown subcommand")
+            raise Exception("Unknown search subcommand '%s'" % args.search_cmd)
 
         # i should no longer be masked from queries
         if aq is not None:
@@ -228,13 +295,29 @@ def design_for_id(args):
 def main(args):
     logger = logging.getLogger(__name__)
 
-    if len(args.in_fasta) != len(args.out_tsv):
-        raise Exception("Number output TSVs must match number of input FASTAs")
+    if args.input_type in ['auto-from-file', 'auto-from-args']:
+        if args.input_type == 'auto-from-file':
+            if not os.path.isdir(args.out_tsv_dir):
+                raise Exception(("Output directory '%s' does not exist") %
+                    args.out_tsv_dir)
 
-    # Allow G-U base pairing, unless it is explicitly disallowed
-    args.allow_gu_pairs = not args.do_not_allow_gu_pairing
+        # Prepare input alignments, stored in temp fasta files
+        in_fasta, out_tsv = prepare_alignments(args)
+        args.in_fasta = [tf.name for tf in in_fasta]
+        args.out_tsv = out_tsv
+    elif args.input_type == 'fasta':
+        if len(args.in_fasta) != len(args.out_tsv):
+            raise Exception(("Number output TSVs must match number of input "
+                "FASTAs"))
+    else:
+        raise Exception("Unknown input type subcommand '%s'" % args.input_type)
 
     design_for_id(args)
+
+    # Close temporary files storing alignments
+    if args.input_type in ['auto_from_file', 'auto-from-args']:
+        for tf in in_fasta:
+            tf.close()
 
 
 if __name__ == "__main__":
@@ -244,13 +327,6 @@ if __name__ == "__main__":
     # OPTIONS AVAILABLE ACROSS ALL SUBCOMMANDS
     ###########################################################################
     base_subparser = argparse.ArgumentParser(add_help=False)
-
-    # Output
-    base_subparser.add_argument('-o', '--out-tsv', nargs='+', required=True,
-        help=("Path to output TSV. If more than one input "
-              "FASTA is given, the same number of output TSVs "
-              "must be given; each output TSV corresponds to "
-              "an input FASTA."))
 
     # Parameters on guide length and mismatches
     base_subparser.add_argument('-gl', '--guide-length', type=int, default=28,
@@ -457,25 +533,46 @@ if __name__ == "__main__":
     input_fasta_subparser.add_argument('in_fasta', nargs='+',
         help=("Path to input FASTA. More than one can be "
               "given for differential identification"))
+    input_fasta_subparser.add_argument('-o', '--out-tsv',
+        nargs='+', required=True,
+        help=("Path to output TSV. If more than one input FASTA is given, the "
+              "same number of output TSVs must be given; each output TSV "
+              "corresponds to an input FASTA."))
+
+    # Auto prepare, common arguments
+    input_auto_common_subparser = argparse.ArgumentParser(add_help=False)
+    input_auto_common_subparser.add_argument('--mafft-path',
+        required=True,
+        help=("Path to mafft executable, used for generating alignments"))
+    input_auto_common_subparser.add_argument('--prep-memoize-dir',
+        help=("Path to directory in which to memoize alignments and "
+              "statistics on them; if not set, this does not memoize "
+              "this information"))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)
     input_autofile_subparser.add_argument('in_tsv',
         help=("Path to input TSV. Each row gives the following columns, "
-              "in order: (1) taxonomic (e.g., species) ID from NCBI; (2) "
-              "label of segment (e.g., 'S') if there is one, or 'None' if "
-              "unsegmented; (3) accession of reference sequence to use for "
-              "curation"))
+              "in order: (1) label for the row (used for naming output "
+              "files; must be unique); (2) taxonomic (e.g., species) ID from "
+              "NCBI; (3) label of segment (e.g., 'S') if there is one, or "
+              "'None' if unsegmented; (4) accession of reference sequence to "
+              "use for curation"))
+    input_autofile_subparser.add_argument('out_tsv_dir',
+        help=("Path to directory in which to place output TSVs; each "
+              "output TSV corresponds to a row in the input"))
 
     # Auto prepare from arguments
     input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
-    input_autoargs_subparser.add_argument('tax_id',
+    input_autoargs_subparser.add_argument('tax_id', type=int,
         help=("Taxonomic (e.g., species) ID from NCBI"))
     input_autoargs_subparser.add_argument('segment',
         help=("Label of segment (e.g., 'S') if there is one, or 'None' if "
               "unsegmented"))
     input_autoargs_subparser.add_argument('ref_acc',
         help=("Accession of reference sequence to use for curation"))
+    input_autoargs_subparser.add_argument('out_tsv',
+        help=("Path to output TSV"))
 
     # Add parsers for subcommands
     for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:
@@ -487,14 +584,14 @@ if __name__ == "__main__":
             parents=parents + [input_fasta_subparser],
             help=("Search from a given alignment input as a FASTA file"))
         search_cmd_subparser.add_parser('auto-from-file',
-            parents=parents + [input_autofile_subparser],
+            parents=parents + [input_auto_common_subparser, input_autofile_subparser],
             help=("Automatically fetch sequences for one or more "
                   "taxonomies, then curate and align each; use these "
                   "alignments as input. The information is provided in "
                   "a TSV file. Differential identification is performed "
                   "across the taxonomies."))
         search_cmd_subparser.add_parser('auto-from-args',
-            parents=parents + [input_autoargs_subparser],
+            parents=parents + [input_auto_common_subparser, input_autoargs_subparser],
             help=("Automatically fetch sequences for one taxonomy, then curate "
                   "and align them; use this alignment as input. The "
                   "taxonomy is provided as command-line arguments."))

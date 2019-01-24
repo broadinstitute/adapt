@@ -206,3 +206,45 @@ def read_blacklisted_kmers(fn, min_len_warning=5, max_len_warning=28):
                 "desired") % kmer)
         kmers.add(kmer)
     return kmers
+
+
+def read_taxonomies(fn):
+    """Read file of taxonomies from which to prepare alignments.
+
+    The columns must be, in order:
+        1) a label for the row (used for output files; must be unique)
+        2) a taxonomic (e.g., species) ID from NCBI
+        3) a segment label, or 'None' if unsegmented
+        4) an accession of a reference sequence
+
+    Args:
+        fn: path to TSV file, where each row corresponds to a taxonomy
+
+    Returns:
+        list of tuples (label, taxonomic_id, segment, reference_accession)
+    """
+    labels = set()
+    taxs = []
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 4:
+                raise Exception(("Input taxonomy TSV must have 4 columns"))
+
+            label = ls[0]
+            if label in labels:
+                raise Exception(("Taxonomy label '%s' is not unique") % label)
+            labels.add(label)
+
+            try:
+                tax_id = int(ls[1])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[1])
+
+            segment = ls[2]
+            if segment.lower() == 'none':
+                segment = None
+            ref_acc = ls[3]
+            taxs += [(label, tax_id, segment, ref_acc)]
+    return taxs
