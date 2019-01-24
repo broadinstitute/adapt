@@ -292,6 +292,10 @@ class Alignment:
             suitable_guides = []
             for s, idx in seq_rows:
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
+                    if (guide_is_suitable_fn is not None and
+                            guide_is_suitable_fn(s) is False):
+                        # Skip s, which is not suitable
+                        continue
                     # s has no ambiguity and is a suitable guide
                     if idx in selected_cluster_idxs:
                         # Pick s as the guide
