@@ -292,6 +292,10 @@ class Alignment:
             suitable_guides = []
             for s, idx in seq_rows:
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
+                    if (guide_is_suitable_fn is not None and
+                            guide_is_suitable_fn(s) is False):
+                        # Skip s, which is not suitable
+                        continue
                     # s has no ambiguity and is a suitable guide
                     if idx in selected_cluster_idxs:
                         # Pick s as the guide
@@ -533,17 +537,16 @@ class AlignmentQuerier:
     gapless. In terms of querying for potential hits, this is more
     realistic because the actual sequences do not have gaps.
 
-    This might use considerable memory, depending on the guide length,
-    reporting probability, etc. It currently stores in the data structure
-    a tuple (subsequence string s, index i of alignment with s, index j of
-    sequence in alignment i that has subsequence s). One option to reduce
-    memory usage would be to still key on the subsequence string, but
-    not store it in the tuple and, in its place, store the index x of the
-    subsequence in the j'th sequence of alignment i, so that the subsequence
-    can be found as: self.alns[i].seqs[x:(x + guide_length)][j].
+    This currently stores in the near-neighbor data structure a tuple
+    (subsequence string s, index i of alignment with s) -- i.e., all
+    unique subsequences for each alignment. It stores an additional data
+    structure that contains, for each of those tuples, all of the
+    sequences in alignment i that contain s. Together, these can be used
+    to query for all sequences that contain a subsequence that is 'near'
+    the queried guide.
     """
 
-    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=15,
+    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=22,
                  reporting_prob=0.95):
         """
         Args:
@@ -591,10 +594,18 @@ class AlignmentQuerier:
         self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, dist_fn,
             reporting_prob, hash_idx=0, join_concat_as_str=True)
 
+        self.seqs_with_subseq = defaultdict(set)
+
         self.is_setup = False
 
     def setup(self):
         """Build data structure for near neighbor lookup of guide sequences.
+
+        The data structure in self.nnr stores only unique subsequences in
+        each alignment; it does not store the particular sequences of
+        the alignment that contain the subsequences. A separate hashtable
+        stored here, self.seqs_with_subseq, tracks the sequence indices
+        in alignment i that contain a subsequence s (key'd on (s, i)).
         """
         for aln_idx, aln in enumerate(self.alns):
             # Convert aln.seqs from column-major order to row-major order
@@ -609,11 +620,12 @@ class AlignmentQuerier:
                     aln_idx + 1, len(self.alns), seq_idx + 1, len(seqs))
 
                 # Add all possible guide sequences g as:
-                #   (g, aln_idx, seq_idx)
-                pts = []
+                #   (g, aln_idx)
+                pts = set()
                 for j in range(len(seq) - self.guide_length + 1):
                     g = seq[j:(j + self.guide_length)]
-                    pts += [(g, aln_idx, seq_idx)]
+                    pts.add((g, aln_idx))
+                    self.seqs_with_subseq[(g, aln_idx)].add(seq_idx)
                 self.nnr.add(pts)
         self.is_setup = True
 
@@ -666,8 +678,9 @@ class AlignmentQuerier:
         neighbors = self.nnr.query(guide)
         seqs_hit_by_aln = defaultdict(set)
         for neighbor in neighbors:
-            _, aln_idx, seq_idx = neighbor
-            seqs_hit_by_aln[aln_idx].add(seq_idx)
+            _, aln_idx = neighbor
+            seq_idxs = self.seqs_with_subseq[neighbor]
+            seqs_hit_by_aln[aln_idx].update(seq_idxs)
 
         frac_of_aln_hit = []
         for i, aln in enumerate(self.alns):

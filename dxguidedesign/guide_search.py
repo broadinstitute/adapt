@@ -263,14 +263,6 @@ class GuideSearcher:
                 p = self._construct_guide_memoized(pos, seqs_to_consider,
                     num_needed)
 
-            if p is not None and self.guide_is_suitable_fn is not None:
-                # Verify that the guide is suitable according to the given
-                # function (it should be, in order to have been output
-                # by self.aln.construct_guide(..))
-                gd, _ = p
-                if not self.guide_is_suitable_fn(gd):
-                    p = None
-
             if p is None:
                 # There is no suitable guide at pos
                 if max_guide_cover is None:
