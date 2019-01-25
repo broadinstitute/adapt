@@ -28,6 +28,15 @@ class TestAlignment(unittest.TestCase):
         self.c_seqs = ['ATCGAA', 'ATC-AA']
         self.c = alignment.Alignment.from_list_of_seqs(self.c_seqs)
 
+        self.d_seqs = ['ATCGAA',
+                       'ATCGAA',
+                       'GGGCCC',
+                       'ATCGAA',
+                       'ATCGAA',
+                       'ATCGAA',
+                       'GGGCCC']
+        self.d_seqs_aln = alignment.Alignment.from_list_of_seqs(self.d_seqs)
+
         self.gc = alignment.SequenceClusterer(lsh.HammingDistanceFamily(4), k=2)
 
     def test_make_list_of_seqs_a(self):
@@ -73,6 +82,118 @@ class TestAlignment(unittest.TestCase):
         self.assertCountEqual(self.a.seqs_with_gap(), [])
         self.assertCountEqual(self.b.seqs_with_gap(), [])
         self.assertCountEqual(self.c.seqs_with_gap(), [1])
+
+    def test_seqs_with_required_flanking_none_required(self):
+        # No required flanking sequences should yield that all match
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                2, 3, (None, None)),
+            {0,1,2,3,4,5,6}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                0, 3, (None, None)),
+            {0,1,2,3,4,5,6}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 3, (None, None)),
+            {0,1,2,3,4,5,6}
+        )
+
+    def test_seqs_with_required_flanking_subset_to_consider(self):
+        # Only look over a subset of the input sequences
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                2, 3, (None, None), seqs_to_consider={2,3,6}),
+            {2,3,6}
+        )
+
+    def test_seqs_with_required_flanking_end5(self):
+        # Required flanking on 5' end
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 3, ('ATC', None)),
+            {0,1,3,4,5}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 3, ('C', None)),
+            {0,1,3,4,5}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 3, ('C', None), seqs_to_consider={0,1,3,4,5}),
+            {0,1,3,4,5}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 3, ('A', None)),
+            {}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 3, ('S', None)),
+            {0,1,2,3,4,5,6}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 3, ('NC', None)),
+            {0,1,3,4,5}
+        )
+
+    def test_seqs_with_required_flanking_end5_too_close(self):
+        # Required flanking on 5' end, with guide too close to end
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                1, 3, ('ATC', None)),
+            {}
+        )
+
+    def test_seqs_with_required_flanking_end3(self):
+        # Required flanking on 3' end
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                0, 3, (None, 'CCC')),
+            {2,6}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                0, 3, (None, 'CNN')),
+            {2,6}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                0, 3, (None, 'SNN')),
+            {0,1,2,3,4,5,6}
+        )
+
+    def test_seqs_with_required_flanking_end3_too_close(self):
+        # Required flanking on 3' end, with guide too close to end
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                1, 3, (None, 'CCC')),
+            {}
+        )
+
+    def test_seqs_with_required_flanking_both_ends(self):
+        # Required flanking on both ends
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                2, 2, ('G', 'AA')),
+            {}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                2, 2, ('T', 'MN')),
+            {0,1,3,4,5}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                2, 2, ('T', 'MN'), seqs_to_consider={1,2,3,4}),
+            {1,3,4}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                2, 2, ('K', 'MN')),
+            {0,1,2,3,4,5,6}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                2, 2, ('K', 'MN'), seqs_to_consider={4,5}),
+            {4,5}
+        )
+
+    def test_seqs_with_required_flanking_both_ends_too_close(self):
+        # Required flanking on both ends, with guide too close to end
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                3, 2, ('K', 'MN')),
+            {}
+        )
+        self.assertCountEqual(self.d_seqs_aln.seqs_with_required_flanking(
+                0, 2, ('K', 'MN')),
+            {}
+        )
 
     def test_construct_guide_a(self):
         self.assertEqual(self.a.construct_guide(0, 4, {0: {0,1,2,3,4}}, 0, False, self.gc),
@@ -208,7 +329,77 @@ class TestAlignment(unittest.TestCase):
             aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
                 guide_is_suitable_fn=f)
 
+    def test_construct_guide_with_required_flanking(self):
+        seqs = ['TCAAAT',
+                'CCAAAA',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'TCAAAT',
+                'TCAAAT']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        guide_length = 2
+        guide_clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length),
+            k=2)
+        seqs_to_consider = {0: set(range(len(seqs)))}
+
+        # The best guide at start=2 is 'TT', but if we require
+        # 'C' to flank on the 5' end, the best is 'AA'
+        p = aln.construct_guide(2, guide_length, seqs_to_consider, 1, False,
+            guide_clusterer, required_flanking_seqs=('C', None))
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'AA')
+        self.assertEqual(set(covered_seqs), {0,1,9,10})
+
+        # The best guide at start=2 is 'TT', but if we require
+        # 'C' to flank on the 5' end, the best is 'AA'
+        # Now if we require 'M' on the 5' end, 'TT' will be the best guide
+        p = aln.construct_guide(2, guide_length, seqs_to_consider, 1, False,
+            guide_clusterer, required_flanking_seqs=('M', None))
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'TT')
+        self.assertEqual(set(covered_seqs), {2,3,4,5,6,7,8})
+
     def test_sequences_bound_by_guide(self):
+        seqs = ['TCAAAT',
+                'CCAAAA',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'CCTTGT',
+                'TCAAAT',
+                'TCAAAT']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, None)),
+                         [2,3,4,5,6,7,8,9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=('A', None)),
+                         [2,3,4,5,6,7,8])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=('C', None)),
+                         [9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, 'G')),
+                         [9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, 'GN')),
+                         [9])
+        self.assertEqual(aln.sequences_bound_by_guide('TT', 2, 0, False,
+                            required_flanking_seqs=(None, 'N')),
+                         [2,3,4,5,6,7,8,9])
+
+    def test_sequences_bound_by_guide_with_required_flanking(self):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 0, False),
                          [0,1,2,3])
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 1, False),
