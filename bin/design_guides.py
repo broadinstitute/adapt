@@ -140,6 +140,7 @@ def design_for_id(args):
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
+    required_flanking_seqs = (args.require_flanking5, args.require_flanking3)
 
     # Construct the data structure for guide queries to perform
     # differential identification
@@ -197,7 +198,8 @@ def design_for_id(args):
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
                                         blacklisted_ranges=blacklisted_ranges_for_aln,
-                                        allow_gu_pairs=args.allow_gu_pairs)
+                                        allow_gu_pairs=args.allow_gu_pairs,
+                                        required_flanking_seqs=required_flanking_seqs)
 
         if args.search_cmd == 'guides-from-sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -355,6 +357,18 @@ if __name__ == "__main__":
               "target and C in an output guide sequence matches T "
               "in the target (since the synthesized guide is the reverse "
               "complement of the output guide sequence)"))
+
+    # Requiring flanking sequence (PFS)
+    base_subparser.add_argument('--require-flanking5',
+        help=("Require the given sequence on the 5' protospacer flanking "
+              "site (PFS) of each designed guide; this tolerates ambiguity "
+              "in the sequence (e.g., 'H' requires 'A', 'C', or 'T', or, "
+              "equivalently, avoids guides flanked by 'G')"))
+    base_subparser.add_argument('--require-flanking3',
+        help=("Require the given sequence on the 3' protospacer flanking "
+              "site (PFS) of each designed guide; this tolerates ambiguity "
+              "in the sequence (e.g., 'H' requires 'A', 'C', or 'T', or, "
+              "equivalently, avoids guides flanked by 'G')"))
 
     # Requiring guides in the cover, and blacklisting ranges and/or k-mers
     base_subparser.add_argument('--required-guides',
