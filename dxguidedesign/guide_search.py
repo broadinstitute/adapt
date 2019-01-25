@@ -23,7 +23,7 @@ class GuideSearcher:
     def __init__(self, aln, guide_length, mismatches, cover_frac,
                  missing_data_params, guide_is_suitable_fn=None,
                  seq_groups=None, required_guides={}, blacklisted_ranges={},
-                 allow_gu_pairs=False):
+                 allow_gu_pairs=False, required_flanking_seqs=(None, None)):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -58,6 +58,11 @@ class GuideSearcher:
                 exclusive.
             allow_gu_pairs: if True, tolerate G-U base pairs between a
                 guide and target when computing whether a guide binds
+            required_flanking_seqs: tuple (s5, s3) that specifies sequences
+                on the 5' (left; s5) end and 3' (right; s3) end flanking
+                the guide (in the target, not the guide) that must be
+                present for a guide to bind; if either is None, no
+                flanking sequence is required for that end
         """
         if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
@@ -137,6 +142,8 @@ class GuideSearcher:
 
         self.allow_gu_pairs = allow_gu_pairs
 
+        self.required_flanking_seqs = required_flanking_seqs
+
         self.guide_clusterer = alignment.SequenceClusterer(
             lsh.HammingDistanceFamily(guide_length),
             k=min(10, int(guide_length/2)))
@@ -177,7 +184,8 @@ class GuideSearcher:
                         seqs_to_consider, self.mismatches, self.allow_gu_pairs,
                         self.guide_clusterer, num_needed=num_needed,
                         missing_threshold=self.missing_threshold,
-                        guide_is_suitable_fn=self.guide_is_suitable_fn)
+                        guide_is_suitable_fn=self.guide_is_suitable_fn,
+                        required_flanking_seqs=self.required_flanking_seqs)
             except alignment.CannotConstructGuideError:
                 p = None
             self._memoized_guides[start][key] = p
@@ -451,7 +459,8 @@ class GuideSearcher:
                 # Determine which sequences are bound by gd, and memoize
                 # them
                 gd_covered_seqs = self.aln.sequences_bound_by_guide(
-                    gd, gd_pos, self.mismatches, self.allow_gu_pairs)
+                    gd, gd_pos, self.mismatches, self.allow_gu_pairs,
+                    required_flanking_seqs=self.required_flanking_seqs)
                 if len(gd_covered_seqs) == 0:
                     # gd covers no sequences at gd_pos; still initialize with it
                     # but give a warning
@@ -540,7 +549,8 @@ class GuideSearcher:
             seqs_bound = set()
             for pos in self._selected_guide_positions[gd_seq]:
                 seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
-                    pos, self.mismatches, self.allow_gu_pairs))
+                    pos, self.mismatches, self.allow_gu_pairs,
+                    required_flanking_seqs=self.required_flanking_seqs))
 
             # For each group, find the number of sequences that need to
             # be covered that are covered by gd_seq, and sum these over
@@ -576,7 +586,8 @@ class GuideSearcher:
             # Determine all sequences covered by gd_seq
             for pos in self._selected_guide_positions[gd_seq]:
                 seqs_bound.update(self.aln.sequences_bound_by_guide(gd_seq,
-                    pos, self.mismatches, self.allow_gu_pairs))
+                    pos, self.mismatches, self.allow_gu_pairs,
+                    required_flanking_seqs=self.required_flanking_seqs))
         return seqs_bound
 
     def _total_frac_bound_by_guides(self, guides):

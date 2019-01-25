@@ -196,7 +196,7 @@ class Alignment:
             required_flanking_seqs: tuple (s5, s3) that specifies sequences
                 on the 5' (left; s5) end and 3' (right; s3) end flanking
                 the guide (in the target, not the guide) that must be
-                required for a guide to bind; if either is None, no
+                present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
 
         Returns:
@@ -479,7 +479,7 @@ class Alignment:
             required_flanking_seqs: tuple (s5, s3) that specifies sequences
                 on the 5' (left; s5) end and 3' (right; s3) end flanking
                 the guide (in the target, not the guide) that must be
-                required for a guide to bind; if either is None, no
+                present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
 
         Returns:
