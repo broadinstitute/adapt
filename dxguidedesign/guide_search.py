@@ -635,7 +635,7 @@ class GuideSearcher:
               1) start position of the window
               2) end position of the window
               3) number of guides designed for the window (i.e., length of
-                 the set in (4))
+                 the set in (6))
               4) score corresponding to the guides in the window, which can
                  be used to break ties across windows that have the same
                  number of minimal guides (higher is better)
@@ -735,13 +735,13 @@ class GuideSearcher:
                     ("Number of windows with guides", num_windows_with_guides)
                 ]
             else:
-                min_count = min(x[1] for x in guide_collections)
+                min_count = min(x[2] for x in guide_collections)
                 num_with_min_count = sum(1 for x in guide_collections
-                    if x[1] == min_count)
-                max_score_for_count = max(x[2] for x in guide_collections
-                    if x[1] == min_count)
+                    if x[2] == min_count)
+                max_score_for_count = max(x[3] for x in guide_collections
+                    if x[2] == min_count)
                 num_with_max_score = sum(1 for x in guide_collections if
-                    x[1] == min_count and x[2] == max_score_for_count)
+                    x[2] == min_count and x[3] == max_score_for_count)
 
                 min_count_str = (str(min_count) + " guide" + 
                                  ("s" if min_count > 1 else ""))
