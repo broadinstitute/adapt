@@ -339,7 +339,9 @@ def curate_against_ref(seqs, ref_acc, asm=None,
                 ref_acc_key = k
                 break
         if ref_acc_key is None:
-            raise Exception("ref_acc must be in seqs")
+            raise Exception(("ref_acc must be in seqs; it is possible that "
+                "the reference accession '%s' is invalid or could not "
+                "be found") % ref_acc)
 
     seqs_filtered = OrderedDict()
     for accver, seq in seqs.items():

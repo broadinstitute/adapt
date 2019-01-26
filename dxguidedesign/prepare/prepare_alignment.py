@@ -49,6 +49,13 @@ def prepare_for(taxid, segment, ref_acc, out,
     if segment != None and segment != '':
         neighbors = [n for n in neighbors if n.segment == segment]
 
+    if len(neighbors) == 0:
+        if segment != None and segment != '':
+            raise Exception(("No sequences were found for taxid %d and "
+                "segment '%s'") % (taxid, segment))
+        else:
+            raise Exception(("No sequences were found for taxid %d") % taxid)
+
     # Fetch FASTAs for the neighbors; also do so for ref_acc if it
     # is not included
     # Keep track of whether it was added, so that it can be removed
