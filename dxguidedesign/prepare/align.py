@@ -232,6 +232,11 @@ def align(seqs, am=None):
     in_fasta.close()
     out_fasta.close()
 
+    if len(seqs) > 0 and len(seqs_aligned) == 0:
+        logger.warning(("The generated alignment contains no sequences; "
+            "it is possible that mafft failed, e.g., due to running out "
+            "of memory"))
+
     if am is not None:
         # Memoize the alignment
         am.save(seqs_aligned)
@@ -384,6 +389,9 @@ def curate_against_ref(seqs, ref_acc, asm=None,
         if (aln_identity >= aln_identity_thres and
                 aln_identity_ccg >= aln_identity_ccg_thres):
             seqs_filtered[accver] = seq
+
+    logger.info(("After curation, %d of %d sequences were kept") %
+        (len(seqs_filtered), len(seqs)))
 
     if asm is not None:
         # Save the new memoized values
