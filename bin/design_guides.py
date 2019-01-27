@@ -160,7 +160,8 @@ def prepare_alignments(args):
     for label, tax_id, segment, ref_acc in taxs:
         aln_file = tempfile.NamedTemporaryFile()
         prepare_alignment.prepare_for(tax_id, segment, ref_acc,
-            aln_file.name, aln_memoizer=am, aln_stat_memoizer=asm)
+            aln_file.name, aln_memoizer=am, aln_stat_memoizer=asm,
+            limit_seqs=args.limit_seqs)
         in_fasta += [aln_file]
 
         if label is None:
@@ -548,6 +549,11 @@ if __name__ == "__main__":
         help=("Path to directory in which to memoize alignments and "
               "statistics on them; if not set, this does not memoize "
               "this information"))
+    input_auto_common_subparser.add_argument('--limit-seqs', type=int,
+        help=("After fetching accessions, randomly select LIMIT_SEQS of them "
+              "without replacement from each taxonomy and only move forward "
+              "in the design with these. This is useful for testing and "
+              "measuring output growth as input size grows."))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)

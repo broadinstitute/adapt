@@ -4,6 +4,7 @@ This includes downloading, curating, and aligning sequences.
 """
 
 import logging
+import random
 
 from dxguidedesign.prepare import align
 from dxguidedesign.prepare import ncbi_neighbors
@@ -15,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_for(taxid, segment, ref_acc, out,
-        aln_memoizer=None, aln_stat_memoizer=None, filter_warn=0.25):
+        aln_memoizer=None, aln_stat_memoizer=None,
+        limit_seqs=None, filter_warn=0.25):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -35,6 +37,9 @@ def prepare_for(taxid, segment, ref_acc, out,
             or None to not memoize
         aln_stat_memoizer: AlignmentStatMemoizer to use for memoization
             of alignment statistic values; or None to not memoize
+        limit_seqs: fetch all accessions, and then randomly select
+            LIMIT_SEQS of them without replacement and only design from
+            these; if None (default), do not limit the input
         filter_warn: raise a warning if the fraction of sequences that
             are filtered out during curation is greater than or equal to
             this float
@@ -55,6 +60,15 @@ def prepare_for(taxid, segment, ref_acc, out,
                 "segment '%s'") % (taxid, segment))
         else:
             raise Exception(("No sequences were found for taxid %d") % taxid)
+
+    if limit_seqs is not None:
+        # Randomly sample limit_seqs from neighbors
+        if limit_seqs > len(neighbors):
+            raise Exception(("limit_seqs for tax %id (segment: %s) is %d and "
+                "is greater than number of sequences available (%d); it must "
+                "be at most %d") % (taxid, segment, limit_seqs, len(neighbors),
+                len(neighbors)))
+        neighbors = random.sample(neighbors, limit_seqs)
 
     # Fetch FASTAs for the neighbors; also do so for ref_acc if it
     # is not included
