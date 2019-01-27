@@ -156,7 +156,7 @@ class TargetSearcher:
             # If targets should not overlap and this overlaps a target
             # already in target_heap, check if we should bother trying to
             # find guides in this window
-            overlapping_i = None
+            overlapping_i = []
             if no_overlap:
                 # Check if any targets already in target_heap have
                 # primer pairs overlapping with (p1, p2)
@@ -165,18 +165,22 @@ class TargetSearcher:
                     (p1_i, p2_i), _ = target_i
                     if p1.overlaps(p1_i) and p2.overlaps(p2_i):
                         # Replace target_i
-                        overlapping_i = i
+                        overlapping_i += [i]
+            if overlapping_i:
+                # target overlaps with one or more entries already in
+                # target_heap
+                cost_is_too_high = True
+                for i in overlapping_i:
+                    cost_i = -1 * target_heap[i][0]
+                    if cost_total_lo < cost_i:
+                        cost_is_too_high = False
                         break
-            if overlapping_i is not None:
-                # target overlaps with an entry already in target_heap
-                cost_i = -1 * target_heap[overlapping_i][0]
-                if cost_total_lo >= cost_i:
-                    # We will try to replace overlapping_i with a new
-                    # entry, but the cost is already >= than what it
-                    # is for overlapping_i, and will only stay the
-                    # same or get bigger after adding the term for guides,
-                    # so there is no reason for considering this window
-                    # (it will never replace overlapping_i)
+                if cost_is_too_high:
+                    # We will try to replace an entry in overlapping_i (i) with
+                    # a new entry, but the cost is already >= than what it
+                    # is for i, and will only stay the same or get bigger
+                    # after adding the term for guides, so there is no reason
+                    # for considering this window (it will never replace i)
                     continue
 
             logger.info(("Found window [%d, %d) bound by primers that could "
@@ -217,14 +221,44 @@ class TargetSearcher:
             # costs)
             target = ((p1, p2), (guides_frac_bound, guides))
             entry = (-cost_total, next(push_id_counter), target)
-            if overlapping_i is not None:
+            if overlapping_i:
                 # target overlaps with an entry already in target_heap;
-                # consider replacing overlapping_i with new entry
-                cost_i = -1 * target_heap[overlapping_i][0]
-                if cost_total < cost_i:
-                    # Replace overlapping_i with entry
-                    target_heap[overlapping_i] = entry
-                    heapq.heapify(target_heap)
+                # consider replacing that entry with new entry
+                if len(overlapping_i) == 1:
+                    # Almost all cases will satisfy this: the new entry
+                    # overlaps just one existing entry; optimize for this case
+                    i = overlapping_i[0]
+                    cost_i = -1 * target_heap[i][0]
+                    if cost_total < cost_i:
+                        # Replace i with entry
+                        target_heap[i] = entry
+                        heapq.heapify(target_heap)
+                else:
+                    # For some edge cases, the new entry overlaps with
+                    # multiple existing entries
+                    # Check if the new entry has a sufficiently low cost
+                    # to justify removing any existing overlapping entries
+                    cost_is_sufficiently_low = False
+                    for i in overlapping_i:
+                        cost_i = -1 * target_heap[i][0]
+                        if cost_total < cost_i:
+                            cost_is_sufficiently_low = True
+                            break
+                    if cost_is_sufficiently_low:
+                        # Remove all entries that overlap the new entry,
+                        # then add the new entry
+                        for i in sorted(overlapping_i, reverse=True):
+                            del target_heap[i]
+                        target_heap.append(entry)
+                        heapq.heapify(target_heap)
+                        # Note that this can lead to cases in which the size
+                        # of the output (target_heap) is < best_n, or in which
+                        # there is an entry with very high cost, because
+                        # in certain edge cases we might finish the search
+                        # having removed >1 entry but only replacing it with
+                        # one, and if the search continues for a short time
+                        # after, len(target_heap) < best_n could result in
+                        # some high-cost entries being placed into the heap
             elif len(target_heap) < best_n:
                 # target_heap is not yet full, so push entry to it
                 heapq.heappush(target_heap, entry)
