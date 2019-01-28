@@ -33,6 +33,31 @@ class TestPrimerResult(unittest.TestCase):
         self.assertFalse(a.overlaps(c))
         self.assertFalse(c.overlaps(a))
 
+    def test_does_overlap_with_expand(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(a, expand=5))
+
+        b = primer_search.PrimerResult(12, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(b, expand=5))
+        self.assertTrue(b.overlaps(a, expand=5))
+
+        b = primer_search.PrimerResult(17, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(b, expand=5))
+        self.assertTrue(b.overlaps(a, expand=5))
+
+        c = primer_search.PrimerResult(2, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(c, expand=5))
+        self.assertTrue(c.overlaps(a, expand=5))
+
+    def test_does_not_overlap_with_expand(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        b = primer_search.PrimerResult(20, 1, 5, 1.0, {'AAAAA'})
+        c = primer_search.PrimerResult(0, 1, 5, 1.0, {'AAAAA'})
+        self.assertFalse(a.overlaps(b, expand=5))
+        self.assertFalse(b.overlaps(a, expand=5))
+        self.assertFalse(a.overlaps(c, expand=5))
+        self.assertFalse(c.overlaps(a, expand=5))
+
 
 class TestPrimerSearch(unittest.TestCase):
     """Tests methods in the PrimerSearch class.

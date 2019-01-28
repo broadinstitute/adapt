@@ -32,17 +32,20 @@ class PrimerResult:
         self.frac_bound = frac_bound
         self.primers_in_cover = primers_in_cover
 
-    def overlaps(self, other):
+    def overlaps(self, other, expand=0):
         """Determine if self overlaps other.
 
         Args:
             other: PrimerResult object
+            expand: tests overlap within +/- EXPAND nt of other
 
         Returns:
             True iff self overlaps other
         """
-        return ((self.start <= other.start < self.start + self.primer_length) or
-                (other.start <= self.start < other.start + other.primer_length))
+        return ((self.start - expand <= other.start < (self.start +
+                    self.primer_length + expand)) or
+                (other.start - expand <= self.start < (other.start +
+                    other.primer_length + expand)))
 
     def __str__(self):
         return str((self.start, self.num_primers, self.primer_length,
