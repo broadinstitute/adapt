@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 def prepare_for(taxid, segment, ref_acc, out,
         aln_memoizer=None, aln_stat_memoizer=None,
-        limit_seqs=None, filter_warn=0.25):
+        limit_seqs=None, filter_warn=0.25,
+        prep_influenza=False):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -43,12 +44,18 @@ def prepare_for(taxid, segment, ref_acc, out,
         filter_warn: raise a warning if the fraction of sequences that
             are filtered out during curation is greater than or equal to
             this float
+        prep_influenza: if True, assume taxid represents an Influenza
+            A or B virus taxonomy, and fetch sequences using NCBI's
+            Influenza database
     """
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
         "reference %s") % (taxid, segment, ref_acc))
 
     # Download neighbors for taxid
-    neighbors = ncbi_neighbors.construct_neighbors(taxid)
+    if prep_influenza:
+        neighbors = ncbi_neighbors.construct_influenza_genome_neighbors(taxid)
+    else:
+        neighbors = ncbi_neighbors.construct_neighbors(taxid)
 
     # Filter neighbors by segment
     if segment != None and segment != '':

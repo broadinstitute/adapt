@@ -161,7 +161,7 @@ def prepare_alignments(args):
         aln_file = tempfile.NamedTemporaryFile()
         prepare_alignment.prepare_for(tax_id, segment, ref_acc,
             aln_file.name, aln_memoizer=am, aln_stat_memoizer=asm,
-            limit_seqs=args.limit_seqs)
+            limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza)
         in_fasta += [aln_file]
 
         if label is None:
@@ -554,6 +554,10 @@ if __name__ == "__main__":
               "without replacement from each taxonomy and only move forward "
               "in the design with these. This is useful for testing and "
               "measuring output growth as input size grows."))
+    input_auto_common_subparser.add_argument('--prep-influenza',
+        action='store_true',
+        help=("If set, fetch sequences using the NCBI Influenza database; "
+              "should only be used for Influenza A or B virus taxonomies"))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)
