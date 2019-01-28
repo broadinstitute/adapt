@@ -64,11 +64,12 @@ def prepare_for(taxid, segment, ref_acc, out,
     if limit_seqs is not None:
         # Randomly sample limit_seqs from neighbors
         if limit_seqs > len(neighbors):
-            raise Exception(("limit_seqs for tax %id (segment: %s) is %d and "
-                "is greater than number of sequences available (%d); it must "
-                "be at most %d") % (taxid, segment, limit_seqs, len(neighbors),
-                len(neighbors)))
-        neighbors = random.sample(neighbors, limit_seqs)
+            logger.warning(("limit_seqs for tax %d (segment: %s) is %d and "
+                "is greater than the number of sequences available (%d); not "
+                "subsampling, and instead using all available sequences") %
+                (taxid, segment, limit_seqs, len(neighbors)))
+        else:
+            neighbors = random.sample(neighbors, limit_seqs)
 
     # Fetch FASTAs for the neighbors; also do so for ref_acc if it
     # is not included
