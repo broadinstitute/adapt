@@ -98,6 +98,7 @@ class TargetSearcher:
         push_id_counter = itertools.count()
 
         num_primer_pairs = 0
+        num_suitable_primer_pairs = 0
         last_window_start = -1
         for p1, p2 in self._find_primer_pairs():
             num_primer_pairs += 1
@@ -120,6 +121,9 @@ class TargetSearcher:
             # To consider this window, a guide must fit within it
             if window_length < self.gs.guide_length:
                 continue
+
+            # If here, the window passed basic checks
+            num_suitable_primer_pairs += 1
 
             # Since window_start increases monotonically, we no
             # longer need to memoize guide covers between the last
@@ -271,9 +275,11 @@ class TargetSearcher:
                     # one with the highest cost
                     heapq.heappushpop(target_heap, entry)
 
-        if num_primer_pairs == 0:
-            logger.warning(("Zero suitable primer pairs were found, so "
-                "no targets could be found"))
+        if len(target_heap) == 0:
+            logger.warning(("Zero targets were found. The number of total "
+                "primer pairs found was %d and the number of them that "
+                "were suitable (passing basic criteria, e.g., on length) "
+                "was %d"), num_primer_pairs, num_suitable_primer_pairs)
 
         # Invert the costs (target_heap had been storing the negative
         # of each cost), toss push_id, and sort by cost
