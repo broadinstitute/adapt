@@ -68,7 +68,8 @@ def cluster_from_dist_matrix(dist_matrix, threshold):
 
     Args:
         dist_matrix: distance matrix, represented in scipy's 1d condensed form
-        threshold: maximum inter-cluster distance to merge clusters
+        threshold: maximum inter-cluster distance to merge clusters (higher
+            results in fewer clusters)
 
     Returns:
         list c such that c[i] is a collection of all the observations
@@ -96,7 +97,7 @@ def cluster_from_dist_matrix(dist_matrix, threshold):
     return elements_in_cluster_sorted
 
 
-def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.2):
+def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1):
     """Cluster sequences based on their MinHash signatures.
 
     Args:
@@ -107,7 +108,9 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.2):
         N: number of hash values to use in a signature (higher is slower for
             clustering, but likely more sensitive for divergent genomes)
         threshold: maximum inter-cluster distance to merge clusters, in
-            Jaccard distance
+            average nucleotide dissimilarity (1-ANI, where ANI is
+            average nucleotide identity); higher results in fewer
+            clusters
 
     Returns:
         list c such that c[i] gives a collection of sequence headers
@@ -126,6 +129,18 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.2):
         seq_headers += [name]
         signatures += [signatures_map[name]]
 
+    # Eq. 4 of the Mash paper (Ondov et al. 2016) shows that the
+    # Mash distance, which is shown to be closely related to 1-ANI, is:
+    #  D = (-1/k) * ln(2*j/(1+j))
+    # where j is a Jaccard similarity. Solving for j:
+    #  j = 1/(2*exp(k*D) - 1)
+    # So, for a desired distance D in terms of 1-ANI, the corresponding
+    # Jaccard distance is:
+    #  1.0 - 1/(2*exp(k*D) - 1)
+    # We can use this to calculate a clustering threshold in terms of
+    # Jaccard distance
+    jaccard_dist_threshold = 1.0 - 1.0/(2.0*np.exp(k*threshold) - 1)
+
     def jaccard_dist(i, j):
         # Return estimated Jaccard dist between signatures at
         # index i and index j
@@ -133,7 +148,8 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.2):
             signatures[i], signatures[j])
 
     dist_matrix = create_condensed_dist_matrix(num_seqs, jaccard_dist)
-    clusters = cluster_from_dist_matrix(dist_matrix, threshold)
+    clusters = cluster_from_dist_matrix(dist_matrix,
+        jaccard_dist_threshold)
 
     seqs_in_cluster = []
     for cluster_idxs in clusters:
