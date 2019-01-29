@@ -200,6 +200,13 @@ def align(seqs, am=None):
         if seqs_aligned is not None:
             return seqs_aligned
 
+    if len(seqs) == 1:
+        # There's one sequence; simply output it
+        seqs_aligned = OrderedDict(seqs)
+        if am is not None:
+            am.save(seqs_aligned)
+        return OrderedDict(seqs_aligned)
+
     global _mafft_exec
     # Check that mafft executable has been set
     if _mafft_exec is None:
