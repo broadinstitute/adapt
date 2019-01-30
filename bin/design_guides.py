@@ -2,6 +2,7 @@
 """Design guides for diagnostics."""
 
 import argparse
+from collections import defaultdict
 import logging
 import os
 import re
@@ -119,10 +120,12 @@ def prepare_alignments(args):
         args: namespace of arguments provided to this executable
 
     Returns:
-        tuple (in_fasta, out_tsv) in which in_fasta is a list of
-        tempfile objects that contain an input alignment and out_tsv
-        is a list of paths to files at which to write output
-        (out_tsv[i] is the output for in_tsv[i])
+        tuple (in_fasta, taxid_for_fasta, aln_tmp_dirs out_tsv) in which
+        in_fasta is a list of paths to fasta files each containing an
+        alignment, taxid_for_fasta[i] gives a taxon id for in_fasta[i],
+        aln_tmp_dirs is a list of temp directories that need to be
+        cleaned up, and out_tsv[i] is a path to the file at which to
+        write the output for in_fasta[i]
     """
     logger.info(("Setting up to prepare alignments"))
 
@@ -156,21 +159,28 @@ def prepare_alignments(args):
 
     # Construct alignments for each taxonomy
     in_fasta = []
+    taxid_for_fasta = []
+    aln_tmp_dirs = []
     out_tsv = []
     for label, tax_id, segment, ref_acc in taxs:
-        aln_file = tempfile.NamedTemporaryFile()
-        prepare_alignment.prepare_for(tax_id, segment, ref_acc,
-            aln_file.name, aln_memoizer=am, aln_stat_memoizer=asm,
+        aln_file_dir = tempfile.TemporaryDirectory()
+        nc = prepare_alignment.prepare_for(
+            tax_id, segment, ref_acc,
+            aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza)
-        in_fasta += [aln_file]
+        for i in range(nc):
+            in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
+            taxid_for_fasta += [tax_id]
+        aln_tmp_dirs += [aln_file_dir]
 
         if label is None:
-            out_tsv += [args.out_tsv]
+            out_tsv += [args.out_tsv + '.' + str(i) for i in range(nc)]
         else:
-            out_name = label + '.tsv'
-            out_tsv += [os.path.join(args.out_tsv_dir, out_name)]
+            for i in range(nc):
+                out_name = label + '.' + str(i) + '.tsv'
+                out_tsv += [os.path.join(args.out_tsv_dir, out_name)]
 
-    return in_fasta, out_tsv
+    return in_fasta, taxid_for_fasta, aln_tmp_dirs, out_tsv
 
 
 def design_for_id(args):
@@ -209,29 +219,39 @@ def design_for_id(args):
     # Allow G-U base pairing, unless it is explicitly disallowed
     allow_gu_pairs = not args.do_not_allow_gu_pairing
 
+    # Assign an id in [0, 1, 2, ...] for each taxid
+    # Find all alignments with each taxid
+    aln_with_taxid = defaultdict(set)
+    for i, taxid in enumerate(args.taxid_for_fasta):
+        aln_with_taxid[taxid].add(i)
+    num_taxa = len(aln_with_taxid)
+    logger.info(("Designing for %d taxa"), num_taxa)
+
     # Construct the data structure for guide queries to perform
     # differential identification
-    if len(alns) > 1:
+    if num_taxa > 1:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
         aq = alignment.AlignmentQuerier(alns, args.guide_length,
             args.diff_id_mismatches, allow_gu_pairs)
         aq.setup()
     else:
-        logger.info(("Only one alignment was provided, so not constructing "
+        logger.info(("Only one taxon was provided, so not constructing "
             "data structure to permit queries for differential "
             "identification"))
         aq = None
 
     for i in range(num_aln_for_design):
-        logger.info("Finding guides for alignment %d (of %d)",
-            i + 1, num_aln_for_design)
+        taxid = args.taxid_for_fasta[i]
+        logger.info(("Finding guides for alignment %d (of %d), which is in "
+            "taxon %d"), i + 1, num_aln_for_design, taxid)
 
         aln = alns[i]
         seq_groups = seq_groups_per_input[i]
         cover_frac = cover_frac_per_input[i]
         required_guides_for_aln = required_guides[i]
         blacklisted_ranges_for_aln = blacklisted_ranges[i]
+        alns_in_same_taxon = aln_with_taxid[taxid]
 
         def guide_is_suitable(guide):
             # Return True iff the guide does not contain a blacklisted
@@ -245,15 +265,17 @@ def design_for_id(args):
             # Return True if guide does not hit too many sequences in
             # alignments other than aln
             if aq is not None:
-                return aq.guide_is_specific_to_aln(guide, i, args.diff_id_frac)
+                return aq.guide_is_specific_to_alns(
+                    guide, alns_in_same_taxon, args.diff_id_frac)
             else:
                 return True
 
-        # Mask alignment with index i (aln) from being reported in queries
-        # because we will likely get many guide sequences that hit aln, but we
-        # do not care about these for checking specificity
+        # Mask alignments from this taxon from being reported in queries
+        # because we will likely get many guide sequences that hit its
+        # alignments, but we do not care about these for checking specificity
         if aq is not None:
-            aq.mask_aln(i)
+            for j in alns_in_same_taxon:
+                aq.mask_aln(j)
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
@@ -303,13 +325,15 @@ def main(args):
                     args.out_tsv_dir)
 
         # Prepare input alignments, stored in temp fasta files
-        in_fasta, out_tsv = prepare_alignments(args)
-        args.in_fasta = [tf.name for tf in in_fasta]
+        in_fasta, taxid_for_fasta, aln_tmp_dirs, out_tsv = prepare_alignments(args)
+        args.in_fasta = in_fasta
+        args.taxid_for_fasta = taxid_for_fasta
         args.out_tsv = out_tsv
     elif args.input_type == 'fasta':
         if len(args.in_fasta) != len(args.out_tsv):
             raise Exception(("Number output TSVs must match number of input "
                 "FASTAs"))
+        args.taxid_for_fasta = list(range(len(args.in_fasta)))
     else:
         raise Exception("Unknown input type subcommand '%s'" % args.input_type)
 
@@ -317,8 +341,8 @@ def main(args):
 
     # Close temporary files storing alignments
     if args.input_type in ['auto_from_file', 'auto-from-args']:
-        for tf in in_fasta:
-            tf.close()
+        for td in aln_tmp_dirs:
+            td.cleanup()
 
 
 if __name__ == "__main__":
@@ -570,7 +594,8 @@ if __name__ == "__main__":
               "use for curation"))
     input_autofile_subparser.add_argument('out_tsv_dir',
         help=("Path to directory in which to place output TSVs; each "
-              "output TSV corresponds to a row in the input"))
+              "output TSV corresponds to a cluster for the taxon in a row "
+              "in the input"))
 
     # Auto prepare from arguments
     input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
@@ -582,7 +607,8 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('ref_acc',
         help=("Accession of reference sequence to use for curation"))
     input_autoargs_subparser.add_argument('out_tsv',
-        help=("Path to output TSV"))
+        help=("Path to output TSVs, with one per cluster; output TSVs are "
+              "OUT_TSV.{cluster-number}"))
 
     # Add parsers for subcommands
     for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:

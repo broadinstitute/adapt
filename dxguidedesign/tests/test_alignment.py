@@ -298,9 +298,9 @@ class TestAlignmentQuerier(unittest.TestCase):
         def assert_is_specific(guide, thres, specific_to):
             not_specific_to = [i for i in [0, 1, 2] if i not in specific_to]
             for i in specific_to:
-                self.assertTrue(self.aq.guide_is_specific_to_aln(guide, i, thres))
+                self.assertTrue(self.aq.guide_is_specific_to_alns(guide, [i], thres))
             for i in not_specific_to:
-                self.assertFalse(self.aq.guide_is_specific_to_aln(guide, i, thres))
+                self.assertFalse(self.aq.guide_is_specific_to_alns(guide, [i], thres))
 
         assert_is_specific('ATCGA', 0, [])
         assert_is_specific('GGGGG', 0, [0, 1, 2])

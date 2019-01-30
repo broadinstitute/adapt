@@ -676,16 +676,16 @@ class AlignmentQuerier:
             frac_of_aln_hit += [frac_hit]
         return frac_of_aln_hit
 
-    def guide_is_specific_to_aln(self, guide, aln_idx, frac_hit_thres):
+    def guide_is_specific_to_alns(self, guide, aln_idxs, frac_hit_thres):
         """Determine if guide is specific to a particular alignment.
 
         Note that this does *not* verify whether guide hits the alignment
-        with index aln_idx -- only that it does not hit all the others.
+        with an index in aln_idx -- only that it does not hit all the others.
 
         Args:
             guide: guide sequence to check
-            aln_idx: check if guide is specific to the alignment with this
-                index (self.alns[aln_dx])
+            aln_idxs: check if guide is specific to all the alignments with
+                these indices (self.alns[aln_idxx[i]])
             frac_hit_thres: say that a guide "hits" an alignment A if the
                 fraction of sequences in A that it hits is > this value
 
@@ -694,12 +694,13 @@ class AlignmentQuerier:
         """
         frac_of_aln_hit = self.frac_of_aln_hit_by_guide(guide)
         for j, frac in enumerate(frac_of_aln_hit):
-            if aln_idx == j:
-                # This frac is for alignment aln_idx; it should be high and
+            if j in aln_idxs:
+                # This frac is for alignment in aln_idxs; it should be high and
                 # is irrelevant for specificity (but we won't check that
                 # it is high)
-                # Note that if aln_idx has already been masked, then this
-                # check should not be necessary (j should never equal aln_idx)
+                # Note that if aln_idxs[i] has already been masked, then this
+                # check should not be necessary (j should never equal
+                # aln_idxs[i])
                 continue
             if frac > frac_hit_thres:
                 # guide hits too many sequences in alignment j
