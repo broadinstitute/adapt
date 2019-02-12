@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def prepare_for(taxid, segment, ref_acc, out,
         aln_memoizer=None, aln_stat_memoizer=None,
         limit_seqs=None, filter_warn=0.25, min_seq_len=200,
-        min_cluster_size=2, prep_influenza=False):
+        min_cluster_size=2, prep_influenza=False, years_tsv=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -59,6 +59,10 @@ def prepare_for(taxid, segment, ref_acc, out,
         prep_influenza: if True, assume taxid represents an Influenza
             A or B virus taxonomy, and fetch sequences using NCBI's
             Influenza database
+        years_tsv: if set, a path to a TSV file to which this will write
+            a year (column 2) for each sequence written to out (column 1);
+            this is only done for influenza sequences (if prep_influenza
+            is True)
 
     Returns:
         number of clusters
@@ -174,6 +178,20 @@ def prepare_for(taxid, segment, ref_acc, out,
         # Write a fasta file of aligned sequences
         fasta_file = os.path.join(out, str(cluster_idx) + '.fasta')
         seq_io.write_fasta(seqs_aligned, fasta_file)
+
+    # Write the years for each sequence, if requested
+    if years_tsv:
+        if not prep_influenza:
+            raise Exception(("Can only write years tsv if preparing influenza "
+                "sequences"))
+        year_for_acc = {neighbor.acc: neighbor.metadata['year'] for
+                neighbor in neighbors}
+        all_seq_names = set().union(*clusters)
+        with open(years_tsv, 'w') as fw:
+            for name in all_seq_names:
+                # name is [accession].[version]; extract the accession
+                acc = name.split('.')[0]
+                fw.write('\t'.join([name, str(year_for_acc[acc])]) + '\n')
 
     return len(clusters)
 

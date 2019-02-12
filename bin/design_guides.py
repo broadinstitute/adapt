@@ -120,12 +120,14 @@ def prepare_alignments(args):
         args: namespace of arguments provided to this executable
 
     Returns:
-        tuple (in_fasta, taxid_for_fasta, aln_tmp_dirs out_tsv) in which
-        in_fasta is a list of paths to fasta files each containing an
+        tuple (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs out_tsv) in
+        which in_fasta is a list of paths to fasta files each containing an
         alignment, taxid_for_fasta[i] gives a taxon id for in_fasta[i],
-        aln_tmp_dirs is a list of temp directories that need to be
-        cleaned up, and out_tsv[i] is a path to the file at which to
-        write the output for in_fasta[i]
+        years_tsv gives a tempfile storing a tsv file containing a year for
+        each sequence across all the fasta files (only if
+        args.cover_by_year_decay is set), aln_tmp_dirs is a list of temp
+        directories that need to be cleaned up, and out_tsv[i] is a path to the
+        file at which to write the output for in_fasta[i]
     """
     logger.info(("Setting up to prepare alignments"))
 
@@ -160,17 +162,28 @@ def prepare_alignments(args):
     # Construct alignments for each taxonomy
     in_fasta = []
     taxid_for_fasta = []
+    years_tsv_per_aln = []
     aln_tmp_dirs = []
     out_tsv = []
     for label, tax_id, segment, ref_acc in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
+        if args.cover_by_year_decay:
+            years_tsv_tmp = tempfile.NamedTemporaryFile()
+            years_tsv_tmp_name = years_tsv_tmp.name
+        else:
+            years_tsv_tmp = None
+            years_tsv_tmp_name = None
+
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_acc,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
-            limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza)
+            limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza,
+            years_tsv=years_tsv_tmp_name)
+
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
             taxid_for_fasta += [tax_id]
+        years_tsv_per_aln += [years_tsv_tmp]
         aln_tmp_dirs += [aln_file_dir]
 
         if label is None:
@@ -180,7 +193,20 @@ def prepare_alignments(args):
                 out_name = label + '.' + str(i) + '.tsv'
                 out_tsv += [os.path.join(args.out_tsv_dir, out_name)]
 
-    return in_fasta, taxid_for_fasta, aln_tmp_dirs, out_tsv
+    # Combine all years tsv (there is one per fasta file)
+    if any(f is not None for f in years_tsv_per_aln):
+        years_tsv = tempfile.NamedTemporaryFile()
+        with open(years_tsv.name, 'w') as fw:
+            for tf in years_tsv_per_aln:
+                if tf is not None:
+                    with open(tf.name) as fin:
+                        for line in fin:
+                            fw.write(line)
+                    tf.close()
+    else:
+        years_tsv = None
+
+    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv
 
 
 def design_for_id(args):
@@ -325,10 +351,18 @@ def main(args):
                     args.out_tsv_dir)
 
         # Prepare input alignments, stored in temp fasta files
-        in_fasta, taxid_for_fasta, aln_tmp_dirs, out_tsv = prepare_alignments(args)
+        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv = prepare_alignments(args)
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
         args.out_tsv = out_tsv
+
+        if args.cover_by_year_decay:
+            # args.cover_by_year_decay contains two parameters: the year
+            # with the highest cover and the decay; add in (to the beginning)
+            # the file listing the years
+            year_highest_cover, year_cover_decay = args.cover_by_year_decay
+            args.cover_by_year_decay = (years_tsv.name, year_highest_cover,
+                    year_cover_decay)
     elif args.input_type == 'fasta':
         if len(args.in_fasta) != len(args.out_tsv):
             raise Exception(("Number output TSVs must match number of input "
@@ -343,6 +377,8 @@ def main(args):
     if args.input_type in ['auto_from_file', 'auto-from-args']:
         for td in aln_tmp_dirs:
             td.cleanup()
+        if years_tsv is not None:
+            years_tsv.close()
 
 
 if __name__ == "__main__":
@@ -379,7 +415,7 @@ if __name__ == "__main__":
 
     # Automatically setting desired coverage of target sequences based
     # on their year
-    class ParseCoverDecay(argparse.Action):
+    class ParseCoverDecayWithYearsFile(argparse.Action):
         # This is needed because --cover-by-year-decay has multiple args
         # of different types
         def __call__(self, parser, namespace, values, option_string=None):
@@ -397,19 +433,24 @@ if __name__ == "__main__":
                 raise argparse.ArgumentTypeError(("%s is an invalid decay; it "
                     "must be a float in (0,1)" % c))
             setattr(namespace, self.dest, (a, bi, cf))
-    base_subparser.add_argument('--cover-by-year-decay', nargs=3,
-        action=ParseCoverDecay,
-        help=("<A> <B> <C>; if set, group input sequences by year and set a "
-              "desired partial cover for each year (fraction of sequences that "
-              "must be covered by guides) as follows: A is a tsv giving "
-              "a year for each input sequence (col 1 is sequence name "
-              "matching that in the input FASTA, col 2 is year). All years "
-              ">= B receive a desired cover fraction of GUIDE_COVER_FRAC "
-              "(specified with -p/--cover-frac). Each preceding year receives "
-              "a desired cover fraction that decays by C -- i.e., year n is "
-              "given C*(desired cover fraction of year n+1). This "
-              "grouping and varying cover fraction is only applied to guide "
-              "coverage (i.e., not primers if complete-targets is used)."))
+    class ParseCoverDecayByGeneratingYearsFile(argparse.Action):
+        # This is needed because --cover-by-year-decay has multiple args
+        # of different types
+        def __call__(self, parser, namespace, values, option_string=None):
+            a, b = values
+            # Check that a is a valid year
+            year_pattern = re.compile('^(\d{4})$')
+            if year_pattern.match(a):
+                ai = int(a)
+            else:
+                raise argparse.ArgumentTypeError(("%s is an invalid 4-digit "
+                    "year") % a)
+            # Check that b is a valid decay
+            bf = float(b)
+            if bf <= 0 or bf >= 1:
+                raise argparse.ArgumentTypeError(("%s is an invalid decay; it "
+                    "must be a float in (0,1)" % b))
+            setattr(namespace, self.dest, (ai, bf))
 
     # Handling missing data
     base_subparser.add_argument('--missing-thres', nargs=3,
@@ -563,6 +604,19 @@ if __name__ == "__main__":
         help=("Path to output TSV. If more than one input FASTA is given, the "
               "same number of output TSVs must be given; each output TSV "
               "corresponds to an input FASTA."))
+    input_fasta_subparser.add_argument('--cover-by-year-decay', nargs=3,
+        action=ParseCoverDecayWithYearsFile,
+        help=("<A> <B> <C>; if set, group input sequences by year and set a "
+              "desired partial cover for each year (fraction of sequences that "
+              "must be covered by guides) as follows: A is a tsv giving "
+              "a year for each input sequence (col 1 is sequence name "
+              "matching that in the input FASTA, col 2 is year). All years "
+              ">= B receive a desired cover fraction of GUIDE_COVER_FRAC "
+              "(specified with -p/--cover-frac). Each preceding year receives "
+              "a desired cover fraction that decays by C -- i.e., year n is "
+              "given C*(desired cover fraction of year n+1). This "
+              "grouping and varying cover fraction is only applied to guide "
+              "coverage (i.e., not primers if complete-targets is used)."))
 
     # Auto prepare, common arguments
     input_auto_common_subparser = argparse.ArgumentParser(add_help=False)
@@ -582,6 +636,19 @@ if __name__ == "__main__":
         action='store_true',
         help=("If set, fetch sequences using the NCBI Influenza database; "
               "should only be used for Influenza A or B virus taxonomies"))
+    input_auto_common_subparser.add_argument('--cover-by-year-decay', nargs=2,
+        action=ParseCoverDecayByGeneratingYearsFile,
+        help=("<A> <B>; if set, group input sequences by year and set a "
+              "desired partial cover for each year (fraction of sequences that "
+              "must be covered by guides) as follows: All years "
+              ">= A receive a desired cover fraction of GUIDE_COVER_FRAC "
+              "(specified with -p/--cover-frac). Each preceding year receives "
+              "a desired cover fraction that decays by B -- i.e., year n is "
+              "given B*(desired cover fraction of year n+1). This "
+              "grouping and varying cover fraction is only applied to guide "
+              "coverage (i.e., not primers if complete-targets is used). This "
+              "only works if --prep-influenza is set, because it currently "
+              "can only fetch years for influenza sequences."))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)
