@@ -153,7 +153,8 @@ def prepare_alignments(args):
     # Read list of taxonomies
     if args.input_type == 'auto-from-args':
         s = None if args.segment == 'None' else args.segment
-        taxs = [(None, args.tax_id, s, args.ref_acc)]
+        ref_accs = args.ref_accs.split(',')
+        taxs = [(None, args.tax_id, s, ref_accs)]
     elif args.input_type == 'auto-from-file':
         taxs = seq_io.read_taxonomies(args.in_tsv)
     else:
@@ -165,7 +166,7 @@ def prepare_alignments(args):
     years_tsv_per_aln = []
     aln_tmp_dirs = []
     out_tsv = []
-    for label, tax_id, segment, ref_acc in taxs:
+    for label, tax_id, segment, ref_accs in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
             years_tsv_tmp = tempfile.NamedTemporaryFile()
@@ -175,7 +176,7 @@ def prepare_alignments(args):
             years_tsv_tmp_name = None
 
         nc = prepare_alignment.prepare_for(
-            tax_id, segment, ref_acc,
+            tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name)
@@ -657,8 +658,8 @@ if __name__ == "__main__":
               "in order: (1) label for the row (used for naming output "
               "files; must be unique); (2) taxonomic (e.g., species) ID from "
               "NCBI; (3) label of segment (e.g., 'S') if there is one, or "
-              "'None' if unsegmented; (4) accession of reference sequence to "
-              "use for curation"))
+              "'None' if unsegmented; (4) accessions of reference sequences to "
+              "use for curation (comma-separated)"))
     input_autofile_subparser.add_argument('out_tsv_dir',
         help=("Path to directory in which to place output TSVs; each "
               "output TSV corresponds to a cluster for the taxon in a row "
@@ -671,8 +672,9 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('segment',
         help=("Label of segment (e.g., 'S') if there is one, or 'None' if "
               "unsegmented"))
-    input_autoargs_subparser.add_argument('ref_acc',
-        help=("Accession of reference sequence to use for curation"))
+    input_autoargs_subparser.add_argument('ref_accs',
+        help=("Accessions of reference sequences to use for curation (comma-"
+              "separated)"))
     input_autoargs_subparser.add_argument('out_tsv',
         help=("Path to output TSVs, with one per cluster; output TSVs are "
               "OUT_TSV.{cluster-number}"))

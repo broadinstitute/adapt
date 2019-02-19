@@ -18,7 +18,7 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
-def prepare_for(taxid, segment, ref_acc, out,
+def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None,
         limit_seqs=None, filter_warn=0.25, min_seq_len=200,
         min_cluster_size=2, prep_influenza=False, years_tsv=None):
@@ -35,7 +35,7 @@ def prepare_for(taxid, segment, ref_acc, out,
             sequences
         segment: only use sequences of this segment (ignored if set
             to '' or None, e.g., if taxid is unsegmented)
-        ref_acc: accession of reference sequence to use for curation
+        ref_accs: list of accessions of reference sequences to use for curation
         out: path to direcotry in which write FASTA files of aligned
             sequences (one per cluster)
         aln_memoizer: AlignmentMemoizer to use for memoizing alignments;
@@ -68,7 +68,7 @@ def prepare_for(taxid, segment, ref_acc, out,
         number of clusters
     """
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
-        "reference %s") % (taxid, segment, ref_acc))
+        "references %s") % (taxid, segment, ref_accs))
 
     # Download neighbors for taxid
     if prep_influenza:
@@ -97,16 +97,16 @@ def prepare_for(taxid, segment, ref_acc, out,
         else:
             neighbors = random.sample(neighbors, limit_seqs)
 
-    # Fetch FASTAs for the neighbors; also do so for ref_acc if it
-    # is not included
-    # Keep track of whether it was added, so that it can be removed
+    # Fetch FASTAs for the neighbors; also do so for ref_accs if ones
+    # are not included
+    # Keep track of whether they were added, so that they can be removed
     # later on
     acc_to_fetch = [n.acc for n in neighbors]
-    if ref_acc not in acc_to_fetch:
-        acc_to_fetch += [ref_acc]
-        added_ref_acc_to_fetch = True
-    else:
-        added_ref_acc_to_fetch = False
+    added_ref_accs_to_fetch = []
+    for ref_acc in ref_accs:
+        if ref_acc not in acc_to_fetch:
+            acc_to_fetch += [ref_acc]
+            added_ref_accs_to_fetch += [ref_acc]
     seqs_unaligned_fp = ncbi_neighbors.fetch_fastas(acc_to_fetch)
     seqs_unaligned = align.read_unaligned_seqs(seqs_unaligned_fp)
     seqs_unaligned_fp.close()
@@ -124,8 +124,8 @@ def prepare_for(taxid, segment, ref_acc, out,
         del seqs_unaligned[name]
 
     seqs_unaligned_curated = align.curate_against_ref(
-        seqs_unaligned, ref_acc, asm=aln_stat_memoizer,
-        remove_ref_acc=added_ref_acc_to_fetch)
+        seqs_unaligned, ref_accs, asm=aln_stat_memoizer,
+        remove_ref_accs=added_ref_accs_to_fetch)
 
     # An accession can show up multiple times (as separate neighbors)
     # for different RefSeq entries, but seqs_unaligned only stores
@@ -134,8 +134,8 @@ def prepare_for(taxid, segment, ref_acc, out,
     frac_filtered = 1.0 - float(len(seqs_unaligned_curated)) / len(seqs_unaligned)
     if frac_filtered >= filter_warn:
         logger.warning(("A fraction %f of sequences were filtered out "
-            "during curation for tax %d (segment: %s) using reference %s") %
-            (frac_filtered, taxid, segment, ref_acc))
+            "during curation for tax %d (segment: %s) using references %s") %
+            (frac_filtered, taxid, segment, ref_accs))
 
     # Produce clusters of unaligned sequences
     logger.info(("Clustering %d sequences"), len(seqs_unaligned_curated))

@@ -310,92 +310,106 @@ def _collapse_consecutive_gaps(a, b):
     return (a_ccg, b_ccg)
 
 
-def curate_against_ref(seqs, ref_acc, asm=None,
+def curate_against_ref(seqs, ref_accs, asm=None,
         aln_identity_thres=0.5, aln_identity_ccg_thres=0.6,
-        remove_ref_acc=False):
-    """Curate sequences by aligning pairwise with a reference sequence.
+        remove_ref_accs=[]):
+    """Curate sequences by aligning pairwise with reference sequences.
 
     This can make use of an object of AlignmentStatMemoizer to
     memoize values, since the pairwise alignment can be slow.
 
+    This compares each sequence against a list of reference accessions,
+    and keeps any that satisfies the criteria against any reference
+    sequence. In other words, it filters out any sequences that fail to
+    meet the criteria against all reference sequences.
+
     Args:
         seqs: dict mapping sequence accession to sequences
-        ref_acc: accession of reference sequence to use for curation; either
-            itself or ref_acc.[version] for some version must be a key
-            in seqs
+        ref_accs: list of accessions of reference sequences to use for curation;
+            for each ref_acc in ref_accs, either itself or ref_acc.[version]
+            for some version must be a key in seqs
         asm: AlignmentStatMemoizer to use for memoization of values; or
             None to not memoize
         aln_identity_thres: filter out any sequences with less than
-            this fraction identity to ref_acc (taken over the whole alignment)
+            this fraction identity to all ref_acc in ref_accs (taken over the
+            whole alignment)
         aln_identity_ccg_thres: filter out any sequences with less than
-            this fraction identity to ref_acc, after collapsing
+            this fraction identity to all ref_acc in ref_accs, after collapsing
             consecutive gaps to a single gap; this should be at least
             aln_identity_thres
-        remove_ref_acc: do not include ref_acc in the output
+        remove_ref_accs: a list of ref_acc, specifying to not include each
+            ref_acc in the output
 
     Returns:
         dict mapping sequence accession.version to sequences, filtered by
-        ones that can align reasonably well with ref_acc
+        ones that can align reasonably well with some ref_acc in ref_accs
     """
-    logger.debug(("Curating %d sequences against reference %s") %
-        (len(seqs), ref_acc))
+    logger.debug(("Curating %d sequences against references %s") %
+        (len(seqs), ref_accs))
 
-    # Find ref_acc in seqs
-    if ref_acc in seqs:
-        ref_acc_key = ref_acc
-    else:
-        # Look for a key in seqs that is ref_acc.[version] for some version
-        ref_acc_key = None
-        for k in seqs.keys():
-            if k.split('.')[0] == ref_acc:
-                ref_acc_key = k
-                break
-        if ref_acc_key is None:
-            raise Exception(("ref_acc must be in seqs; it is possible that "
-                "the reference accession '%s' is invalid or could not "
-                "be found") % ref_acc)
+    # Find each ref_acc in seqs
+    ref_acc_to_key = {}
+    for ref_acc in ref_accs:
+        if ref_acc in seqs:
+            ref_acc_key = ref_acc
+        else:
+            # Look for a key in seqs that is ref_acc.[version] for some version
+            ref_acc_key = None
+            for k in seqs.keys():
+                if k.split('.')[0] == ref_acc:
+                    ref_acc_key = k
+                    break
+            if ref_acc_key is None:
+                raise Exception(("Each ref_acc must be in seqs; it is possible "
+                    "that the reference accession '%s' is invalid or could not "
+                    "be found") % ref_acc)
+        ref_acc_to_key[ref_acc] = ref_acc_key
 
     seqs_filtered = OrderedDict()
     for accver, seq in seqs.items():
-        if accver == ref_acc_key:
-            # ref_acc_key will align well with ref_acc_key, so include it
-            # automatically
-            seqs_filtered[accver] = seq
-            continue
+        for ref_acc in ref_accs:
+            ref_acc_key = ref_acc_to_key[ref_acc]
+            if accver == ref_acc_key:
+                # ref_acc_key will align well with ref_acc_key, so include it
+                # automatically
+                seqs_filtered[accver] = seq
+                break
 
-        stats = asm.get((ref_acc_key, accver)) if asm is not None else None
-        if stats is not None:
-            aln_identity, aln_identity_ccg = stats
-        else:
-            # Align ref_acc_key with accver
-            to_align = {ref_acc_key: seqs[ref_acc_key], accver: seq}
-            aligned = align(to_align)
-            ref_acc_aln = aligned[ref_acc_key]
-            accver_aln = aligned[accver]
-            assert len(ref_acc_aln) == len(accver_aln)
+            stats = asm.get((ref_acc_key, accver)) if asm is not None else None
+            if stats is not None:
+                aln_identity, aln_identity_ccg = stats
+            else:
+                # Align ref_acc_key with accver
+                to_align = {ref_acc_key: seqs[ref_acc_key], accver: seq}
+                aligned = align(to_align)
+                ref_acc_aln = aligned[ref_acc_key]
+                accver_aln = aligned[accver]
+                assert len(ref_acc_aln) == len(accver_aln)
 
-            # Compute the identity of the alignment
-            aln_identity = _aln_identity(ref_acc_aln, accver_aln)
+                # Compute the identity of the alignment
+                aln_identity = _aln_identity(ref_acc_aln, accver_aln)
 
-            # Compute the identity of the alignment, after collapsing
-            # consecutive gaps (ccg) to a single gap
-            ref_acc_aln_ccg, accver_aln_ccg = _collapse_consecutive_gaps(
-                ref_acc_aln, accver_aln)
-            aln_identity_ccg = _aln_identity(ref_acc_aln_ccg, accver_aln_ccg)
+                # Compute the identity of the alignment, after collapsing
+                # consecutive gaps (ccg) to a single gap
+                ref_acc_aln_ccg, accver_aln_ccg = _collapse_consecutive_gaps(
+                    ref_acc_aln, accver_aln)
+                aln_identity_ccg = _aln_identity(ref_acc_aln_ccg, accver_aln_ccg)
 
-            if asm is not None:
-                # Memoize these statistics, so the alignment does not need
-                # to be performed again
-                stats = (aln_identity, aln_identity_ccg)
-                asm.add((ref_acc_key, accver), stats)
+                if asm is not None:
+                    # Memoize these statistics, so the alignment does not need
+                    # to be performed again
+                    stats = (aln_identity, aln_identity_ccg)
+                    asm.add((ref_acc_key, accver), stats)
 
-        logger.debug(("Alignment between %s and reference %s has identity "
-            "%f and identity (after collapsing consecutive gaps) %f") %
-            (accver, ref_acc_key, aln_identity, aln_identity_ccg))
+            logger.debug(("Alignment between %s and reference %s has identity "
+                "%f and identity (after collapsing consecutive gaps) %f") %
+                (accver, ref_acc_key, aln_identity, aln_identity_ccg))
 
-        if (aln_identity >= aln_identity_thres and
-                aln_identity_ccg >= aln_identity_ccg_thres):
-            seqs_filtered[accver] = seq
+            if (aln_identity >= aln_identity_thres and
+                    aln_identity_ccg >= aln_identity_ccg_thres):
+                # Include accver in the filtered output
+                seqs_filtered[accver] = seq
+                break
 
     logger.info(("After curation, %d of %d sequences were kept") %
         (len(seqs_filtered), len(seqs)))
@@ -404,8 +418,10 @@ def curate_against_ref(seqs, ref_acc, asm=None,
         # Save the new memoized values
         asm.save()
 
-    if remove_ref_acc:
-        # Do not include ref_acc_key in the output
+    for remove_ref_acc in remove_ref_accs:
+        # Do not include the ref_acc_key corresponding to remove_ref_acc
+        # in the output
+        ref_acc_key = ref_acc_to_key[remove_ref_acc]
         del seqs_filtered[ref_acc_key]
 
     return seqs_filtered

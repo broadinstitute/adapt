@@ -189,7 +189,7 @@ class TestCurateAgainstRef(unittest.TestCase):
     """
 
     def setUp(self):
-        self.seqs = {'AB123.1':   'ATCGAAATTTA',
+        self.seqs = {'AB123.1': 'ATCGAAATTTA',
                      'AB456.1': 'AGCGAAGTTA',
                      'AB789.1': 'GGGGG',
                      'KY123.1': 'GAAAA',
@@ -197,23 +197,40 @@ class TestCurateAgainstRef(unittest.TestCase):
                      'KY789.1': 'GAAATTT',
                      'KZ123.1': 'GGGGGGGGGGG'}
 
-        aln1 = {'AB123.1':   'ATCGAAATTTA',
-                'AB456.1': 'AGCGAAGTT-A'}
-        aln2 = {'AB123.1':   'ATCGAAATTTA',
-                'AB789.1': '---GGGGG---'}
-        aln3 = {'AB123.1':   'ATCGAAATTTA',
-                'KY123.1': '---GAAAA---'}
-        aln4 = {'AB123.1':   'ATCGAAATTTA',
-                'KY456.1': 'TTCGAAATTTA'}
-        aln5 = {'AB123.1':   'ATCGAAATTTA',
-                'KY789.1': '---GAAATTT-'}
-        aln6 = {'AB123.1':   'ATCGAAATTTA',
-                'KZ123.1': 'GGGGGGGGGGG'}
-        alns = [aln1, aln2, aln3, aln4, aln5, aln6]
+        aln1  = {'AB123.1': 'ATCGAAATTTA',
+                 'AB456.1': 'AGCGAAGTT-A'}
+        aln2  = {'AB123.1': 'ATCGAAATTTA',
+                 'AB789.1': '---GGGGG---'}
+        aln3  = {'AB123.1': 'ATCGAAATTTA',
+                 'KY123.1': '---GAAAA---'}
+        aln4  = {'AB123.1': 'ATCGAAATTTA',
+                 'KY456.1': 'TTCGAAATTTA'}
+        aln5  = {'AB123.1': 'ATCGAAATTTA',
+                 'KY789.1': '---GAAATTT-'}
+        aln6  = {'AB123.1': 'ATCGAAATTTA',
+                 'KZ123.1': 'GGGGGGGGGGG'}
+        aln7  = {'KZ123.1': 'GGGGGGGGGGG',
+                 'AB456.1': 'AGCGAAGTTA-'}
+        aln8  = {'KZ123.1': 'GGGGGGGGGGG',
+                 'AB789.1': '---GGGGG---'}
+        aln9  = {'KZ123.1': 'GGGGGGGGGGG',
+                  'KY123.1': 'GAAAA------'}
+        aln10 = {'KZ123.1': 'GGGGGGGGGGG',
+                 'KY456.1': 'TTCGAAATTTA'}
+        aln11 = {'KZ123.1': 'GGGGGGGGGGG',
+                 'KY789.1': '--GAAATTT--'}
+        alns = [aln1, aln2, aln3, aln4, aln5, aln6,
+                aln7, aln8, aln9, aln10, aln11]
 
-        expected_curated_seq_accs = ['AB123.1', 'AB456.1', 'KY456.1', 'KY789.1']
-        self.expected_curated_seqs = {acc: self.seqs[acc]
-            for acc in expected_curated_seq_accs}
+        expected_curated_seq_accs1 = ['AB123.1', 'AB456.1', 'KY456.1',
+                'KY789.1']
+        self.expected_curated_seqs1 = {acc: self.seqs[acc]
+            for acc in expected_curated_seq_accs1}
+
+        expected_curated_seq_accs2 = ['AB123.1', 'AB456.1', 'KY456.1',
+                'KY789.1', 'KZ123.1']
+        self.expected_curated_seqs2 = {acc: self.seqs[acc]
+            for acc in expected_curated_seq_accs2}
         
         # Override align.align() to provide expected alignments, but
         # keep the real function
@@ -227,16 +244,23 @@ class TestCurateAgainstRef(unittest.TestCase):
     def test_ref_acc_with_ver(self):
         ref_acc = 'AB123.1'
         self.assertEqual(
-            align.curate_against_ref(self.seqs, ref_acc,
-                remove_ref_acc=False),
-            self.expected_curated_seqs)
+            align.curate_against_ref(self.seqs, [ref_acc],
+                remove_ref_accs=[]),
+            self.expected_curated_seqs1)
 
     def test_ref_acc_without_ver(self):
         ref_acc = 'AB123'
         self.assertEqual(
-            align.curate_against_ref(self.seqs, ref_acc,
-                remove_ref_acc=False),
-            self.expected_curated_seqs)
+            align.curate_against_ref(self.seqs, [ref_acc],
+                remove_ref_accs=[]),
+            self.expected_curated_seqs1)
+
+    def test_multiple_ref_accs(self):
+        ref_accs = ['KZ123', 'AB123']
+        self.assertEqual(
+            align.curate_against_ref(self.seqs, ref_accs,
+                remove_ref_accs=[]),
+            self.expected_curated_seqs2)
 
     def tearDown(self):
         # Reset align.align()

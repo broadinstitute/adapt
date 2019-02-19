@@ -215,13 +215,13 @@ def read_taxonomies(fn):
         1) a label for the row (used for output files; must be unique)
         2) a taxonomic (e.g., species) ID from NCBI
         3) a segment label, or 'None' if unsegmented
-        4) an accession of a reference sequence
+        4) one or more accessions of reference sequences (comma-separated)
 
     Args:
         fn: path to TSV file, where each row corresponds to a taxonomy
 
     Returns:
-        list of tuples (label, taxonomic_id, segment, reference_accession)
+        list of tuples (label, taxonomic_id, segment, reference_accessions)
     """
     labels = set()
     taxs = []
@@ -245,6 +245,6 @@ def read_taxonomies(fn):
             segment = ls[2]
             if segment.lower() == 'none':
                 segment = None
-            ref_acc = ls[3]
-            taxs += [(label, tax_id, segment, ref_acc)]
+            ref_accs = ls[3].split(',')
+            taxs += [(label, tax_id, segment, ref_accs)]
     return taxs
