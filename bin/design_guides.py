@@ -567,7 +567,7 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('-pp', '--primer-cover-frac',
         type=check_cover_frac, default=1.0,
         help=("Same as --cover-frac, except for the design of primers -- "
-              "i.e., the fract_argsion of sequences that must be covered "
+              "i.e., the fraction of sequences that must be covered "
               "by the primers, independently on each end"))
     parser_ct_args.add_argument('-pm', '--primer-mismatches',
         type=int, default=0,
@@ -580,7 +580,7 @@ if __name__ == "__main__":
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))
     parser_ct_args.add_argument('--cost-fn-weights', type=float, nargs=3,
-        help=("Specify custom weights in the cost funct_argsion; given as "
+        help=("Specify custom weights in the cost function; given as "
               "3 weights (A B C), where the cost funct_argsion is "
               "A*(total number of primers) + B*log2(amplicon length) + "
               "C*(number of guides)"))
