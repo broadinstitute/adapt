@@ -72,10 +72,10 @@ INPUT-TYPE is one of:
 * `fasta`: The input is one or more FASTA files, each containing aligned sequences for a taxon.
 If more than one file is provided, the search performs differential identification across the taxa.
 * `auto-from-file`: The input is a file containing a list of taxon IDs and related information.
-This fetches sequences for those taxa, clusters and curates and aligns sequences for each taxon, and uses the generated alignments as input for design.
+This fetches sequences for those taxa, then curates, clusters and aligns the sequences for each taxon, and finally uses the generated alignments as input for design.
 The search finds crRNAs for differential identification across the taxa.
 * `auto-from-args`: The input is a single taxonomic ID, and related information, provided as command-line arguments.
-This fetches sequences for the taxon, clusters and curates and aligns sequences for each taxon, and uses the generated alignment as input for design.
+This fetches sequences for the taxon, then curates, clusters and aligns the sequences, and finally uses the generated alignment as input for design.
 
 To see details on all the arguments to use for a particular choice of subcommands, run:
 ```bash
