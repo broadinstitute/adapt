@@ -1,16 +1,20 @@
-diagnostic-guide-design
-=======================
+CATCH-dx
+========
 
-*dgd* is a Python package for designing guides to be used for diagnostics with SHERLOCK.
+**CATCH-dx** is a Python package for designing crRNAs that comprehensively account for microbial sequence diversity.
+<br/>
+
+The method and software are not yet published.
+However, the problems they solve do share some similarity with the problems solved by CATCH, which is described in [_Nature Biotechnology_](https://www.nature.com/articles/s41587-018-0006-x) and available on [GitHub](https://github.com/broadinstitute/catch).
 <br/>
 
 ### Table of contents
 
-* [Setting up dgd](#setting-up-dgd)
+* [Setting up CATCH-dx](#setting-up-catch-dx)
   * [Dependencies](#dependencies)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
-* [Using dgd](#using-dgd)
+* [Using CATCH-dx](#using-catch-dx)
   * [Designing guides](#designing-guides)
   * [Additional options](#additional-options)
   * [Output](#output)
@@ -18,16 +22,20 @@ diagnostic-guide-design
   * [Designing against a single target](#designing-against-a-single-target)
 <br/>
 
-# Setting up dgd
+# Setting up CATCH-dx
 
 ## Dependencies
 
-dgd is tested using Python 3.5, but should also work with earlier versions of Python 3.
-There are no other dependencies.
+CATCH-dx requires:
+* [Python](https://www.python.org) &gt;= 3.5
+* [NumPy](http://www.numpy.org) &gt;= 1.9.0
+* [SciPy](https://www.scipy.org) &gt;= 1.0.0
+
+Installing CATCH-dx with `pip`, as described below, will install NumPy and SciPy if they are not already installed.
 
 ## Downloading and installing
 
-An easy way to setup dgd is to clone the repository and install the package with `pip`:
+An easy way to setup CATCH-dx is to clone the repository and install the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/diagnostic-guide-design.git
 cd diagnostic-guide-design
@@ -42,7 +50,7 @@ To execute all unit tests, run:
 python -m unittest discover
 ```
 
-# Using dgd
+# Using CATCH-dx
 
 ## Designing guides
 
@@ -81,7 +89,7 @@ Guides are designed separately for each window of length WINDOW_SIZE nt.
 See `design_guides.py --help` for details on this argument.
 * `--id` / `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification, in which each input FASTA is a group/taxon to identify with specificity.
 Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a group/taxon other than the one for which it is being designed, and decide that a guide hits a group/taxon if it hits at least ID_FRAC of the sequences in that group/taxon.
-dgd does not output guides that hit group/taxons other than the one for which they are being designed.
+CATCH-dx does not output guides that hit group/taxons other than the one for which they are being designed.
 Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
 Note that `--id` must be set to perform differential identification (setting `--id-m` and/or `--id-frac` alone will not suffice).
 (Default: 2 for ID_M, 0.05 for ID_FRAC.)
@@ -97,7 +105,7 @@ See `design_guides.py --help` for details on the BLACKLISTED_KMERS file format.
 
 ## Output
 
-Each file output by dgd is a TSV file in which each row corresponds to a window in the alignment and the columns give information about the guides designed for that window.
+Each file output by CATCH-dx is a TSV file in which each row corresponds to a window in the alignment and the columns give information about the guides designed for that window.
 The columns are:
 * `window-start`/`window-end`: Start (inclusive) and end (exclusive) positions of this window in the alignment.
 * `count`: The number of guide sequences for this window.
