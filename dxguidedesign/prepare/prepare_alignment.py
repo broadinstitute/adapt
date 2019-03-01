@@ -22,7 +22,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None,
         limit_seqs=None, filter_warn=0.25, min_seq_len=200,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
-        cluster_threshold=0.1):
+        cluster_threshold=0.1, accessions_to_use=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -68,6 +68,8 @@ def prepare_for(taxid, segment, ref_accs, out,
             average nucleotide dissimilarity (1-ANI, where ANI is
             average nucleotide identity); higher results in fewer
             clusters
+        accessions_to_use: if set, a collection of accessions to use instead
+            of fetching neighbors for taxid
 
     Returns:
         number of clusters
@@ -75,15 +77,19 @@ def prepare_for(taxid, segment, ref_accs, out,
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
         "references %s") % (taxid, segment, ref_accs))
 
-    # Download neighbors for taxid
-    if prep_influenza:
-        neighbors = ncbi_neighbors.construct_influenza_genome_neighbors(taxid)
+    if accessions_to_use is not None:
+        neighbors = [ncbi_neighbors.Neighbor(acc, None, None, None, None,
+            segment) for acc in accessions_to_use]
     else:
-        neighbors = ncbi_neighbors.construct_neighbors(taxid)
+        # Download neighbors for taxid
+        if prep_influenza:
+            neighbors = ncbi_neighbors.construct_influenza_genome_neighbors(taxid)
+        else:
+            neighbors = ncbi_neighbors.construct_neighbors(taxid)
 
-    # Filter neighbors by segment
-    if segment != None and segment != '':
-        neighbors = [n for n in neighbors if n.segment == segment]
+        # Filter neighbors by segment
+        if segment != None and segment != '':
+            neighbors = [n for n in neighbors if n.segment == segment]
 
     if len(neighbors) == 0:
         if segment != None and segment != '':

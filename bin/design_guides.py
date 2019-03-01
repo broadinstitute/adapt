@@ -160,6 +160,24 @@ def prepare_alignments(args):
     else:
         raise Exception(("Unknown input type '%s'") % args.input_type)
 
+    # Read specified accessions, if provided
+    if args.use_accessions:
+        accessions_to_use = seq_io.read_accessions_for_taxonomies(
+                args.use_accessions)
+
+        # Verify there is at least one accession for each taxonomic grouping
+        for _, tax_id, segment, _ in taxs:
+            if (tax_id, segment) not in accessions_to_use:
+                if segment is None:
+                    raise Exception(("--use-accessions was specified, but "
+                        "there are no accessions for taxid %d"), tax_id)
+                else:
+                    raise Exception(("--use-accessions was specified, but "
+                        "there are no accessions for taxid %d and segment '%s'"),
+                        tax_id, segment)
+    else:
+        accessions_to_use = None
+
     # Construct alignments for each taxonomy
     in_fasta = []
     taxid_for_fasta = []
@@ -175,12 +193,18 @@ def prepare_alignments(args):
             years_tsv_tmp = None
             years_tsv_tmp_name = None
 
+        if accessions_to_use is not None:
+            accessions_to_use_for_tax = accessions_to_use[(tax_id, segment)]
+        else:
+            accessions_to_use_for_tax = None
+
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name,
-            cluster_threshold=args.cluster_threshold)
+            cluster_threshold=args.cluster_threshold,
+            accessions_to_use=accessions_to_use_for_tax)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -659,6 +683,13 @@ if __name__ == "__main__":
                "nucleotide dissimilarity (1-ANI, where ANI is average "
                "nucleotide identity); higher values result in fewer "
                "clusters")))
+    input_auto_common_subparser.add_argument('--use-accessions',
+        help=("If set, use specified accessions instead of fetching neighbors "
+              "for the given taxonomic ID(s). This provides a path to a TSV "
+              "file with 3 columns: (1) a taxonomic ID; (2) segment label, "
+              "or 'None' if unsegmented; (3) accession. Each row specifies "
+              "an accession to use in the input, and values for columns 1 "
+              "and 2 can appear in multiple rows."))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)

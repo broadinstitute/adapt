@@ -1,6 +1,7 @@
 """Functions for working with sequence (and related) i/o.
 """
 
+from collections import defaultdict
 from collections import OrderedDict
 import logging
 import re
@@ -248,3 +249,43 @@ def read_taxonomies(fn):
             ref_accs = ls[3].split(',')
             taxs += [(label, tax_id, segment, ref_accs)]
     return taxs
+
+
+def read_accessions_for_taxonomies(fn):
+    """Read file of accessions for each taxonomy.
+
+    The columns must be, in order:
+        1) a taxonomic (e.g., species) ID from NCBI
+        2) a segment label, or 'None' if unsegmented
+        3) an accession to include in the design for the taxonomic ID
+
+    A taxonomic ID can appear in multiple rows, if there should be multiple
+    accessions used for it.
+
+    Args:
+        fn: path to TSV file, where each row corresponds to an accession
+            to include in the design
+
+    Returns:
+        dict {(taxonomic-id, segment): [list of accessions]}
+    """
+    accs = defaultdict(list)
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 3:
+                raise Exception(("Input accession TSV must have 3 columns"))
+
+            try:
+                tax_id = int(ls[0])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[0])
+
+            segment = ls[1]
+            if segment.lower() == 'none':
+                segment = None
+            accession = ls[2]
+            accs[(tax_id, segment)].append(accession)
+    return accs
+
