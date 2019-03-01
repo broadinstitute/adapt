@@ -179,7 +179,8 @@ def prepare_alignments(args):
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza,
-            years_tsv=years_tsv_tmp_name)
+            years_tsv=years_tsv_tmp_name,
+            cluster_threshold=args.cluster_threshold)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -650,6 +651,14 @@ if __name__ == "__main__":
               "coverage (i.e., not primers if complete-targets is used). This "
               "only works if --prep-influenza is set, because it currently "
               "can only fetch years for influenza sequences."))
+    input_auto_common_subparser.add_argument('--cluster-threshold',
+        type=float,
+        default=0.1,
+        help=(("Maximum inter-cluster distance to use when clustering "
+               "input sequences prior to alignment. Expressed as average "
+               "nucleotide dissimilarity (1-ANI, where ANI is average "
+               "nucleotide identity); higher values result in fewer "
+               "clusters")))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)

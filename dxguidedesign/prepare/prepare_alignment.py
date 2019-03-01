@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None,
         limit_seqs=None, filter_warn=0.25, min_seq_len=200,
-        min_cluster_size=2, prep_influenza=False, years_tsv=None):
+        min_cluster_size=2, prep_influenza=False, years_tsv=None,
+        cluster_threshold=0.1):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -63,6 +64,10 @@ def prepare_for(taxid, segment, ref_accs, out,
             a year (column 2) for each sequence written to out (column 1);
             this is only done for influenza sequences (if prep_influenza
             is True)
+        cluster_threshold: maximum inter-cluster distance to merge clusters, in
+            average nucleotide dissimilarity (1-ANI, where ANI is
+            average nucleotide identity); higher results in fewer
+            clusters
 
     Returns:
         number of clusters
@@ -140,7 +145,7 @@ def prepare_for(taxid, segment, ref_accs, out,
     # Produce clusters of unaligned sequences
     logger.info(("Clustering %d sequences"), len(seqs_unaligned_curated))
     clusters = cluster.cluster_with_minhash_signatures(
-        seqs_unaligned_curated)
+        seqs_unaligned_curated, threshold=cluster_threshold)
 
     # Throw away clusters (and the sequences in them) that are too small;
     # but only throw away clusters if at least 1 will remain
