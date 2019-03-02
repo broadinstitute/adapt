@@ -16,5 +16,5 @@ setup(name='dxguidedesign',
       packages=find_packages(),
       install_requires=['numpy>=1.9.0', 'scipy>=1.0.0'],
       scripts=[
-        'bin/design_guides.py'
+        'bin/design.py'
       ])
