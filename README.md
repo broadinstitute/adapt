@@ -54,11 +54,11 @@ python -m unittest discover
 
 ## Designing guides
 
-The main program to design guides is [`design_guides.py`](./bin/design_guides.py).
+The main program to design guides is [`design.py`](./bin/design.py).
 
-[`design_guides.py`](./bin/design_guides.py) requires two subcommands:
+[`design.py`](./bin/design.py) requires two subcommands:
 ```bash
-design_guides.py [SEARCH-TYPE] [INPUT-TYPE] ...
+design.py [SEARCH-TYPE] [INPUT-TYPE] ...
 ```
 
 SEARCH-TYPE is one of:
@@ -79,13 +79,13 @@ This fetches sequences for the taxon, then curates, clusters and aligns the sequ
 
 To see details on all the arguments to use for a particular choice of subcommands, run:
 ```bash
-design_guides.py [SEARCH-TYPE] [INPUT-TYPE] --help
+design.py [SEARCH-TYPE] [INPUT-TYPE] --help
 ```
 This includes required positional arguments for each choice of subcommands.
 
 ## Common options
 
-Below is a summary of some common arguments to [`design_guides.py`](./bin/design_guides.py):
+Below is a summary of some common arguments to [`design.py`](./bin/design.py):
 
 * `-gl GUIDE_LENGTH`: Design guides to be GUIDE_LENGTH nt long.
 (Default: 28.)
@@ -94,7 +94,7 @@ Below is a summary of some common arguments to [`design_guides.py`](./bin/design
 * `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
 (Default: 1.0.)
 * `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
-See `design_guides.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
 * `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
 Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
 CATCH-dx does not output guides that hit group/taxons other than the one for which they are being designed.
@@ -104,7 +104,7 @@ Higher values of ID_M and lower values of ID_FRAC correspond to more specificity
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
 * `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs between guide and target sequence as matching.
 * `--required-guides REQUIRED_GUIDES`: Ensure that the guides provided in REQUIRED_GUIDES are included in the design, and perform the design with them already included.
-See `design_guides.py --help` for details on the REQUIRED_GUIDES file format.
+See `design.py --help` for details on the REQUIRED_GUIDES file format.
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
 * `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
 
@@ -121,7 +121,7 @@ If not set, there is no limit.
 Smaller values can significantly improve runtime.
 (Default: not set.)
 * `--cost-fn-weights COST_FN_WEIGHTS`: Coefficients to use in a cost function for each target.
-See `design_guides.py complete-targets [INPUT-TYPE] --help` for details.
+See `design.py complete-targets [INPUT-TYPE] --help` for details.
 * `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS targets, where each target receives a cost according to COST_FN_WEIGHTS.
 Note that higher values can significantly increase runtime.
 (Default: 10.)
@@ -141,7 +141,7 @@ The columns are:
 * `target-sequence-positions`: The positions of the guide sequences in the alignment, in the same order as the sequences are reported; since a guide may come from >1 position, positions are reported in set notation (e.g., \{100\}).
 
 By default, the rows in the output are sorted by the position of the window.
-If you include the `--sort` argument to [`design_guides.py`](./bin/design_guides.py), it will sort the rows in the output so that the "best" choices of windows are on top.
+If you include the `--sort` argument to [`design.py`](./bin/design.py), it will sort the rows in the output so that the "best" choices of windows are on top.
 It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.
 
 When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and crRNA combination) and there are additional columns giving information about primer pairs.
@@ -149,7 +149,7 @@ There is also a `cost` column, giving the cost of each target according to `--co
 
 When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV file for each cluster of input sequences.
 
-For all cases, see `design_guides.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and paths to the output TSV files.
+For all cases, see `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and paths to the output TSV files.
 
 Note that output sequences are directly from the input sequences; guide sequences should be reverse complements of the output!
 
@@ -161,7 +161,7 @@ This is the most simple example.
 The package includes an alignment of LASV sequences (S segment) from Sierra Leone.
 For example:
 ```bash
-design_guides.py sliding-window fasta examples/SLE_S.aligned.fasta -o guides.tsv -w 200 -gl 28 -gm 1 -gp 0.95
+design.py sliding-window fasta examples/SLE_S.aligned.fasta -o guides.tsv -w 200 -gl 28 -gm 1 -gp 0.95
 ```
 reads an alignment from `examples/SLE_S.aligned.fasta`.
 
