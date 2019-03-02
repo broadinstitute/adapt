@@ -33,6 +33,8 @@ CATCH-dx requires:
 
 Installing CATCH-dx with `pip`, as described below, will install NumPy and SciPy if they are not already installed.
 
+If using alignment features in subcommands below, CATCH-dx also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
+
 ## Downloading and installing
 
 An easy way to setup CATCH-dx is to clone the repository and install the package with `pip`:
