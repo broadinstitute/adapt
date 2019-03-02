@@ -201,7 +201,7 @@ def prepare_alignments(args):
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
-            limit_seqs=args.limit_seqs, prep_influenza=args.prep_influenza,
+            sample_seqs=args.sample_seqs, prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name,
             cluster_threshold=args.cluster_threshold,
             accessions_to_use=accessions_to_use_for_tax)
@@ -653,11 +653,13 @@ if __name__ == "__main__":
         help=("Path to directory in which to memoize alignments and "
               "statistics on them; if not set, this does not memoize "
               "this information"))
-    input_auto_common_subparser.add_argument('--limit-seqs', type=int,
-        help=("After fetching accessions, randomly select LIMIT_SEQS of them "
-              "without replacement from each taxonomy and only move forward "
+    input_auto_common_subparser.add_argument('--sample-seqs', type=int,
+        help=("After fetching accessions, randomly select SAMPLE_SEQS of them "
+              "with replacement from each taxonomy any move forward "
               "in the design with these. This is useful for testing and "
-              "measuring output growth as input size grows."))
+              "measuring output growth as input size grows, as well as "
+              "assessing the dispersion in output associated with some "
+              "input sample."))
     input_auto_common_subparser.add_argument('--prep-influenza',
         action='store_true',
         help=("If set, fetch sequences using the NCBI Influenza database; "

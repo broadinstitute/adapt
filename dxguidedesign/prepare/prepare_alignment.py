@@ -3,6 +3,7 @@
 This includes downloading, curating, and aligning sequences.
 """
 
+from collections import Counter
 from collections import OrderedDict
 import logging
 import os
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None,
-        limit_seqs=None, filter_warn=0.25, min_seq_len=200,
+        sample_seqs=None, filter_warn=0.25, min_seq_len=200,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         cluster_threshold=0.1, accessions_to_use=None):
     """Prepare an alignment for a taxonomy.
@@ -43,9 +44,9 @@ def prepare_for(taxid, segment, ref_accs, out,
             or None to not memoize
         aln_stat_memoizer: AlignmentStatMemoizer to use for memoization
             of alignment statistic values; or None to not memoize
-        limit_seqs: fetch all accessions, and then randomly select
-            LIMIT_SEQS of them without replacement and only design from
-            these; if None (default), do not limit the input
+        sample_seqs: fetch all accessions, and then randomly select
+            SAMPLE_SEQS of them with replacement and design from
+            these; if None (default), do not sample the input
         filter_warn: raise a warning if the fraction of sequences that
             are filtered out during curation is greater than or equal to
             this float
@@ -98,21 +99,33 @@ def prepare_for(taxid, segment, ref_accs, out,
         else:
             raise Exception(("No sequences were found for taxid %d") % taxid)
 
-    if limit_seqs is not None:
-        # Randomly sample limit_seqs from neighbors
-        if limit_seqs > len(neighbors):
-            logger.warning(("limit_seqs for tax %d (segment: %s) is %d and "
-                "is greater than the number of sequences available (%d); not "
-                "subsampling, and instead using all available sequences") %
-                (taxid, segment, limit_seqs, len(neighbors)))
-        else:
-            neighbors = random.sample(neighbors, limit_seqs)
+    if sample_seqs is not None:
+        # Randomly sample sample_seqs from neighbors
+        if sample_seqs > len(neighbors):
+            logger.warning(("sample_seqs for tax %d (segment: %s) is %d and "
+                "is greater than the number of sequences available (%d); "
+                "still subsampling with replacement, but this might be "
+                "unintended") %
+                (taxid, segment, sample_seqs, len(neighbors)))
+        # Sample accessions, rather than neighbors, because an accession can
+        # show up multiple times in neighbors due to having multiple RefSeq
+        # entries
+        acc_to_sample = list(set([n.acc for n in neighbors]))
+        acc_to_fetch = random.choices(acc_to_sample, k=sample_seqs)
+        neighbors = [n for n in neighbors if n.acc in acc_to_fetch]
+        # Because this is sampling with replacement, an accession may
+        # show up multiple times in the sampling; to keep this multiplicity
+        # going forward, track its count
+        acc_count = Counter(acc_to_fetch)
+    else:
+        # Only fetch each accession once
+        acc_to_fetch = list(set([n.acc for n in neighbors]))
+        acc_count = Counter(acc_to_fetch)   # 1 for each accession
 
     # Fetch FASTAs for the neighbors; also do so for ref_accs if ones
     # are not included
     # Keep track of whether they were added, so that they can be removed
     # later on
-    acc_to_fetch = [n.acc for n in neighbors]
     added_ref_accs_to_fetch = []
     for ref_acc in ref_accs:
         if ref_acc not in acc_to_fetch:
@@ -134,15 +147,33 @@ def prepare_for(taxid, segment, ref_accs, out,
     for name in seqs_too_short:
         del seqs_unaligned[name]
 
+    # Curate against ref_accs
     seqs_unaligned_curated = align.curate_against_ref(
         seqs_unaligned, ref_accs, asm=aln_stat_memoizer,
         remove_ref_accs=added_ref_accs_to_fetch)
 
-    # An accession can show up multiple times (as separate neighbors)
-    # for different RefSeq entries, but seqs_unaligned only stores
-    # unique accessions; when determining how many were filtered out,
-    # compared against seqs_unaligned rather than neighbors
-    frac_filtered = 1.0 - float(len(seqs_unaligned_curated)) / len(seqs_unaligned)
+    # An accession can show up multiple times if there was sampling with
+    # replacement, but the dicts above (seqs_unaligned and
+    # seqs_unaligned_curate) are key'd on accession; replicate the
+    # multiplicity here but renaming an accession that should appear multiple
+    # times from [accession.version] to [accession.version]-{1,2,...}
+    seqs_unaligned_curated_with_multiplicity = OrderedDict()
+    for accver, seq in seqs_unaligned_curated.items():
+        acc = accver.split('.')[0]
+        assert acc_count[acc] > 0
+        if acc_count[acc] == 1:
+            seqs_unaligned_curated_with_multiplicity[accver] = seq
+        else:
+            logger.debug(("Adding multiplicity %d to accession %s") %
+                    (acc_count[acc], acc))
+            for i in range(1, acc_count[acc] + 1):
+                new_name = accver + '-' + str(i)
+                seqs_unaligned_curated_with_multiplicity[new_name] = seq
+    seqs_unaligned_curated = seqs_unaligned_curated_with_multiplicity
+
+    # When determining how many were filtered out, we care about acc_to_fetch
+    # (which has multiplicity in case of sampling with replacement)
+    frac_filtered = 1.0 - float(len(seqs_unaligned_curated)) / len(acc_to_fetch)
     if frac_filtered >= filter_warn:
         logger.warning(("A fraction %f of sequences were filtered out "
             "during curation for tax %d (segment: %s) using references %s") %
@@ -200,7 +231,8 @@ def prepare_for(taxid, segment, ref_accs, out,
         all_seq_names = set().union(*clusters)
         with open(years_tsv, 'w') as fw:
             for name in all_seq_names:
-                # name is [accession].[version]; extract the accession
+                # name is [accession].[version] (or [accession].[version]-[n]
+                # in case of multiplicity); extract the accession
                 acc = name.split('.')[0]
                 fw.write('\t'.join([name, str(year_for_acc[acc])]) + '\n')
 
