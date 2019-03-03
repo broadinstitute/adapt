@@ -287,7 +287,7 @@ def construct_influenza_genome_neighbors(taxid):
         name = ls[7]
 
         # Parse the year
-        year_m = year_p.match(date)
+        year_m = year_p.search(date)
         if year_m is None:
             # No year available; skip the sequence
             continue
