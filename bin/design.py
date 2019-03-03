@@ -638,7 +638,7 @@ if __name__ == "__main__":
               "a year for each input sequence (col 1 is sequence name "
               "matching that in the input FASTA, col 2 is year). All years "
               ">= B receive a desired cover fraction of GUIDE_COVER_FRAC "
-              "(specified with -p/--cover-frac). Each preceding year receives "
+              "(specified with -gp/--guide-cover-frac). Each preceding year receives "
               "a desired cover fraction that decays by C -- i.e., year n is "
               "given C*(desired cover fraction of year n+1). This "
               "grouping and varying cover fraction is only applied to guide "
@@ -670,13 +670,11 @@ if __name__ == "__main__":
               "desired partial cover for each year (fraction of sequences that "
               "must be covered by guides) as follows: All years "
               ">= A receive a desired cover fraction of GUIDE_COVER_FRAC "
-              "(specified with -p/--cover-frac). Each preceding year receives "
+              "(specified with -gp/--guide-cover-frac). Each preceding year receives "
               "a desired cover fraction that decays by B -- i.e., year n is "
               "given B*(desired cover fraction of year n+1). This "
               "grouping and varying cover fraction is only applied to guide "
-              "coverage (i.e., not primers if complete-targets is used). This "
-              "only works if --prep-influenza is set, because it currently "
-              "can only fetch years for influenza sequences."))
+              "coverage (i.e., not primers if complete-targets is used)."))
     input_auto_common_subparser.add_argument('--cluster-threshold',
         type=float,
         default=0.1,

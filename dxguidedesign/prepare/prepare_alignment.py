@@ -92,6 +92,15 @@ def prepare_for(taxid, segment, ref_accs, out,
         if segment != None and segment != '':
             neighbors = [n for n in neighbors if n.segment == segment]
 
+    num_unique_acc = len(set(n.acc for n in neighbors))
+    logger.info(("There are %d neighbors (%d with unique accessions)"),
+            len(neighbors), num_unique_acc)
+
+    if years_tsv is not None:
+        # Fetch metadata (including year), add it to neighbors, and
+        # filter out ones without a known year
+        neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors)
+
     if len(neighbors) == 0:
         if segment != None and segment != '':
             raise Exception(("No sequences were found for taxid %d and "
@@ -223,9 +232,6 @@ def prepare_for(taxid, segment, ref_accs, out,
 
     # Write the years for each sequence, if requested
     if years_tsv:
-        if not prep_influenza:
-            raise Exception(("Can only write years tsv if preparing influenza "
-                "sequences"))
         year_for_acc = {neighbor.acc: neighbor.metadata['year'] for
                 neighbor in neighbors}
         all_seq_names = set().union(*clusters)

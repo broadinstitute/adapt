@@ -411,8 +411,8 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 seqs_filtered[accver] = seq
                 break
 
-    logger.info(("After curation, %d of %d sequences were kept") %
-        (len(seqs_filtered), len(seqs)))
+    logger.info(("After curation, %d of %d sequences (with unique accession) "
+        "were kept") % (len(seqs_filtered), len(seqs)))
 
     if asm is not None:
         # Save the new memoized values
