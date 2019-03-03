@@ -1,6 +1,7 @@
 """Utilities for working with genome neighbors (complete genomes) from NCBI.
 """
 
+from collections import defaultdict
 import datetime
 import gzip
 import logging
@@ -9,6 +10,7 @@ import tempfile
 import time
 import urllib.parse
 import urllib.request
+from xml.dom import minidom
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -85,7 +87,7 @@ def fetch_influenza_genomes_table(species_name):
                 yield line_rstrip
 
 
-def ncbi_download_url(accessions):
+def ncbi_fasta_download_url(accessions):
     """Construct URL for downloading FASTA sequence.
 
     Args:
@@ -126,12 +128,81 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
     # Download sequences in batches
     for i in range(0, len(accessions), batch_size):
         batch = accessions[i:(i + batch_size)]
-        url = ncbi_download_url(batch)
+        url = ncbi_fasta_download_url(batch)
         r = urllib.request.urlopen(url)
         raw_data = r.read()
         for line in raw_data.decode('utf-8').split('\n'):
             fp.write((line + '\n').encode())
         time.sleep(1.0/reqs_per_sec)
+
+    # Set position to 0 so it can be re-read
+    fp.seek(0)
+
+    return fp
+
+
+def ncbi_xml_download_url(accessions):
+    """Construct URL for downloading GenBank XML.
+
+    Args:
+        accessions: collection of accessions to download XML for
+
+    Returns:
+        str representing download URL
+    """
+    ids = ','.join(accessions)
+    # Use safe=',' to not encode ',' as '%2'
+    params = urllib.parse.urlencode({'id': ids, 'db': 'nuccore',
+        'retmode': 'xml'}, safe=',')
+    url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params
+    return url
+
+
+def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
+    """Download XML for accessions.
+
+    Entrez enforces a limit of ~3 requests per second (or else it
+    will return a 'Too many requests' error); to avoid this, this
+    aims for ~2 requests per second. To use up to 10 requests per second,
+    request an API key from Entrez.
+
+    Args:
+        accessions: collection of accessions to download XML for
+        batch_size: number of accessions to download in each batch
+        reqs_per_sec: number of requests per second to allow
+
+    Returns:
+        tempfile object containing the downloaded XML data
+    """
+    # Make temp file
+    fp = tempfile.NamedTemporaryFile()
+
+    # Only write the header once; otherwise, it will be written for each
+    # beach, and then the file will not be able to be parsed
+    def is_xml_header(line):
+        return (line.startswith('<?xml ') or line.startswith('<!DOCTYPE '))
+
+    # Download in batches
+    for i in range(0, len(accessions), batch_size):
+        batch = accessions[i:(i + batch_size)]
+        url = ncbi_xml_download_url(batch)
+        r = urllib.request.urlopen(url)
+        raw_data = r.read()
+        for line in raw_data.decode('utf-8').split('\n'):
+            if i > 0 and is_xml_header(line):
+                # Only write XML header for the first batch (i == 0)
+                continue
+            if i > 0 and '<GBSet>' in line:
+                # Do not write GBSet open after the first batch
+                line = line.replace('<GBSet>', '')
+            if '</GBSet>' in line:
+                # Never write GBSet close until the end
+                line = line.replace('</GBSet>', '')
+            fp.write((line + '\n').encode())
+        time.sleep(1.0/reqs_per_sec)
+
+    # Write the GBSet close
+    fp.write(('</GBSet>' + '\n').encode())
 
     # Set position to 0 so it can be re-read
     fp.seek(0)
@@ -216,6 +287,34 @@ def construct_neighbors(taxid):
 
         neighbor = Neighbor(acc, refseq_acc, hosts, lineage, tax_name, segment)
         neighbors += [neighbor]
+
+    return neighbors
+
+
+def add_metadata_to_neighbors_and_filter(neighbors):
+    """Fetch and add metadata to neighbors.
+
+    This also filters out neighbors without a known year.
+
+    Args:
+        neighbors: collection of Neighbor objects
+
+    Returns:
+        neighbors, with metadata included (excluding the ones filtered out)
+    """
+    # Fetch metadata for each neighbor
+    metadata = fetch_metadata([n.acc for n in neighbors])
+    acc_to_skip = set()
+    for neighbor in neighbors:
+        neighbor.metadata = metadata[neighbor.acc]
+        if neighbor.metadata['year'] is None:
+            acc_to_skip.add(neighbor.acc)
+
+    # Requiring year, so remove accessions that do not have a year
+    if len(acc_to_skip) > 0:
+        logger.warning(("Leaving out %d accessions that do not contain "
+            "a year"), len(acc_to_skip))
+    neighbors = [n for n in neighbors if n.acc not in acc_to_skip]
 
     return neighbors
 
@@ -307,3 +406,93 @@ def construct_influenza_genome_neighbors(taxid):
         neighbors += [neighbor]
 
     return neighbors
+
+
+def parse_genbank_xml_for_source_features(fn):
+    """Parse GenBank XML to extract source features.
+
+    Args:
+        fn: path to XML file, as generated by GenBank
+
+    Returns:
+        dict {accession: [(qualifier name, qualifier value)]}
+    """
+    doc = minidom.parse(fn)
+    def parse_xml_node_value(element, tag_name):
+        return element.getElementsByTagName(tag_name)[0].firstChild.nodeValue
+
+    source_features = defaultdict(list)
+
+    seqs = doc.getElementsByTagName('GBSeq')
+    for seq in seqs:
+        accession = parse_xml_node_value(seq, 'GBSeq_primary-accession')
+        feature_table = seq.getElementsByTagName('GBSeq_feature-table')[0]
+        for feature in feature_table.getElementsByTagName('GBFeature'):
+            feature_key = parse_xml_node_value(feature, 'GBFeature_key')
+            if feature_key == 'source':
+                quals = feature.getElementsByTagName('GBFeature_quals')[0]
+                for qualifier in quals.getElementsByTagName('GBQualifier'):
+                    qual_name = parse_xml_node_value(qualifier, 'GBQualifier_name')
+                    qual_value = parse_xml_node_value(qualifier, 'GBQualifier_value')
+                    source_features[accession].append((qual_name, qual_value))
+
+    return source_features
+
+
+def fetch_metadata(accessions):
+    """Fetch metadata from GenBank for accessions.
+
+    This currently only parses out country and collection year.
+
+    Args:
+        accessions: collection of accessions to fetch for
+
+    Returns:
+        dict {accession: {'country': country, 'year': collection-year}}
+    """
+    accessions = list(set(accessions))
+    logger.info(("Fetching metadata for %d accessions"), len(accessions))
+
+    # Fetch XML and parse it for source features
+    xml_tf = fetch_xml(accessions)
+    source_features = parse_genbank_xml_for_source_features(xml_tf.name)
+
+    # Construct a pattern to match years in a date (1000--2999)
+    year_p = re.compile('([1-2][0-9]{3})')
+
+    # Determine the current year
+    curr_year = int(datetime.datetime.now().year)
+
+    metadata = {}
+    for accession, feats in source_features.items():
+        year = None
+        country = None
+        for (name, value) in feats:
+            if name == 'collection_date':
+                # Parse the year
+                year_m = year_p.search(value)
+                if year_m is None:
+                    # No year available
+                    feat_year = None
+                else:
+                    feat_year = int(year_m.group(1))
+                    if feat_year > curr_year:
+                        # This year is in the future (probably a typo)
+                        # Treat it as unavailable
+                        feat_year = None
+                    if year is not None and feat_year != year:
+                        raise Exception(("Inconsistent year for "
+                            "accession %s") % accession)
+                year = feat_year
+            if name == 'country':
+                if country is not None and value != country:
+                    raise Exception(("Inconsistent country for "
+                        "accession %s") % accession)
+                country = value
+        metadata[accession] = {'country': country, 'year': year}
+
+    # Close the tempfile
+    xml_tf.close()
+
+    return metadata
+

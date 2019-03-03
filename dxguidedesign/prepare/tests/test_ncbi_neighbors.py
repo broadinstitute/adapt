@@ -18,10 +18,16 @@ class TestURLConstruction(unittest.TestCase):
             '.cgi?taxid=123&cmd=download2')
         self.assertEqual(url, expected_url)
 
-    def test_ncbi_download_url(self):
-        url = nn.ncbi_download_url(['A123', 'A456', 'B789'])
+    def test_ncbi_fasta_download_url(self):
+        url = nn.ncbi_fasta_download_url(['A123', 'A456', 'B789'])
         expected_url = ('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch'
             '.fcgi?id=A123,A456,B789&db=nuccore&rettype=fasta&retmode=text')
+        self.assertEqual(url, expected_url)
+
+    def test_ncbi_xml_download_url(self):
+        url = nn.ncbi_xml_download_url(['A123', 'A456', 'B789'])
+        expected_url = ('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch'
+            '.fcgi?id=A123,A456,B789&db=nuccore&retmode=xml')
         self.assertEqual(url, expected_url)
 
 
