@@ -22,6 +22,7 @@ However, the problems they solve do share some similarity with the problems solv
   * [Designing with sliding window against a single target](#designing-with-sliding-window-against-a-single-target)
 * [Contributing](#contributing)
 * [Citation](#citation)
+* [License](#license)
 <br/>
 
 # Setting up CATCH-dx
@@ -206,6 +207,10 @@ If you have questions, please create an [issue](https://github.com/broadinstitut
 ## Citation
 
 CATCH-dx is not yet published.
-If you find it useful to your work, please use the following citations:
+If you find it useful to your work, please let me know and use the following citations:
   * Metsky HC _et al_. Continuous crRNA design for comprehensive diagnostics (CATCH-dx). Manuscript in preparation.
   * Metsky HC _et al_. Capturing sequence diversity in metagenomes with comprehensive and scalable probe design. _Nature Biotechnology_, **37**(2), 160&ndash;168 (2019). doi: [10.1038/s41587-018-0006-x](https://www.nature.com/articles/s41587-018-0006-x)
+
+## License
+
+CATCH-dx is licensed under the terms of the [MIT license](./LICENSE).
