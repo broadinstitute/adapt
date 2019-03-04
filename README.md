@@ -88,6 +88,8 @@ Note that `--id` must be set to perform differential identification (setting `--
 * `--specific-against [alignment] [alignment ...]`: Design guides to be specific against the provided alignments (in FASTA format).
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
 * `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs as matching.
+* `--require-flanking5 REQUIRE_FLANKING5` / `--require-flanking3 REQUIRE_FLANKING3`: Require the given sequence on the 5' (REQUIRE_FLANKING5) and/or 3' (REQUIRE_FLANKING3) protospacer flanking site (PFS) for each designed guide.
+This tolerates ambiguity in the sequence (e.g., 'H' requires 'A', 'C', or 'T').
 * `--required-guides REQUIRED_GUIDES`: Ensure that the guides provided in REQUIRED_GUIDES are included in the design, and perform the design with them already included.
 See `design_guides.py --help` for details on the REQUIRED_GUIDES file format.
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
