@@ -37,7 +37,11 @@ def seqs_grouped_by_year(seqs, args):
         mapping each year to the set of indices in aln representing
         sequences for that year; and cover_frac is a dict mapping each
         year to the desired partial cover of sequences from that year,
-        as determined by args.cover_by_year_decay
+        as determined by args.cover_by_year_decay (if args.search_cmd
+        is 'complete-targets', then cover_frac is a tuple (g, p) where
+        g is the previously described dict calculated from
+        args.guide_cover_frac and p is the same calculated from
+        args.primer_cover_frac)
     """
     years_fn, year_highest_cover, year_cover_decay = args.cover_by_year_decay
 
@@ -66,8 +70,15 @@ def seqs_grouped_by_year(seqs, args):
             if name in seq_idx)
 
     # Construct desired partial cover for each year
-    cover_frac = year_cover.construct_partial_covers(
+    guide_cover_frac = year_cover.construct_partial_covers(
         years.keys(), year_highest_cover, args.guide_cover_frac, year_cover_decay)
+
+    if args.search_cmd == 'complete-targets':
+        primer_cover_frac = year_cover.construct_partial_covers(
+            years.keys(), year_highest_cover, args.primer_cover_frac, year_cover_decay)
+        cover_frac = (guide_cover_frac, primer_cover_frac)
+    else:
+        cover_frac = guide_cover_frac
 
     return aln, years_idx, cover_frac
 
@@ -244,18 +255,29 @@ def design_for_id(args):
     # Create an alignment object for each input
     alns = []
     seq_groups_per_input = []
-    cover_frac_per_input = []
+    guide_cover_frac_per_input = []
+    primer_cover_frac_per_input = []
     for in_fasta in args.in_fasta:
         seqs = seq_io.read_fasta(in_fasta)
         if args.cover_by_year_decay:
             aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args)
+            if args.search_cmd == 'complete-targets':
+                guide_cover_frac, primer_cover_frac = cover_frac
+            else:
+                guide_cover_frac = cover_frac
+                primer_cover_frac = None
         else:
             aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
             seq_groups = None
-            cover_frac = args.guide_cover_frac
+            guide_cover_frac = args.guide_cover_frac
+            if args.search_cmd == 'complete-targets':
+                primer_cover_frac = args.primer_cover_frac
+            else:
+                primer_cover_frac = None
         alns += [aln]
         seq_groups_per_input += [seq_groups]
-        cover_frac_per_input += [cover_frac]
+        guide_cover_frac_per_input += [guide_cover_frac]
+        primer_cover_frac_per_input += [primer_cover_frac]
 
     # Also add the specific_against alignments into alns, but keep
     # track of how many use for design (the first N of them)
@@ -300,7 +322,8 @@ def design_for_id(args):
 
         aln = alns[i]
         seq_groups = seq_groups_per_input[i]
-        cover_frac = cover_frac_per_input[i]
+        guide_cover_frac = guide_cover_frac_per_input[i]
+        primer_cover_frac = primer_cover_frac_per_input[i]
         required_guides_for_aln = required_guides[i]
         blacklisted_ranges_for_aln = blacklisted_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
@@ -334,7 +357,7 @@ def design_for_id(args):
         # specific to this alignment
         gs = guide_search.GuideSearcher(aln, args.guide_length,
                                         args.guide_mismatches,
-                                        cover_frac, args.missing_thres,
+                                        guide_cover_frac, args.missing_thres,
                                         guide_is_suitable_fn=guide_is_suitable,
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
@@ -351,8 +374,9 @@ def design_for_id(args):
             # and write them to a file
             ps = primer_search.PrimerSearcher(aln, args.primer_length,
                                               args.primer_mismatches,
-                                              args.primer_cover_frac,
-                                              args.missing_thres)
+                                              primer_cover_frac,
+                                              args.missing_thres,
+                                              seq_groups=seq_groups)
             ts = target_search.TargetSearcher(ps, gs,
                 max_primers_at_site=args.max_primers_at_site,
                 max_target_length=args.max_target_length,
@@ -637,12 +661,10 @@ if __name__ == "__main__":
               "must be covered by guides) as follows: A is a tsv giving "
               "a year for each input sequence (col 1 is sequence name "
               "matching that in the input FASTA, col 2 is year). All years "
-              ">= B receive a desired cover fraction of GUIDE_COVER_FRAC "
-              "(specified with -gp/--guide-cover-frac). Each preceding year receives "
-              "a desired cover fraction that decays by C -- i.e., year n is "
-              "given C*(desired cover fraction of year n+1). This "
-              "grouping and varying cover fraction is only applied to guide "
-              "coverage (i.e., not primers if complete-targets is used)."))
+              ">= A receive a desired cover fraction of GUIDE_COVER_FRAC "
+              "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
+              "year receives a desired cover fraction that decays by B -- "
+              "i.e., year n is given B*(desired cover fraction of year n+1)."))
 
     # Auto prepare, common arguments
     input_auto_common_subparser = argparse.ArgumentParser(add_help=False)
@@ -670,11 +692,9 @@ if __name__ == "__main__":
               "desired partial cover for each year (fraction of sequences that "
               "must be covered by guides) as follows: All years "
               ">= A receive a desired cover fraction of GUIDE_COVER_FRAC "
-              "(specified with -gp/--guide-cover-frac). Each preceding year receives "
-              "a desired cover fraction that decays by B -- i.e., year n is "
-              "given B*(desired cover fraction of year n+1). This "
-              "grouping and varying cover fraction is only applied to guide "
-              "coverage (i.e., not primers if complete-targets is used)."))
+              "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
+              "year receives a desired cover fraction that decays by B -- "
+              "i.e., year n is given B*(desired cover fraction of year n+1)."))
     input_auto_common_subparser.add_argument('--cluster-threshold',
         type=float,
         default=0.1,
