@@ -153,10 +153,12 @@ def prepare_alignments(args):
         align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
         if not os.path.exists(align_memoize_dir):
             os.makedirs(align_memoize_dir)
-        align_memoize_stat_file = os.path.join(args.prep_memoize_dir, 'stats')
+        align_stat_memoize_dir = os.path.join(args.prep_memoize_dir, 'stats')
+        if not os.path.exists(align_stat_memoize_dir):
+            os.makedirs(align_stat_memoize_dir)
 
         am = align.AlignmentMemoizer(align_memoize_dir)
-        asm = align.AlignmentStatMemoizer(align_memoize_stat_file)
+        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir)
     else:
         am = None
         asm = None

@@ -5,6 +5,7 @@ from collections import OrderedDict
 import hashlib
 import logging
 import os
+import random
 import re
 import subprocess
 import tempfile
@@ -69,7 +70,7 @@ class AlignmentMemoizer:
             accvers: collection of accession.version in an alignment
 
         Returns:
-            path to file that should store accs
+            path to file that should store accvers
         """
         h = hashlib.md5(str(sorted(set(accvers))).encode('utf-8')).hexdigest()
         return os.path.join(self.path, h)
@@ -104,11 +105,20 @@ class AlignmentMemoizer:
             seqs: dict mapping accession.version to sequences
         """
         p = self._hash_accvers_filepath(seqs.keys())
-        seq_io.write_fasta(seqs, p)
+
+        # Generate a random 8-digit hex to append to p temporarily, so that
+        # two files don't write to p at the same time
+        p_tmp = p + '.' + ("%08x" % random.getrandbits(32))
+
+        seq_io.write_fasta(seqs, p_tmp)
+        os.rename(p_tmp, p)
         
 
 class AlignmentStatMemoizer:
     """Memoizer for statistics on alignments.
+
+    This stores an alignment using a hash of accession.version
+    in the alignments.
 
     This stores, for each alignment, the tuple (aln_identity, aln_identity_ccg).
     """
@@ -116,20 +126,36 @@ class AlignmentStatMemoizer:
     def __init__(self, path):
         """
             Args:
-                path: path to file at which to read and store memoized
+                path: path to directory in which to read and store memoized
                     stats
         """
         self.path = path
-        self.memoized = {}
 
-        if os.path.isfile(self.path):
-            # Read stats from the file
-            with open(self.path) as f:
-                for line in f:
-                    ls = line.split('\t')
-                    accvers = tuple(ls[0].split(','))
-                    stats = float(ls[1]), float(ls[2])
-                    self.memoized[accvers] = stats
+        if not os.path.exists(self.path):
+            os.makedirs(self.path)
+
+    def _hash_accvers_filepath(self, accvers):
+        """Generate a path to use as the filename for an alignment.
+
+        Let h be the hash of accers and and h_2 be the first two
+        (hexadecimal) digits of h. This stores h in a directory
+        corresponding to h_2, in order to decrease the number of
+        files per directory.
+
+        Args:
+            accvers: collection of accession.version in an alignment
+
+        Returns:
+            path to file that should store stats on accvers
+        """
+        h = hashlib.md5(str(sorted(set(accvers))).encode('utf-8')).hexdigest()
+
+        h_2 = h[:2]
+        h_dir = os.path.join(self.path, h_2)
+        if not os.path.exists(h_dir):
+            os.makedirs(h_dir)
+
+        return os.path.join(h_dir, h)
 
     def get(self, accvers):
         """Get memoized stats for alignment.
@@ -139,33 +165,45 @@ class AlignmentStatMemoizer:
 
         Returns:
             (aln_identity, aln_identity_ccg) for alignment of
-            accvers; or None if accs is not memoized
+            accvers; or None if accvers is not memoized
         """
-        accvers_sorted = tuple(sorted(accvers))
-        if accvers_sorted in self.memoized:
-            return self.memoized[accvers_sorted]
+        p = self._hash_accvers_filepath(accvers)
+
+        if os.path.exists(p):
+            # Read the file, and verify that the accessions in it
+            # match accvers (i.e., that there is not a collision)
+            with open(p) as f:
+                lines = [line.rstrip() for line in f]
+                assert len(lines) == 1  # should be just 1 line
+                ls = lines[0].split('\t')
+            accvers_in_p = ls[0].split(',')
+            if set(accvers) == set(accvers_in_p):
+                stats = (float(ls[1]), float(ls[2]))
+                return stats
+            else:
+                return None
         else:
             return None
 
-    def add(self, accvers, stats):
+    def save(self, accvers, stats):
         """Memoize statistics for an alignment.
 
         Args:
-            accvers: collection of accessions in an alignment
+            accvers: collection of accession.version in an alignment
             stats: tuple (aln_identity, aln_identity_ccg)
         """
-        assert len(stats) == 2
-        accvers_sorted = tuple(sorted(accvers))
-        self.memoized[accvers_sorted] = stats
+        p = self._hash_accvers_filepath(accvers)
 
-    def save(self):
-        """Save memoized values to file."""
-        with open(self.path + '.tmp', 'w') as f:
-            for accvers, stats in self.memoized.items():
-                accvers_str = ','.join(accvers)
-                f.write(('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
-                    '\n'))
-        os.rename(self.path + '.tmp', self.path)
+        # Generate a random 8-digit hex to append to p temporarily, so that
+        # two files don't write to p at the same time
+        p_tmp = p + '.' + ("%08x" % random.getrandbits(32))
+
+        accvers_str = ','.join(accvers)
+        with open(p_tmp, 'w') as fw:
+            fw.write(('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
+                '\n'))
+
+        os.rename(p_tmp, p)
 
 
 _mafft_exec = None
@@ -399,7 +437,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                     # Memoize these statistics, so the alignment does not need
                     # to be performed again
                     stats = (aln_identity, aln_identity_ccg)
-                    asm.add((ref_acc_key, accver), stats)
+                    asm.save((ref_acc_key, accver), stats)
 
             logger.debug(("Alignment between %s and reference %s has identity "
                 "%f and identity (after collapsing consecutive gaps) %f") %
@@ -413,10 +451,6 @@ def curate_against_ref(seqs, ref_accs, asm=None,
 
     logger.info(("After curation, %d of %d sequences (with unique accession) "
         "were kept") % (len(seqs_filtered), len(seqs)))
-
-    if asm is not None:
-        # Save the new memoized values
-        asm.save()
 
     for remove_ref_acc in remove_ref_accs:
         # Do not include the ref_acc_key corresponding to remove_ref_acc

@@ -146,14 +146,13 @@ class TestMemoization(unittest.TestCase):
         tempdir.cleanup()
 
     def test_alignment_stat_memoizer(self):
-        # Create a new file at which to store memoizations
-        tf = tempfile.NamedTemporaryFile()
+        # Create a new directory in which to store memoizations
+        tempdir = tempfile.TemporaryDirectory()
 
         # Create some fake stats
-        asm = align.AlignmentStatMemoizer(tf.name)
-        asm.add(['AB123.1', 'KY456.2'], (0.8, 0.9))
-        asm.add(['AB123.1', 'KY789.2'], (0.85, 0.95))
-        asm.save()
+        asm = align.AlignmentStatMemoizer(tempdir.name)
+        asm.save(['AB123.1', 'KY456.2'], (0.8, 0.9))
+        asm.save(['AB123.1', 'KY789.2'], (0.85, 0.95))
         self.assertEqual(asm.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
         self.assertEqual(asm.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
         self.assertEqual(asm.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
@@ -161,19 +160,18 @@ class TestMemoization(unittest.TestCase):
         del asm
 
         # Check that a new AlignmentStatMemoizer can read these
-        asm_new = align.AlignmentStatMemoizer(tf.name)
+        asm_new = align.AlignmentStatMemoizer(tempdir.name)
         self.assertEqual(asm_new.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
         self.assertEqual(asm_new.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
         self.assertEqual(asm_new.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
         self.assertIsNone(asm_new.get(['KY456.2', 'KY789.2']))
 
         # Add a new stat to the memoizer
-        asm_new.add(['AB123.1', 'KY000.1'], (0.5, 0.6))
-        asm_new.save()
+        asm_new.save(['AB123.1', 'KY000.1'], (0.5, 0.6))
         del asm_new
 
         # Check that we can read all the stats
-        asm_new2 = align.AlignmentStatMemoizer(tf.name)
+        asm_new2 = align.AlignmentStatMemoizer(tempdir.name)
         self.assertEqual(asm_new2.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
         self.assertEqual(asm_new2.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
         self.assertEqual(asm_new2.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
@@ -181,7 +179,7 @@ class TestMemoization(unittest.TestCase):
         self.assertEqual(asm_new2.get(['AB123.1', 'KY000.1']), (0.5, 0.6))
 
         # Cleanup
-        tf.close()
+        tempdir.cleanup()
 
 
 class TestCurateAgainstRef(unittest.TestCase):
