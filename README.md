@@ -20,6 +20,8 @@ However, the problems they solve do share some similarity with the problems solv
   * [Output](#output)
 * [Examples](#examples)
   * [Designing with sliding window against a single target](#designing-with-sliding-window-against-a-single-target)
+* [Contributing](#contributing)
+* [Citation](#citation)
 <br/>
 
 # Setting up CATCH-dx
@@ -194,3 +196,16 @@ From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest
 
 It outputs a file, `guides.tsv`, that contain constructed guide sequences.
 See [Output](#output) above for a description of this file.
+
+## Contributing
+
+I welcome contributions to CATCH-dx.
+This can be in the form of an [issue](https://github.com/broadinstitute/diagnostic-guide-design/issues) or [pull request](https://github.com/broadinstitute/diagnostic-guide-design/pulls).
+If you have questions, please create an [issue](https://github.com/broadinstitute/diagnostic-guide-design/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
+
+## Citation
+
+CATCH-dx is not yet published.
+If you find it useful to your work, please use the following citations:
+  * Metsky HC _et al_. Continuous crRNA design for comprehensive diagnostics (CATCH-dx). Manuscript in preparation.
+  * Metsky HC _et al_. Capturing sequence diversity in metagenomes with comprehensive and scalable probe design. _Nature Biotechnology_, **37**(2), 160&ndash;168 (2019). doi: [10.1038/s41587-018-0006-x](https://www.nature.com/articles/s41587-018-0006-x)
