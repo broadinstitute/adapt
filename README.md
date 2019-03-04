@@ -97,6 +97,7 @@ Below is a summary of some common arguments to [`design.py`](./bin/design.py):
 (Default: 1.0.)
 * `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
 See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
+Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
 * `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
 Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
 CATCH-dx does not output guides that hit group/taxons other than the one for which they are being designed.
@@ -106,7 +107,7 @@ Higher values of ID_M and lower values of ID_FRAC correspond to more specificity
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
 * `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs between guide and target sequence as matching.
 * `--required-guides REQUIRED_GUIDES`: Ensure that the guides provided in REQUIRED_GUIDES are included in the design, and perform the design with them already included.
-See `design.py --help` for details on the REQUIRED_GUIDES file format.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GUIDES file format.
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
 * `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
 
@@ -128,6 +129,22 @@ See `design.py complete-targets [INPUT-TYPE] --help` for details.
 Note that higher values can significantly increase runtime.
 (Default: 10.)
 
+Below are some additional arguments when INPUT-TYPE is `auto-from-{file,args}`:
+
+* `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
+* `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments in PREP_MEMOIZE_DIR.
+If not set (default), do not memoize this information.
+If repeatedly re-running on the same taxonomies, using this can significantly improve runtime.
+* `--prep-influenza`: If set, use NCBI's influenza database for fetching data.
+This must be specified if design is for influenza A/B/C viruses.
+* `--sample-seqs SAMPLE_SEQS`: Randomly sample SAMPLE_SEQS accessions with replacement from each taxonomy, and move forward with the design using this sample.
+This can be useful for measuring various properties of the design.
+* `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
+The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
+* `--use-accessions USE_ACCESSIONS`: Use the specified accessions, in a file at the path USE_ACCESSIONS, for generating input.
+This is performed instead of fetching neighbors from NCBI.
+See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the format of the file.
+
 ## Output
 
 The files output by CATCH-dx are TSV files, but vary in format depending on SEARCH-TYPE and INPUT-TYPE.
@@ -142,16 +159,17 @@ The columns are:
 * `target-sequences`: The sequences of the targets for this window from which to construct guides, separated by spaces (guides should be reverse complements of these sequences).
 * `target-sequence-positions`: The positions of the guide sequences in the alignment, in the same order as the sequences are reported; since a guide may come from >1 position, positions are reported in set notation (e.g., \{100\}).
 
-By default, the rows in the output are sorted by the position of the window.
+By default, when SEARCH-TYPE is `sliding-window`, the rows in the output are sorted by the position of the window.
 If you include the `--sort` argument to [`design.py`](./bin/design.py), it will sort the rows in the output so that the "best" choices of windows are on top.
 It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.
 
 When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and crRNA combination) and there are additional columns giving information about primer pairs.
 There is also a `cost` column, giving the cost of each target according to `--cost-fn-weights`.
+The rows in the output are sorted by the cost (ascending, so that better targets are on top).
 
 When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV file for each cluster of input sequences.
 
-For all cases, see `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and paths to the output TSV files.
+For all cases, see `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and how to specify paths to the output TSV files.
 
 Note that output sequences are directly from the input sequences; guide sequences should be reverse complements of the output!
 
