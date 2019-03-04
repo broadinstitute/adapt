@@ -1,6 +1,7 @@
 """Functions for working with sequence (and related) i/o.
 """
 
+from collections import defaultdict
 from collections import OrderedDict
 import logging
 import re
@@ -76,7 +77,8 @@ def write_fasta(seqs, out_fn, chars_per_line=70):
     with open(out_fn, 'w') as f:
         for seq_name, seq in seqs.items():
             f.write('>' + seq_name + '\n')
-            seq_wrapped = textwrap.wrap(seq, chars_per_line)
+            seq_wrapped = textwrap.wrap(seq, chars_per_line,
+                break_on_hyphens=False)
             for seq_line in seq_wrapped:
                 f.write(seq_line + '\n')
             f.write('\n')
@@ -205,3 +207,85 @@ def read_blacklisted_kmers(fn, min_len_warning=5, max_len_warning=28):
                 "desired") % kmer)
         kmers.add(kmer)
     return kmers
+
+
+def read_taxonomies(fn):
+    """Read file of taxonomies from which to prepare alignments.
+
+    The columns must be, in order:
+        1) a label for the row (used for output files; must be unique)
+        2) a taxonomic (e.g., species) ID from NCBI
+        3) a segment label, or 'None' if unsegmented
+        4) one or more accessions of reference sequences (comma-separated)
+
+    Args:
+        fn: path to TSV file, where each row corresponds to a taxonomy
+
+    Returns:
+        list of tuples (label, taxonomic_id, segment, reference_accessions)
+    """
+    labels = set()
+    taxs = []
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 4:
+                raise Exception(("Input taxonomy TSV must have 4 columns"))
+
+            label = ls[0]
+            if label in labels:
+                raise Exception(("Taxonomy label '%s' is not unique") % label)
+            labels.add(label)
+
+            try:
+                tax_id = int(ls[1])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[1])
+
+            segment = ls[2]
+            if segment.lower() == 'none':
+                segment = None
+            ref_accs = ls[3].split(',')
+            taxs += [(label, tax_id, segment, ref_accs)]
+    return taxs
+
+
+def read_accessions_for_taxonomies(fn):
+    """Read file of accessions for each taxonomy.
+
+    The columns must be, in order:
+        1) a taxonomic (e.g., species) ID from NCBI
+        2) a segment label, or 'None' if unsegmented
+        3) an accession to include in the design for the taxonomic ID
+
+    A taxonomic ID can appear in multiple rows, if there should be multiple
+    accessions used for it.
+
+    Args:
+        fn: path to TSV file, where each row corresponds to an accession
+            to include in the design
+
+    Returns:
+        dict {(taxonomic-id, segment): [list of accessions]}
+    """
+    accs = defaultdict(list)
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 3:
+                raise Exception(("Input accession TSV must have 3 columns"))
+
+            try:
+                tax_id = int(ls[0])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[0])
+
+            segment = ls[1]
+            if segment.lower() == 'none':
+                segment = None
+            accession = ls[2]
+            accs[(tax_id, segment)].append(accession)
+    return accs
+

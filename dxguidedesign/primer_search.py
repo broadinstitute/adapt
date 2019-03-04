@@ -32,17 +32,20 @@ class PrimerResult:
         self.frac_bound = frac_bound
         self.primers_in_cover = primers_in_cover
 
-    def overlaps(self, other):
+    def overlaps(self, other, expand=0):
         """Determine if self overlaps other.
 
         Args:
             other: PrimerResult object
+            expand: tests overlap within +/- EXPAND nt of other
 
         Returns:
             True iff self overlaps other
         """
-        return ((self.start <= other.start < self.start + self.primer_length) or
-                (other.start <= self.start < other.start + other.primer_length))
+        return ((self.start - expand <= other.start < (self.start +
+                    self.primer_length + expand)) or
+                (other.start - expand <= self.start < (other.start +
+                    other.primer_length + expand)))
 
     def __str__(self):
         return str((self.start, self.num_primers, self.primer_length,
@@ -81,7 +84,7 @@ class PrimerSearcher(guide_search.GuideSearcher):
     """
 
     def __init__(self, aln, primer_length, mismatches, cover_frac,
-                 missing_data_params):
+                 missing_data_params, seq_groups=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -89,15 +92,21 @@ class PrimerSearcher(guide_search.GuideSearcher):
             mismatches: threshold on number of mismatches for determining whether
                 a primer would hybridize to a target sequence
             cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
-                 a primer
+                 a primer; see seq_groups
             missing_data_params: tuple (a, b, c) specifying to not attempt to
                 design guides overlapping sites where the fraction of
                 sequences with missing data is > min(a, max(b, c*m)), where m is
                 the median fraction of sequences with missing data over the
                 alignment
+            seq_groups: dict that maps group ID to collection of sequences in
+                that group. If set, cover_frac must also be a dict that maps
+                group ID to the fraction of sequences in that group that
+                must be 'captured' by a primer. If None, then do not divide
+                the sequences into groups.
         """
         super().__init__(aln, primer_length, mismatches,
                          cover_frac, missing_data_params,
+                         seq_groups=seq_groups,
                          allow_gu_pairs=False)
 
     def seqs_bound_by_primers(self, primers):

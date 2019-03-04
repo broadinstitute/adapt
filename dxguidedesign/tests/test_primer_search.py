@@ -33,6 +33,31 @@ class TestPrimerResult(unittest.TestCase):
         self.assertFalse(a.overlaps(c))
         self.assertFalse(c.overlaps(a))
 
+    def test_does_overlap_with_expand(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(a, expand=5))
+
+        b = primer_search.PrimerResult(12, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(b, expand=5))
+        self.assertTrue(b.overlaps(a, expand=5))
+
+        b = primer_search.PrimerResult(17, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(b, expand=5))
+        self.assertTrue(b.overlaps(a, expand=5))
+
+        c = primer_search.PrimerResult(2, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps(c, expand=5))
+        self.assertTrue(c.overlaps(a, expand=5))
+
+    def test_does_not_overlap_with_expand(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        b = primer_search.PrimerResult(20, 1, 5, 1.0, {'AAAAA'})
+        c = primer_search.PrimerResult(0, 1, 5, 1.0, {'AAAAA'})
+        self.assertFalse(a.overlaps(b, expand=5))
+        self.assertFalse(b.overlaps(a, expand=5))
+        self.assertFalse(a.overlaps(c, expand=5))
+        self.assertFalse(c.overlaps(a, expand=5))
+
 
 class TestPrimerSearch(unittest.TestCase):
     """Tests methods in the PrimerSearch class.
@@ -70,6 +95,22 @@ class TestPrimerSearch(unittest.TestCase):
         expected = [self._pr(1, 2, 1.0, set(['TCGA', 'GCGA'])),
                     self._pr(2, 2, 1.0, set(['CGAA', 'CGAT']))]
         self.assertEqual(covers, expected)
+
+    def test_find_primers_with_grouped_cover_frac(self):
+        cover_frac = {0: 1.0, 1: 0.01, 2: 1.0}
+        seq_groups = {0: {0, 1}, 1: {2, 3}, 2: {4}}
+        self.a1 = primer_search.PrimerSearcher(self.a_aln, 4, 0, cover_frac,
+                (1, 1, 100),
+                seq_groups=seq_groups)
+        covers = list(self.a1.find_primers())
+        # Two possibilities for group 1 (first primer is 'TTCG' or 'CTCG')
+        expected1 = [self._pr(0, 3, 4.0/5.0, set(['ATCG', 'GGCG', 'TTCG'])),
+                     self._pr(1, 2, 5.0/5.0, set(['TCGA', 'GCGA'])),
+                     self._pr(2, 2, 5.0/5.0, set(['CGAA', 'CGAT']))]
+        expected2 = [self._pr(0, 3, 4.0/5.0, set(['ATCG', 'GGCG', 'CTCG'])),
+                     self._pr(1, 2, 5.0/5.0, set(['TCGA', 'GCGA'])),
+                     self._pr(2, 2, 5.0/5.0, set(['CGAA', 'CGAT']))]
+        self.assertIn(covers, [expected1, expected2])
 
     def tearDown(self):
         # Re-enable logging

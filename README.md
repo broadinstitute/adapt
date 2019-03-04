@@ -1,33 +1,43 @@
-diagnostic-guide-design
-=======================
+CATCH-dx
+========
 
-*dgd* is a Python package for designing guides to be used for diagnostics with SHERLOCK.
+**CATCH-dx** is a Python package for designing crRNAs that comprehensively account for microbial sequence diversity.
+<br/>
+
+The method and software are not yet published.
+However, the problems they solve do share some similarity with the problems solved by CATCH, which is described in [_Nature Biotechnology_](https://www.nature.com/articles/s41587-018-0006-x) and available on [GitHub](https://github.com/broadinstitute/catch).
 <br/>
 
 ### Table of contents
 
-* [Setting up dgd](#setting-up-dgd)
+* [Setting up CATCH-dx](#setting-up-catch-dx)
   * [Dependencies](#dependencies)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
-* [Using dgd](#using-dgd)
+* [Using CATCH-dx](#using-catch-dx)
   * [Designing guides](#designing-guides)
-  * [Additional options](#additional-options)
+  * [Common options](#common-options)
   * [Output](#output)
 * [Examples](#examples)
-  * [Designing against a single target](#designing-against-a-single-target)
+  * [Designing with sliding window against a single target](#designing-with-sliding-window-against-a-single-target)
 <br/>
 
-# Setting up dgd
+# Setting up CATCH-dx
 
 ## Dependencies
 
-dgd is tested using Python 3.5, but should also work with earlier versions of Python 3.
-There are no other dependencies.
+CATCH-dx requires:
+* [Python](https://www.python.org) &gt;= 3.5
+* [NumPy](http://www.numpy.org) &gt;= 1.9.0
+* [SciPy](https://www.scipy.org) &gt;= 1.0.0
+
+Installing CATCH-dx with `pip`, as described below, will install NumPy and SciPy if they are not already installed.
+
+If using alignment features in subcommands below, CATCH-dx also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
 
 ## Downloading and installing
 
-An easy way to setup dgd is to clone the repository and install the package with `pip`:
+An easy way to setup CATCH-dx is to clone the repository and install the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/diagnostic-guide-design.git
 cd diagnostic-guide-design
@@ -42,64 +52,107 @@ To execute all unit tests, run:
 python -m unittest discover
 ```
 
-# Using dgd
+# Using CATCH-dx
 
 ## Designing guides
 
-The main program to design guides is [`design_guides.py`](./bin/design_guides.py).
-To see details on all the arguments that the program accepts, run:
+The main program to design guides is [`design.py`](./bin/design.py).
+
+[`design.py`](./bin/design.py) requires two subcommands:
 ```bash
-design_guides.py --help
+design.py [SEARCH-TYPE] [INPUT-TYPE] ...
 ```
 
-[`design_guides.py`](./bin/design_guides.py) requires paths one or more input files, and corresponding output files:
+SEARCH-TYPE is one of:
 
+* `sliding-window`: Search for crRNAs within a sliding window of a fixed size, and output an optimal crRNA set for each window.
+* `complete-targets`: Search for primer pairs and crRNAs between them.
+Output the top _N_ targets, where each target contains primer pairs and crRNAs between them.
+
+INPUT-TYPE is one of:
+
+* `fasta`: The input is one or more FASTA files, each containing aligned sequences for a taxon.
+If more than one file is provided, the search performs differential identification across the taxa.
+* `auto-from-file`: The input is a file containing a list of taxon IDs and related information.
+This fetches sequences for those taxa, then curates, clusters and aligns the sequences for each taxon, and finally uses the generated alignments as input for design.
+The search finds crRNAs for differential identification across the taxa.
+* `auto-from-args`: The input is a single taxonomic ID, and related information, provided as command-line arguments.
+This fetches sequences for the taxon, then curates, clusters and aligns the sequences, and finally uses the generated alignment as input for design.
+
+To see details on all the arguments to use for a particular choice of subcommands, run:
 ```bash
-design_guides.py [input] [input ...] -o [output] [output ...]
+design.py [SEARCH-TYPE] [INPUT-TYPE] --help
 ```
+This includes required positional arguments for each choice of subcommands.
 
-No other arguments are required.
-Each `input` is a path to a FASTA file that consists of an alignment of sequences from which to design guides.
-Each `output` is a path to a TSV file that will be written, containing the designed guide sequences.
-The _i_'th output corresponds to the _i_'th input, so there must be the same number of outputs as inputs.
-Unless performing differential identification with `--id` (see below), this treats each input completely independently of the others.
+## Common options
 
-## Additional options
+Below is a summary of some common arguments to [`design.py`](./bin/design.py):
 
-Below is a summary of some useful arguments to [`design_guides.py`](./bin/design_guides.py):
-
-* `-l GUIDE_LENGTH`: Design guides to be GUIDE_LENGTH nt long.
+* `-gl GUIDE_LENGTH`: Design guides to be GUIDE_LENGTH nt long.
 (Default: 28.)
-* `-m MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide covers a sequence.
+* `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide hybridizes to a sequence.
 (Default: 0.)
-* `-w WINDOW_SIZE`: Ensure that all designed guides are within a window of this size.
-Guides are designed separately for each window of length WINDOW_SIZE nt.
-(Default: 200.)
-* `-p COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
+* `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
 (Default: 1.0.)
 * `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
-See `design_guides.py --help` for details on this argument.
-* `--id` / `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification, in which each input FASTA is a group/taxon to identify with specificity.
-Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a group/taxon other than the one for which it is being designed, and decide that a guide hits a group/taxon if it hits at least ID_FRAC of the sequences in that group/taxon.
-dgd does not output guides that hit group/taxons other than the one for which they are being designed.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
+Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
+* `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
+Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
+CATCH-dx does not output guides that hit group/taxons other than the one for which they are being designed.
 Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
-Note that `--id` must be set to perform differential identification (setting `--id-m` and/or `--id-frac` alone will not suffice).
 (Default: 2 for ID_M, 0.05 for ID_FRAC.)
 * `--specific-against [alignment] [alignment ...]`: Design guides to be specific against the provided alignments (in FASTA format).
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
-* `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs as matching.
+* `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs between guide and target sequence as matching.
 * `--require-flanking5 REQUIRE_FLANKING5` / `--require-flanking3 REQUIRE_FLANKING3`: Require the given sequence on the 5' (REQUIRE_FLANKING5) and/or 3' (REQUIRE_FLANKING3) protospacer flanking site (PFS) for each designed guide.
 This tolerates ambiguity in the sequence (e.g., 'H' requires 'A', 'C', or 'T').
 * `--required-guides REQUIRED_GUIDES`: Ensure that the guides provided in REQUIRED_GUIDES are included in the design, and perform the design with them already included.
-See `design_guides.py --help` for details on the REQUIRED_GUIDES file format.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GUIDES file format.
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
-See `design_guides.py --help` for details on the BLACKLISTED_RANGES file format.
 * `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
-See `design_guides.py --help` for details on the BLACKLISTED_KMERS file format.
+
+Below are some additional arguments when SEARCH-TYPE is `complete-targets`:
+
+* `-pl PRIMER_LENGTH`: Design primers to be PRIMER_LENGTH nt long.
+(Default: 30.)
+* `-pp PRIMER_COVER_FRAC`: Same as `-gp`, except for the design of primers.
+(Default: 1.0.)
+* `-pm PRIMER_MISMATCHES`: Tolerate up to PRIMER_MISMATCHES mismatches when determining whether a primer hybridizes to a sequence.
+(Default: 0.)
+* `--max-primers-at-site MAX_PRIMERS_AT_SITE`: Only allow up to MAX_PRIMERS_ATE_SITE primers at each primer set.
+If not set, there is no limit.
+Smaller values can significantly improve runtime.
+(Default: not set.)
+* `--cost-fn-weights COST_FN_WEIGHTS`: Coefficients to use in a cost function for each target.
+See `design.py complete-targets [INPUT-TYPE] --help` for details.
+* `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS targets, where each target receives a cost according to COST_FN_WEIGHTS.
+Note that higher values can significantly increase runtime.
+(Default: 10.)
+
+Below are some additional arguments when INPUT-TYPE is `auto-from-{file,args}`:
+
+* `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
+* `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments in PREP_MEMOIZE_DIR.
+If not set (default), do not memoize this information.
+If repeatedly re-running on the same taxonomies, using this can significantly improve runtime.
+* `--prep-influenza`: If set, use NCBI's influenza database for fetching data.
+This must be specified if design is for influenza A/B/C viruses.
+* `--sample-seqs SAMPLE_SEQS`: Randomly sample SAMPLE_SEQS accessions with replacement from each taxonomy, and move forward with the design using this sample.
+This can be useful for measuring various properties of the design.
+* `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
+The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
+* `--use-accessions USE_ACCESSIONS`: Use the specified accessions, in a file at the path USE_ACCESSIONS, for generating input.
+This is performed instead of fetching neighbors from NCBI.
+See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the format of the file.
 
 ## Output
 
-Each file output by dgd is a TSV file in which each row corresponds to a window in the alignment and the columns give information about the guides designed for that window.
+The files output by CATCH-dx are TSV files, but vary in format depending on SEARCH-TYPE and INPUT-TYPE.
+There is a separate TSV file for each taxon.
+
+When SEARCH-TYPE is `sliding-window`, each row corresponds to a window in the alignment and the columns give information about the guides designed for that window.
 The columns are:
 * `window-start`/`window-end`: Start (inclusive) and end (exclusive) positions of this window in the alignment.
 * `count`: The number of guide sequences for this window.
@@ -108,27 +161,36 @@ The columns are:
 * `target-sequences`: The sequences of the targets for this window from which to construct guides, separated by spaces (guides should be reverse complements of these sequences).
 * `target-sequence-positions`: The positions of the guide sequences in the alignment, in the same order as the sequences are reported; since a guide may come from >1 position, positions are reported in set notation (e.g., \{100\}).
 
-By default, the rows in the output are sorted by the position of the window.
-If you include the `--sort` argument to [`design_guides.py`](./bin/design_guides.py), it will sort the rows in the output so that the "best" choices of windows are on top.
+By default, when SEARCH-TYPE is `sliding-window`, the rows in the output are sorted by the position of the window.
+If you include the `--sort` argument to [`design.py`](./bin/design.py), it will sort the rows in the output so that the "best" choices of windows are on top.
 It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.
+
+When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and crRNA combination) and there are additional columns giving information about primer pairs.
+There is also a `cost` column, giving the cost of each target according to `--cost-fn-weights`.
+The rows in the output are sorted by the cost (ascending, so that better targets are on top).
+
+When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV file for each cluster of input sequences.
+
+For all cases, see `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and how to specify paths to the output TSV files.
 
 Note that output sequences are directly from the input sequences; guide sequences should be reverse complements of the output!
 
 # Examples
 
-## Designing against a single target
+## Designing with sliding window against a single target
 
+This is the most simple example.
 The package includes an alignment of LASV sequences (S segment) from Sierra Leone.
 For example:
 ```bash
-design_guides.py examples/SLE_S.aligned.fasta -o guides.tsv -w 200 -l 28 -m 1 -p 0.95
+design.py sliding-window fasta examples/SLE_S.aligned.fasta -o guides.tsv -w 200 -gl 28 -gm 1 -gp 0.95
 ```
 reads an alignment from `examples/SLE_S.aligned.fasta`.
 
 From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest collection of guides that:
 * are all within the window
-* are 28 nt long (`-l 28`)
-* capture 95% of all input sequences (`-p 0.95`) tolerating up to 1 mismatch (`-m 1`)
+* are 28 nt long (`-gl 28`)
+* capture 95% of all input sequences (`-gp 0.95`) tolerating up to 1 mismatch (`-gm 1`)
 
 It outputs a file, `guides.tsv`, that contain constructed guide sequences.
 See [Output](#output) above for a description of this file.

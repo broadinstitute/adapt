@@ -31,7 +31,7 @@ class GuideSearcher:
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
             cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
-                 a guide; see group_seqs
+                 a guide; see seq_groups
             missing_data_params: tuple (a, b, c) specifying to not attempt to
                 design guides overlapping sites where the fraction of
                 sequences with missing data is > min(a, max(b, c*m), where m is

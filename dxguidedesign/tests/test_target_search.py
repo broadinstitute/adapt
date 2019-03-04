@@ -113,6 +113,45 @@ class TestTargetSearch(unittest.TestCase):
                 # The guides should cover all sequences
                 self.assertEqual(guides_frac_bound, 1.0)
 
+    def test_find_targets_with_cover_frac(self):
+        b_seqs = ['ATCGAATGTACGGTCAACATTCTCACCTATGGATGCAGTGA',
+                  'ATCGAATGTACGGTCAACATTCTCACCTATGGATGCAGTGA',
+                  'GGGGAATGTACGGTCGGGGTTCTCACCTATGGCCCCAGTGA',
+                  'CCCCAATGTACGGTCCCCCTTCTCACCTATGGGGGGAGTGA',
+                  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA']
+        b_aln = alignment.Alignment.from_list_of_seqs(b_seqs)
+
+        cover_frac = {0: 1.0, 1: 0.01}
+        seq_groups = {0: {0}, 1: {1, 2, 3, 4}}
+        b_ps = primer_search.PrimerSearcher(
+            b_aln, 4, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
+        b_gs = guide_search.GuideSearcher(
+            b_aln, 6, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
+        b = target_search.TargetSearcher(b_ps, b_gs,
+            max_primers_at_site=2)
+
+        for best_n in [1, 2, 3, 4, 5, 6]:
+            targets = b.find_targets(best_n=best_n, no_overlap=False)
+            self.assertEqual(len(targets), best_n)
+
+            for cost, target in targets:
+                (p1, p2), (guides_frac_bound, guides) = target
+                window_start = p1.start + p1.primer_length
+                window_end = p2.start
+                window_length = window_end - window_start
+
+                # Windows must be at least the guide length (6)
+                self.assertGreaterEqual(window_length, 6)
+
+                # For up to the top 6 targets, only 1 primer on each
+                # end is needed
+                self.assertEqual(p1.num_primers, 1)
+                self.assertEqual(p2.num_primers, 1)
+
+                # The guides should not cover the last sequence in b_seqs,
+                # so the frac_bound should be <1.0
+                self.assertLess(guides_frac_bound, 1.0)
+
     def tearDown(self):
         # Re-enable logging
         logging.disable(logging.NOTSET) 
