@@ -106,6 +106,35 @@ def seq_mismatches_with_gu_pairs(guide_seq, target_seq):
            )
 
 
+def query_target_eq(query_seq, target_seq):
+    """Determine if a query sequence equals a target.
+
+    This tolerates 'N' in the query sequence but not in the target
+    sequence. As a result, it is different than checking if
+    seq_mismatches(query_seq, target_seq) == 0. For example,
+    a query of 'AN' equals a target of 'AT' (but a query of 'AT'
+    does not equal a target of 'AN'). The reason is the same
+    as in seq_mismatches() -- 'N' in a target usually signals
+    missing data rather than ambiguity.
+
+    Args:
+        query_seq: str of a query sequence
+        target_seq: str of a target sequence, same length as
+            query_seq
+
+    Returns:
+        True if query_seq equals target_seq, tolerating all
+        non-N ambiguity codes in the query and target, and
+        tolerating 'N' in the query; otherwise, False
+    """
+    assert len(query_seq) == len(target_seq)
+
+    return sum(1 for i in range(len(query_seq))
+               if target_seq[i] == 'N' or
+               not (FASTA_CODES[query_seq[i]] & FASTA_CODES[target_seq[i]])) == 0
+    return num_mismatches == 0
+
+
 def guide_binds(guide_seq, target_seq, mismatches, allow_gu_pairs):
     """Determine whether a guide binds to a target sequence.
 

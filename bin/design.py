@@ -291,6 +291,7 @@ def design_for_id(args):
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
+    required_flanking_seqs = (args.require_flanking5, args.require_flanking3)
 
     # Allow G-U base pairing, unless it is explicitly disallowed
     allow_gu_pairs = not args.do_not_allow_gu_pairing
@@ -364,7 +365,8 @@ def design_for_id(args):
                                         seq_groups=seq_groups,
                                         required_guides=required_guides_for_aln,
                                         blacklisted_ranges=blacklisted_ranges_for_aln,
-                                        allow_gu_pairs=allow_gu_pairs)
+                                        allow_gu_pairs=allow_gu_pairs,
+                                        required_flanking_seqs=required_flanking_seqs)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -573,6 +575,18 @@ if __name__ == "__main__":
               "should be long enough so that not too many guide sequences "
               "are deemed to be unsuitable, and should be at most the "
               "length of the guide"))
+
+    # Requiring flanking sequence (PFS)
+    base_subparser.add_argument('--require-flanking5',
+        help=("Require the given sequence on the 5' protospacer flanking "
+              "site (PFS) of each designed guide; this tolerates ambiguity "
+              "in the sequence (e.g., 'H' requires 'A', 'C', or 'T', or, "
+              "equivalently, avoids guides flanked by 'G')"))
+    base_subparser.add_argument('--require-flanking3',
+        help=("Require the given sequence on the 3' protospacer flanking "
+              "site (PFS) of each designed guide; this tolerates ambiguity "
+              "in the sequence (e.g., 'H' requires 'A', 'C', or 'T', or, "
+              "equivalently, avoids guides flanked by 'G')"))
 
     # Log levels
     base_subparser.add_argument("--debug",

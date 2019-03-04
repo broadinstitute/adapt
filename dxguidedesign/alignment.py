@@ -97,7 +97,7 @@ class Alignment:
                 sequences
 
         Returns:
-            list of indices of sequences that contain a gap
+            set of indices of sequences that contain a gap
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
@@ -107,9 +107,63 @@ class Alignment:
             has_gap.update(i for i in seqs_to_consider if self.seqs[j][i] == '-')
         return has_gap
 
+    def seqs_with_required_flanking(self, guide_start, guide_length,
+            required_flanking_seqs, seqs_to_consider=None):
+        """Determine sequences in the alignment with required flanking sequence.
+
+        If no flanking sequences are required, this says that all sequences
+        have the required flanking sequence.
+
+        Args:
+            guide_start: start position of the guide in the alignment
+            guide_length: length of the guide
+            required_flanking_seqs: tuple (s5, s3) that specifies sequences
+                on the 5' (left; s5) end and 3' (right; s3) end flanking
+                the guide (in the target, not the guide) that must be
+                required for a guide to bind; if either is None, no
+                flanking sequence is required for that end
+            seqs_to_consider: only look within seqs_to_consider for
+                sequences with the flanking sequences; if None, then
+                look in all sequences
+
+        Returns:
+            set of indices of sequences that have the required flanking
+            sequences
+        """
+        if seqs_to_consider is None:
+            seqs_to_consider = set(range(self.num_sequences))
+
+        def seqs_that_equal(query, start_pos, end_pos):
+            # Return set of sequence indices from seqs_to_consider that,
+            # in the range [start_pos, end_pos) do not contain a gap and
+            # are equal to query
+            if start_pos < 0 or end_pos > self.seq_length:
+                return set()
+            query_matches = set()
+            for i in seqs_to_consider:
+                s = ''.join(self.seqs[j][i] for j in range(start_pos, end_pos))
+                if '-' not in s and guide.query_target_eq(query, s):
+                    query_matches.add(i)
+            return query_matches
+
+        required_flanking5, required_flanking3 = required_flanking_seqs
+
+        seqs_with_required_flanking = set(seqs_to_consider)
+        if required_flanking5 is not None and len(required_flanking5) > 0:
+            query = required_flanking5
+            seqs_with_required_flanking &= seqs_that_equal(
+                required_flanking5, guide_start - len(required_flanking5),
+                guide_start)
+        if required_flanking3 is not None and len(required_flanking3) > 0:
+            seqs_with_required_flanking &= seqs_that_equal(
+                required_flanking3, guide_start + guide_length,
+                guide_start + guide_length + len(required_flanking3))
+        return seqs_with_required_flanking
+
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
             allow_gu_pairs, guide_clusterer, num_needed=None,
-            missing_threshold=1, guide_is_suitable_fn=None):
+            missing_threshold=1, guide_is_suitable_fn=None,
+            required_flanking_seqs=(None, None)):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -139,6 +193,11 @@ class Alignment:
                 range, exceeds this threshold
             guide_is_suitable_fn: if set, a function f(x) such that this
                 will only construct a guide x for which f(x) is True
+            required_flanking_seqs: tuple (s5, s3) that specifies sequences
+                on the 5' (left; s5) end and 3' (right; s3) end flanking
+                the guide (in the target, not the guide) that must be
+                present for a guide to bind; if either is None, no
+                flanking sequence is required for that end
 
         Returns:
             tuple (x, y) where:
@@ -184,15 +243,25 @@ class Alignment:
 
         # Ignore any sequences in the alignment that have a gap in
         # this region
-        seqs_to_ignore = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
+        seqs_with_gap = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
         for group_id in seqs_to_consider.keys():
-            seqs_to_consider[group_id].difference_update(seqs_to_ignore)
+            seqs_to_consider[group_id].difference_update(seqs_with_gap)
         all_seqs_to_consider = set.union(*seqs_to_consider.values())
 
-        # If every sequence in this region has a gap, then there are none
-        # left to consider
+        # Only consider sequences in the alignment that have the
+        # required flanking sequence(s)
+        seqs_with_flanking = self.seqs_with_required_flanking(
+            start, guide_length, required_flanking_seqs,
+            seqs_to_consider=all_seqs_to_consider)
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider[group_id].intersection_update(seqs_with_flanking)
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # If every sequence in this region has a gap or does not contain
+        # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise CannotConstructGuideError("All sequences in region have a gap")
+            raise CannotConstructGuideError(("All sequences in region have "
+                "a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
             include_idx=True)
@@ -292,6 +361,10 @@ class Alignment:
             suitable_guides = []
             for s, idx in seq_rows:
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
+                    if (guide_is_suitable_fn is not None and
+                            guide_is_suitable_fn(s) is False):
+                        # Skip s, which is not suitable
+                        continue
                     # s has no ambiguity and is a suitable guide
                     if idx in selected_cluster_idxs:
                         # Pick s as the guide
@@ -393,7 +466,7 @@ class Alignment:
         return consensus
 
     def sequences_bound_by_guide(self, gd_seq, gd_start, mismatches,
-            allow_gu_pairs):
+            allow_gu_pairs, required_flanking_seqs=(None, None)):
         """Determine the sequences to which a guide hybridizes.
 
         Args:
@@ -403,6 +476,11 @@ class Alignment:
                 a guide would hybridize to a target sequence
             allow_gu_pairs: if True, tolerate G-U base pairs between a
                 guide and target when computing whether a guide binds
+            required_flanking_seqs: tuple (s5, s3) that specifies sequences
+                on the 5' (left; s5) end and 3' (right; s3) end flanking
+                the guide (in the target, not the guide) that must be
+                present for a guide to bind; if either is None, no
+                flanking sequence is required for that end
 
         Returns:
             collection of indices of sequences to which the guide will
@@ -413,9 +491,13 @@ class Alignment:
         aln_for_guide = self.extract_range(gd_start, gd_start + len(gd_seq))
         seq_rows = aln_for_guide.make_list_of_seqs(include_idx=True)
 
+        seqs_with_flanking = self.seqs_with_required_flanking(
+            gd_start, len(gd_seq), required_flanking_seqs)
+
         binding_seqs = []
         for seq, seq_idx in seq_rows:
-            if guide.guide_binds(gd_seq, seq, mismatches, allow_gu_pairs):
+            if (seq_idx in seqs_with_flanking and
+                    guide.guide_binds(gd_seq, seq, mismatches, allow_gu_pairs)):
                 binding_seqs += [seq_idx]
         return binding_seqs
 
@@ -533,17 +615,16 @@ class AlignmentQuerier:
     gapless. In terms of querying for potential hits, this is more
     realistic because the actual sequences do not have gaps.
 
-    This might use considerable memory, depending on the guide length,
-    reporting probability, etc. It currently stores in the data structure
-    a tuple (subsequence string s, index i of alignment with s, index j of
-    sequence in alignment i that has subsequence s). One option to reduce
-    memory usage would be to still key on the subsequence string, but
-    not store it in the tuple and, in its place, store the index x of the
-    subsequence in the j'th sequence of alignment i, so that the subsequence
-    can be found as: self.alns[i].seqs[x:(x + guide_length)][j].
+    This currently stores in the near-neighbor data structure a tuple
+    (subsequence string s, index i of alignment with s) -- i.e., all
+    unique subsequences for each alignment. It stores an additional data
+    structure that contains, for each of those tuples, all of the
+    sequences in alignment i that contain s. Together, these can be used
+    to query for all sequences that contain a subsequence that is 'near'
+    the queried guide.
     """
 
-    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=15,
+    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=22,
                  reporting_prob=0.95):
         """
         Args:
@@ -591,10 +672,18 @@ class AlignmentQuerier:
         self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, dist_fn,
             reporting_prob, hash_idx=0, join_concat_as_str=True)
 
+        self.seqs_with_subseq = defaultdict(set)
+
         self.is_setup = False
 
     def setup(self):
         """Build data structure for near neighbor lookup of guide sequences.
+
+        The data structure in self.nnr stores only unique subsequences in
+        each alignment; it does not store the particular sequences of
+        the alignment that contain the subsequences. A separate hashtable
+        stored here, self.seqs_with_subseq, tracks the sequence indices
+        in alignment i that contain a subsequence s (key'd on (s, i)).
         """
         for aln_idx, aln in enumerate(self.alns):
             # Convert aln.seqs from column-major order to row-major order
@@ -609,11 +698,12 @@ class AlignmentQuerier:
                     aln_idx + 1, len(self.alns), seq_idx + 1, len(seqs))
 
                 # Add all possible guide sequences g as:
-                #   (g, aln_idx, seq_idx)
-                pts = []
+                #   (g, aln_idx)
+                pts = set()
                 for j in range(len(seq) - self.guide_length + 1):
                     g = seq[j:(j + self.guide_length)]
-                    pts += [(g, aln_idx, seq_idx)]
+                    pts.add((g, aln_idx))
+                    self.seqs_with_subseq[(g, aln_idx)].add(seq_idx)
                 self.nnr.add(pts)
         self.is_setup = True
 
@@ -666,8 +756,9 @@ class AlignmentQuerier:
         neighbors = self.nnr.query(guide)
         seqs_hit_by_aln = defaultdict(set)
         for neighbor in neighbors:
-            _, aln_idx, seq_idx = neighbor
-            seqs_hit_by_aln[aln_idx].add(seq_idx)
+            _, aln_idx = neighbor
+            seq_idxs = self.seqs_with_subseq[neighbor]
+            seqs_hit_by_aln[aln_idx].update(seq_idxs)
 
         frac_of_aln_hit = []
         for i, aln in enumerate(self.alns):
