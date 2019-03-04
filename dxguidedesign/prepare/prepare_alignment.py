@@ -30,7 +30,8 @@ def prepare_for(taxid, segment, ref_accs, out,
         1) Downloads a list of neighbors.
         2) Downloads sequences of those neighbors.
         3) Curates the sequences.
-        4) Aligns the sequences.
+        4) Clusters the unaligned sequences.
+        5) Aligns the sequences, with one alignment per cluster.
 
     Args:
         taxid: taxonomic ID from NCBI, for which to download
