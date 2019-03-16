@@ -12,6 +12,7 @@ However, the problems they solve do share some similarity with the problems solv
 
 * [Setting up CATCH-dx](#setting-up-catch-dx)
   * [Dependencies](#dependencies)
+  * [Setting up a conda environment](#setting-up-a-conda-environment)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
 * [Using CATCH-dx](#using-catch-dx)
@@ -38,14 +39,41 @@ Installing CATCH-dx with `pip`, as described below, will install NumPy and SciPy
 
 If using alignment features in subcommands below, CATCH-dx also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
 
+## Setting up a conda environment
+
+_Note: This section is optional, but may be useful to users who are new to Python._
+
+It is generally useful to install and run Python packages inside of a [virtual environment](https://docs.python.org/3/glossary.html#term-virtual-environment), especially if you have multiple versions of Python installed or use multiple packages.
+This can prevent problems when upgrading, conflicts between packages with different requirements, installation issues that arise from having different Python versions available, and more.
+
+One option to manage packages and environments is to use [conda](https://conda.io/en/latest/).
+A fast way to obtain conda is to install Miniconda: you can download it [here](https://conda.io/en/latest/miniconda.html) and find installation instructions for it [here](https://conda.io/projects/conda/en/latest/user-guide/install/index.html#regular-installation).
+For example, on Linux you would run:
+```bash
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+```
+
+Once you have conda, you can [create](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands) an environment for CATCH-dx with Python 3.7:
+```bash
+conda create -n catchdx python=3.7
+```
+Then, you can activate the `catchdx` environment:
+```bash
+conda activate catchdx
+```
+You will need to activate the environment each time you use CATCH-dx.
+After the environment is activated, you can install CATCH-dx as described below.
+
 ## Downloading and installing
 
 An easy way to setup CATCH-dx is to clone the repository and install the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/diagnostic-guide-design.git
 cd diagnostic-guide-design
-pip install --user -e .
+pip install -e .
 ```
+Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
 
 ## Testing
 
