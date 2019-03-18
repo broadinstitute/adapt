@@ -198,6 +198,8 @@ class CoverageAnalyzer:
         """
         frac_bound = {}
         for design_id, design in self.designs.items():
+            logger.info(("Computing fraction of sequences bound by design "
+                "'%s'"), str(design_id))
             seqs_bound = self.seqs_bound_by_design(design)
             frac_bound[design_id] = float(len(seqs_bound)) / len(self.seqs)
         return frac_bound
