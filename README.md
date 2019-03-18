@@ -62,8 +62,8 @@ Then, you can activate the `catchdx` environment:
 ```bash
 conda activate catchdx
 ```
+After the environment is created and activated, you can install CATCH-dx as described below.
 You will need to activate the environment each time you use CATCH-dx.
-After the environment is activated, you can install CATCH-dx as described below.
 
 ## Downloading and installing
 
