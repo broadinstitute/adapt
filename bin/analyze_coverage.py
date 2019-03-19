@@ -5,6 +5,7 @@ import argparse
 import logging
 
 from dxguidedesign import coverage_analysis
+from dxguidedesign.prepare import ncbi_neighbors
 from dxguidedesign.utils import log
 from dxguidedesign.utils import seq_io
 
@@ -60,6 +61,23 @@ def read_designs(fn):
     return designs
 
 
+def read_accessions(fn):
+    """Read a list of accessions from a file.
+
+    Args:
+        fn: path to file where each line gives an accession
+
+    Returns:
+        collection of accessions
+    """
+    accs = []
+    with open(fn) as f:
+        for line in f:
+            line = line.rstrip()
+            accs += [line]
+    return accs
+
+
 def write_frac_bound(designs, frac_bound, out_fn):
     """Write table giving the fraction of sequences bound by a target.
 
@@ -100,15 +118,25 @@ def main(args):
     # Read the designs
     designs = read_designs(args.designs_fn)
 
+    # If accessions were given, fetch them as use them as input
+    if args.use_accessions:
+        accessions = read_accessions(args.seqs_fn)
+        seqs_tempfile = ncbi_neighbors.fetch_fastas(accessions)
+        seqs_fn = seqs_tempfile.name
+    else:
+        seqs_tempfile = None
+        seqs_fn = args.seqs_fn
+
     # Read the input sequences to compute coverage against; use
     # skip_gaps=True so that, if an alignment is input, this
     # is read as unaligned sequences
-    seqs = seq_io.read_fasta(args.seqs_fn, skip_gaps=True)
+    seqs = seq_io.read_fasta(seqs_fn, skip_gaps=True)
 
     analyzer = coverage_analysis.CoverageAnalyzer(
             seqs, designs, args.guide_mismatches, args.primer_mismatches,
             allow_gu_pairs)
 
+    # Perform analyses
     performed_analysis = False
     if args.write_frac_bound:
         frac_bound = analyzer.frac_of_seqs_bound()
@@ -117,6 +145,10 @@ def main(args):
 
     if not performed_analysis:
         logger.warning(("No analysis was requested"))
+
+    # Close tempfiles
+    if seqs_tempfile is not None:
+        seqs_tempfile.close()
 
 
 if __name__ == "__main__":
@@ -128,7 +160,8 @@ if __name__ == "__main__":
               "each row contains a design (target)"))
     parser.add_argument('seqs_fn',
         help=("Path to FASTA file giving sequences against which to "
-              "compute coverage"))
+              "compute coverage. (See --use-accessions to pass accessions "
+              "as input rather than a FASTA file.)"))
 
     # Analyses to output
     parser.add_argument('--write-frac-bound',
@@ -158,6 +191,14 @@ if __name__ == "__main__":
               "target and C in an output guide sequence matches T "
               "in the target (since the synthesized guide is the reverse "
               "complement of the output guide sequence)"))
+
+    # Miscellaneous
+    parser.add_argument('--use-accessions',
+        action='store_true',
+        help=("When set, the input file of sequences gives accessions rather "
+              "than being a FASTA of sequences -- each line in the file gives "
+              "an accession. This fetches the sequences of those accessions "
+              "uses them as input."))
 
     # Log levels
     parser.add_argument("--debug",
