@@ -5,6 +5,7 @@ from collections import defaultdict
 import datetime
 import gzip
 import logging
+import random
 import re
 import tempfile
 import time
@@ -15,6 +16,58 @@ from xml.dom import minidom
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 logger = logging.getLogger(__name__)
+
+
+def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
+        max_num_tries=5):
+    """
+    Open a URL via urllib with repeated tries.
+
+    Often calling urllib.request.urlopen() fails with HTTPError, especially
+    if there are multiple processes calling it. The reason is that NCBI
+    has a cap on the number of requests per unit time, and the error raised
+    is 'HTTP Error 429: Too Many Requests'.
+
+    Args:
+        url: url to open
+        initial_wait: number of seconds to wait in between the first two
+            requests; the wait for each subsequent request doubles in time
+        rand_wait_range: tuple (a, b); in addition to waiting an amount of
+            time that grows exponentially (starting with initial_wait), also
+            wait a random number of seconds between a and b (inclusive).
+            If multiple processes are started simultaneously, this helps to
+            avoid them waiting on the same cycle
+        max_num_tries: maximum number of requests to attempt to make
+
+    Returns:
+        result of urllib.request.urlopen()
+    """
+    num_tries = 0
+    while num_tries < max_num_tries:
+        try:
+            num_tries += 1
+            logger.debug(("Making request to open url: %s"), url)
+            r = urllib.request.urlopen(url)
+            return r
+        except urllib.error.HTTPError:
+            if num_tries == max_num_tries:
+                # This was the last allowed try
+                logger.warning(("Encountered HTTPError %d times (the maximum "
+                    "allowed) when opening url: %s"), num_tries, url)
+                raise
+            else:
+                # Pause for a bit and retry
+                wait = initial_wait * 2**(num_tries - 1)
+                rand_wait = random.randint(*rand_wait_range)
+                total_wait = wait + rand_wait
+                logger.info(("Encountered HTTPError when opening url; "
+                    "sleeping for %d seconds, and then trying again"),
+                    total_wait)
+                time.sleep(total_wait)
+        except:
+            logger.warning(("Encountered unexpected error while opening "
+                "url: %s"), url)
+            raise
 
 
 def ncbi_neighbors_url(taxid):
@@ -44,7 +97,7 @@ def fetch_neighbors_table(taxid):
     logger.debug(("Fetching table of neighbors for tax %d") % taxid)
 
     url = ncbi_neighbors_url(taxid)
-    r = urllib.request.urlopen(url)
+    r = urlopen_with_tries(url)
     raw_data = r.read()
     for line in raw_data.decode('utf-8').split('\n'):
         line_rstrip = line.rstrip()
@@ -78,7 +131,7 @@ def fetch_influenza_genomes_table(species_name):
     species_name_lower = species_name.lower()
 
     url = ncbi_influenza_genomes_url()
-    r = urllib.request.urlopen(url)
+    r = urlopen_with_tries(url)
     raw_data = gzip.GzipFile(fileobj=r).read()
     for line in raw_data.decode('utf-8').split('\n'):
         line_rstrip = line.rstrip()
@@ -129,7 +182,7 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
     for i in range(0, len(accessions), batch_size):
         batch = accessions[i:(i + batch_size)]
         url = ncbi_fasta_download_url(batch)
-        r = urllib.request.urlopen(url)
+        r = urlopen_with_tries(url)
         raw_data = r.read()
         for line in raw_data.decode('utf-8').split('\n'):
             fp.write((line + '\n').encode())
@@ -186,7 +239,7 @@ def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
     for i in range(0, len(accessions), batch_size):
         batch = accessions[i:(i + batch_size)]
         url = ncbi_xml_download_url(batch)
-        r = urllib.request.urlopen(url)
+        r = urlopen_with_tries(url)
         raw_data = r.read()
         for line in raw_data.decode('utf-8').split('\n'):
             if i > 0 and is_xml_header(line):
