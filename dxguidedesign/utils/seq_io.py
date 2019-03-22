@@ -33,7 +33,7 @@ def read_fasta(fn, replace_degenerate=False,
         helps in particular with replicating past results,
         where the input order could affect the output.
     """
-    logger.info("Reading fasta file %s", fn)
+    logger.debug("Reading fasta file %s", fn)
 
     degenerate_pattern = re.compile('[YRWSMKBDHV]')
 
