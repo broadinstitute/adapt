@@ -8,6 +8,8 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
+# Store the unambiguous bases that make up each
+# ambiguous base in the IUPAC notation
 FASTA_CODES = {'A': set(('A')),
                'T': set(('T')),
                'C': set(('C')),
@@ -23,6 +25,10 @@ FASTA_CODES = {'A': set(('A')),
                'H': set(('A', 'C', 'T')),
                'D': set(('A', 'G', 'T')),
                'N': set(('A', 'T', 'C', 'G'))}
+
+# Specify the substring length to use for checking whether
+# to terminate early in guide_binds()
+GUIDE_BINDS_EARLY_TERMINATE_SUBSTR_LEN = 5
 
 
 def seq_mismatches(seq_a, seq_b):
@@ -145,6 +151,21 @@ def guide_binds(guide_seq, target_seq, mismatches, allow_gu_pairs):
     If the target sequence contains a gap (and the guide sequence does
     not, as it should not), this decides that the guide does not bind.
 
+    The calls to seq_mismatches() or seq_mismatches_with_gu_pairs() may
+    be slow because they sum over all bases in guide_seq and target_seq;
+    in particular, the lookups in FASTA_CODES may take a while for each
+    term in the sum. In many cases, the output of those functions (i.e.,
+    the number of mismatches between guide_seq and target_seq) will be
+    far higher than the given threshold on mismatches. The guide will not
+    bind, but we can determine this without having to sum over all bases.
+    To speed up these cases (i.e., when guide_seq and target_seq are very
+    different), this function calls seq_mismatches() (or
+    seq_mismatches_with_gu_pairs()) on just a substring of guide_seq
+    and target_seq. The substring is arbitrary: here, it is taken from
+    the start of those sequences. If the number of mismatches between
+    those substrings is already too high, we can terminate early and
+    say that the guide does not bind.
+
     Args:
         guide_seq: str of a guide sequence
         target_seq: str of a target sequence, same length as guide_seq
@@ -161,7 +182,24 @@ def guide_binds(guide_seq, target_seq, mismatches, allow_gu_pairs):
       return False
 
     if allow_gu_pairs:
-        m = seq_mismatches_with_gu_pairs(guide_seq, target_seq)
+        mismatches_fn = seq_mismatches_with_gu_pairs
     else:
-        m = seq_mismatches(guide_seq, target_seq)
+        mismatches_fn = seq_mismatches
+
+    # Determine whether to terminate early, using just a substring of
+    # the two sequences
+    if (mismatches < GUIDE_BINDS_EARLY_TERMINATE_SUBSTR_LEN and
+            len(guide_seq) > GUIDE_BINDS_EARLY_TERMINATE_SUBSTR_LEN and
+            len(target_seq) > GUIDE_BINDS_EARLY_TERMINATE_SUBSTR_LEN):
+        guide_subseq = guide_seq[:GUIDE_BINDS_EARLY_TERMINATE_SUBSTR_LEN]
+        target_subseq = target_seq[:GUIDE_BINDS_EARLY_TERMINATE_SUBSTR_LEN]
+        m_substr = mismatches_fn(guide_subseq, target_subseq)
+        if m_substr > mismatches:
+            # Even in just the substring, there are too many mismatches for
+            # the guide to bind
+            return False
+
+    # Compute the number of mismatches between guide_seq and target_seq,
+    # and compare against the given threshold
+    m = mismatches_fn(guide_seq, target_seq)
     return m <= mismatches

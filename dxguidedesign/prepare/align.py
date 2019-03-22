@@ -450,7 +450,8 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 break
 
     logger.info(("After curation, %d of %d sequences (with unique accession) "
-        "were kept") % (len(seqs_filtered), len(seqs)))
+        "were kept; %d of these are references that will be removed"),
+        len(seqs_filtered), len(seqs), len(remove_ref_accs))
 
     for remove_ref_acc in remove_ref_accs:
         # Do not include the ref_acc_key corresponding to remove_ref_acc

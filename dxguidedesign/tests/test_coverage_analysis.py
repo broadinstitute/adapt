@@ -1,0 +1,91 @@
+"""Tests for coverage_analysis module.
+"""
+
+import logging
+import unittest
+
+from dxguidedesign import coverage_analysis
+
+__author__ = 'Hayden Metsky <hayden@mit.edu>'
+
+
+class TestCoverageAnalysis(unittest.TestCase):
+    """Tests methods in the CoverageAnalysis class.
+    """
+
+    def setUp(self):
+        # Disable logging
+        logging.disable(logging.WARNING)
+
+        self.seqs = {
+                'seq1': 'ATCGAATTCGATCGAA',
+                'seq2': 'GGATCGAATTCGAG',
+                'seq3': 'TGCAACCGATCCGT'
+        }
+        self.design1 = coverage_analysis.Design({'TTCGA'})
+        self.design2 = coverage_analysis.Design({'TTCGA'},
+                ({'TCGA'}, {'CGAT'}))
+        self.design3 = coverage_analysis.Design({'TTCGA', 'CCGA', 'GGGGG'},
+                ({'TCGA', 'GCAA', 'AAAA'}, {'CGAT', 'TCCG', 'CCCC'}))
+        designs = {
+                'design1': self.design1,
+                'design2': self.design2,
+                'design3': self.design3
+        }
+        self.ca = coverage_analysis.CoverageAnalyzer(self.seqs,
+                designs, 1, 1, allow_gu_pairs=False)
+
+    def test_find_binding_pos(self):
+        self.assertEqual(
+                self.ca.find_binding_pos(self.seqs['seq1'], 'TTCGAT', 1, False),
+                {6}
+        )
+        self.assertEqual(
+                self.ca.find_binding_pos(self.seqs['seq1'], 'TTCC', 0, False),
+                set()
+        )
+        self.assertEqual(
+                self.ca.find_binding_pos(self.seqs['seq1'], 'AAAA', 1, False),
+                set()
+        )
+        self.assertEqual(
+                self.ca.find_binding_pos(self.seqs['seq1'], 'AT', 0, False),
+                {0,5,10}
+        )
+
+    def test_seqs_where_guide_binds(self):
+        self.assertEqual(
+                self.ca.seqs_where_guides_bind({'TTCGA'}),
+                {'seq1', 'seq2'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_guides_bind({'TTCGA', 'CCGA'}),
+                {'seq1', 'seq2', 'seq3'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_guides_bind({'GGGCC'}),
+                set()
+        )
+
+    def test_seqs_where_targets_bind(self):
+        self.assertEqual(
+                self.ca.seqs_where_targets_bind({'TTCGA'},
+                    {'TCGA'}, {'CGAT'}),
+                {'seq1'}
+        )
+
+    def test_seqs_bound_by_design(self):
+        self.assertEqual(self.ca.seqs_bound_by_design(self.design1),
+                {'seq1', 'seq2'})
+        self.assertEqual(self.ca.seqs_bound_by_design(self.design2),
+                {'seq1'})
+        self.assertEqual(self.ca.seqs_bound_by_design(self.design3),
+                {'seq1', 'seq3'})
+        
+    def test_frac_of_seqs_bound(self):
+        self.assertEqual(self.ca.frac_of_seqs_bound(),
+                {'design1': 2.0/3.0, 'design2': 1.0/3.0, 'design3': 2.0/3.0})
+
+    def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)

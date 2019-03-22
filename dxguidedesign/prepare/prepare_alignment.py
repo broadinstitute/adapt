@@ -127,6 +127,12 @@ def prepare_for(taxid, segment, ref_accs, out,
         # show up multiple times in the sampling; to keep this multiplicity
         # going forward, track its count
         acc_count = Counter(acc_to_fetch)
+        logger.info(("After sampling with replacement to %d sequences, there "
+            "are %d unique accessions; after curation, this will repeat ones "
+            "in the input that were sampled more than once (the final number, "
+            "even after adding multiplicity, may be less than %d if accessions "
+            "are filtered out during curation)"),
+            sample_seqs, len(set(acc_to_fetch)), sample_seqs)
     else:
         # Only fetch each accession once
         acc_to_fetch = list(set([n.acc for n in neighbors]))
@@ -180,6 +186,10 @@ def prepare_for(taxid, segment, ref_accs, out,
                 new_name = accver + '-' + str(i)
                 seqs_unaligned_curated_with_multiplicity[new_name] = seq
     seqs_unaligned_curated = seqs_unaligned_curated_with_multiplicity
+
+    if sample_seqs is not None:
+        logger.info(("After adding multiplicity, there are %d sequences"),
+            len(seqs_unaligned_curated))
 
     # When determining how many were filtered out, we care about acc_to_fetch
     # (which has multiplicity in case of sampling with replacement)
