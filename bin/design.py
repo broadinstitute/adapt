@@ -398,6 +398,8 @@ def design_for_id(args):
 def main(args):
     logger = logging.getLogger(__name__)
 
+    logger.info("Running design.py with arguments: %s", args)
+
     if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.input_type == 'auto-from-file':
             if not os.path.isdir(args.out_tsv_dir):
