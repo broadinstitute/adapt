@@ -715,7 +715,7 @@ if __name__ == "__main__":
               "i.e., year n is given B*(desired cover fraction of year n+1)."))
     input_auto_common_subparser.add_argument('--cluster-threshold',
         type=float,
-        default=0.1,
+        default=0.2,
         help=(("Maximum inter-cluster distance to use when clustering "
                "input sequences prior to alignment. Expressed as average "
                "nucleotide dissimilarity (1-ANI, where ANI is average "

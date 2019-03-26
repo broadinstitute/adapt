@@ -174,6 +174,7 @@ This must be specified if design is for influenza A/B/C viruses.
 This can be useful for measuring various properties of the design.
 * `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
 The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
+(Default: 0.2.)
 * `--use-accessions USE_ACCESSIONS`: Use the specified accessions, in a file at the path USE_ACCESSIONS, for generating input.
 This is performed instead of fetching neighbors from NCBI.
 See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the format of the file.
