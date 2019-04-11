@@ -279,7 +279,7 @@ def align(seqs, am=None):
     out_fasta.close()
 
     if len(seqs) > 0 and len(seqs_aligned) == 0:
-        logger.warning(("The generated alignment contains no sequences; "
+        logger.critical(("The generated alignment contains no sequences; "
             "it is possible that mafft failed, e.g., due to running out "
             "of memory"))
 
