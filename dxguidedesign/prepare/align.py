@@ -259,7 +259,8 @@ def align(seqs, am=None):
 
     # Setup arguments to mafft
     params = ['--maxiterate', '1000', '--preservecase']
-    if len(seqs) < 10:
+    max_seq_len = max(len(seq) for seq in seqs.values())
+    if len(seqs) < 10 and max_seq_len < 10000:
         # Accuracy oriented
         params += ['--localpair']
     else:
