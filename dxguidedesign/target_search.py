@@ -283,8 +283,19 @@ class TargetSearcher:
 
         # Invert the costs (target_heap had been storing the negative
         # of each cost), toss push_id, and sort by cost
+        # In particular, sort by a 'sort_tuple' whose first element is
+        # cost and then the target endpoints; it has the target endpoints
+        # to break ties in cost
         r = [(-cost, target) for cost, push_id, target in target_heap]
-        r = sorted(r, key=lambda x: x[0])
+        r_with_sort_tuple = []
+        for (cost, target) in r:
+            ((p1, p2), (guides_frac_bound, guides)) = target
+            target_start = p1.start
+            target_end = p2.start + p2.primer_length
+            sort_tuple = (cost, target_start, target_end)
+            r_with_sort_tuple += [(sort_tuple, cost, target)]
+        r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
+        r = [(cost, target) for sort_tuple, cost, target in r_with_sort_tuple]
 
         return r
 
