@@ -30,6 +30,13 @@ class TestURLConstruction(unittest.TestCase):
             '.fcgi?id=A123,A456,B789&db=nuccore&retmode=xml')
         self.assertEqual(url, expected_url)
 
+    def test_read_taxid(self):
+        url = ('https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup'
+            '.cgi?taxid=123&cmd=download2')
+        taxid = nn.read_taxid_from_ncbi_neighbors_url(url)
+        expected_taxid = 123
+        self.assertEqual(taxid, expected_taxid)
+
 
 class TestConstructNeighbors(unittest.TestCase):
     """Tests the construct_neighbors() function.

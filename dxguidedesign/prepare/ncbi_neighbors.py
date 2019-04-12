@@ -84,6 +84,22 @@ def ncbi_neighbors_url(taxid):
     return url
 
 
+def read_taxid_from_ncbi_neighbors_url(url):
+    """Read the taxid from a URL.
+
+    Args:
+        url: str representing URL for downloading NCBI neighbors
+
+    Returns:
+        taxid in url, or None if no taxid is found
+    """
+    url_query = urllib.parse.urlparse(url).query
+    queries = urllib.parse.parse_qs(url_query)
+    if 'taxid' not in queries:
+        return None
+    return int(queries['taxid'][0])
+
+
 def fetch_neighbors_table(taxid):
     """Fetch genome neighbors table from NCBI.
 
@@ -98,6 +114,22 @@ def fetch_neighbors_table(taxid):
 
     url = ncbi_neighbors_url(taxid)
     r = urlopen_with_tries(url)
+
+    # For some taxids, NCBI redirects to a different taxid and we are
+    # then unable to read the contents of the response (because it is
+    # HTML, and not the expected text format)
+    # Check if this occurred by seeing if the taxid in the url of
+    # the response is different from what was requested; if it is,
+    # then re-fetch the url with the new taxid (only try this once, otherwise
+    # we could end up in a loop of redirects)
+    taxid_in_url = read_taxid_from_ncbi_neighbors_url(r.geturl())
+    if taxid_in_url != taxid:
+        logger.warning(("The neighbors table for taxid %d is being redirected "
+            "to taxid %d"), taxid, taxid_in_url)
+        new_taxid = taxid_in_url
+        url = ncbi_neighbors_url(new_taxid)
+        r = urlopen_with_tries(url)
+
     raw_data = r.read()
     for line in raw_data.decode('utf-8').split('\n'):
         line_rstrip = line.rstrip()
