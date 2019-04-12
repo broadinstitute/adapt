@@ -4,6 +4,7 @@
 from collections import defaultdict
 import datetime
 import gzip
+import http.client
 import logging
 import random
 import re
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
-        max_num_tries=5):
+        max_num_tries=7, read=False):
     """
     Open a URL via urllib with repeated tries.
 
@@ -38,9 +39,12 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
             If multiple processes are started simultaneously, this helps to
             avoid them waiting on the same cycle
         max_num_tries: maximum number of requests to attempt to make
+        read: also try to read the opened URL, and return the results;
+            if this raises an HTTPException, the call will be retried
 
     Returns:
-        result of urllib.request.urlopen()
+        result of urllib.request.urlopen(); unless read is True, in which
+        case it is the data returned by reading the url
     """
     num_tries = 0
     while num_tries < max_num_tries:
@@ -48,21 +52,26 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
             num_tries += 1
             logger.debug(("Making request to open url: %s"), url)
             r = urllib.request.urlopen(url)
-            return r
-        except urllib.error.HTTPError:
+            if read:
+                raw_data = r.read()
+                return raw_data
+            else:
+                return r
+        except (urllib.error.HTTPError, http.client.HTTPException):
             if num_tries == max_num_tries:
                 # This was the last allowed try
-                logger.warning(("Encountered HTTPError %d times (the maximum "
-                    "allowed) when opening url: %s"), num_tries, url)
+                logger.warning(("Encountered HTTPError or HTTPException %d "
+                    "times (the maximum allowed) when opening url: %s"),
+                    num_tries, url)
                 raise
             else:
                 # Pause for a bit and retry
                 wait = initial_wait * 2**(num_tries - 1)
                 rand_wait = random.randint(*rand_wait_range)
                 total_wait = wait + rand_wait
-                logger.info(("Encountered HTTPError when opening url; "
-                    "sleeping for %d seconds, and then trying again"),
-                    total_wait)
+                logger.info(("Encountered HTTPError or HTTPException when "
+                    "opening url; sleeping for %d seconds, and then trying "
+                    "again"), total_wait)
                 time.sleep(total_wait)
         except:
             logger.warning(("Encountered unexpected error while opening "
@@ -214,8 +223,7 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
     for i in range(0, len(accessions), batch_size):
         batch = accessions[i:(i + batch_size)]
         url = ncbi_fasta_download_url(batch)
-        r = urlopen_with_tries(url)
-        raw_data = r.read()
+        raw_data = urlopen_with_tries(url, read=True)
         for line in raw_data.decode('utf-8').split('\n'):
             fp.write((line + '\n').encode())
         time.sleep(1.0/reqs_per_sec)
@@ -271,8 +279,7 @@ def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
     for i in range(0, len(accessions), batch_size):
         batch = accessions[i:(i + batch_size)]
         url = ncbi_xml_download_url(batch)
-        r = urlopen_with_tries(url)
-        raw_data = r.read()
+        raw_data = urlopen_with_tries(url, read=True)
         for line in raw_data.decode('utf-8').split('\n'):
             if i > 0 and is_xml_header(line):
                 # Only write XML header for the first batch (i == 0)
