@@ -35,23 +35,32 @@ class TestCoverageAnalysis(unittest.TestCase):
         self.ca = coverage_analysis.CoverageAnalyzer(self.seqs,
                 designs, 1, 1, allow_gu_pairs=False)
 
+        # Index sequences with a k-mer length of k=2 to ensure k-mers
+        # will be found
+        self.ca._index_seqs(k=2, stride_by_k=False)
+
     def test_find_binding_pos(self):
-        self.assertEqual(
-                self.ca.find_binding_pos(self.seqs['seq1'], 'TTCGAT', 1, False),
-                {6}
-        )
-        self.assertEqual(
-                self.ca.find_binding_pos(self.seqs['seq1'], 'TTCC', 0, False),
-                set()
-        )
-        self.assertEqual(
-                self.ca.find_binding_pos(self.seqs['seq1'], 'AAAA', 1, False),
-                set()
-        )
-        self.assertEqual(
-                self.ca.find_binding_pos(self.seqs['seq1'], 'AT', 0, False),
-                {0,5,10}
-        )
+        for allow_not_fully_sensitive in [False, True]:
+            self.assertEqual(
+                    self.ca.find_binding_pos('seq1', 'TTCGAT', 1, False,
+                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    {6}
+            )
+            self.assertEqual(
+                    self.ca.find_binding_pos('seq1', 'TTCC', 0, False,
+                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    set()
+            )
+            self.assertEqual(
+                    self.ca.find_binding_pos('seq1', 'AAAA', 1, False,
+                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    set()
+            )
+            self.assertEqual(
+                    self.ca.find_binding_pos('seq1', 'AT', 0, False,
+                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    {0,5,10}
+            )
 
     def test_seqs_where_guide_binds(self):
         self.assertEqual(

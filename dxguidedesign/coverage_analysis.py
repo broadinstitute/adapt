@@ -1,6 +1,7 @@
 """Methods for analyzing coverage of a design against a collection of sequences.
 """
 
+from collections import defaultdict
 import logging
 
 from dxguidedesign.utils import guide
@@ -54,32 +55,116 @@ class CoverageAnalyzer:
         self.guide_mismatches = guide_mismatches
         self.primer_mismatches = primer_mismatches
         self.allow_gu_pairs = allow_gu_pairs
+        self.seqs_are_indexed = False
+        self.seqs_index_k = None
 
-    def find_binding_pos(self, target_seq, seq, mismatches, allow_gu_pairs):
+    def _index_seqs(self, k=8, stride_by_k=False):
+        """Construct index of seqs for faster lookups of binding positions.
+
+        This constructs a dictionary d. For key 'name' in self.seqs,
+        d[name][kmer] provides a collection of positions in self.seqs[name]
+        that contain kmer.
+
+        Args:
+            k: length of k-mer to index
+            stride_by_k: if False, index the position of every single k-mer
+                in each sequence; if True, only index k-mers while striding
+                by k (i.e., index every k'th k-mer). Enabling this can
+                save memory but may make it less likely to find a hit
+        """
+        logger.info(("Indexing sequences"))
+        self.seqs_index_k = k
+        self.seqs_index = {}
+        for name, seq in self.seqs.items():
+            self.seqs_index[name] = defaultdict(set)
+            i = 0
+            while i < len(seq) - k + 1:
+                kmer = seq[i:(i+k)]
+                self.seqs_index[name][kmer].add(i)
+                if stride_by_k:
+                    i += k
+                else:
+                    i += 1
+        self.seqs_are_indexed = True
+        logger.info(("Done indexing sequences"))
+
+    def find_binding_pos(self, target_seq_name, seq, mismatches,
+            allow_gu_pairs, allow_not_all_positions=True,
+            allow_not_fully_sensitive=True):
         """Find if and where a sequence binds to in a target sequence.
 
-        This takes a naive (but completely sensitive) approach: it simply
+        This takes a naive (but fully sensitive) approach: it simply
         slides across the target sequence, checking for binding at
         each position.
 
+        This can also use a precomputed index of the target sequences to
+        speed up finding binding positions. If there are hits from this
+        index, it may only report these (depending on allow_not_all_positions).
+        But if there are no hits from the index, this will also fall
+        back on the naive sliding approach.
+
         Args:
-            target_seq: target sequence against which to check for binding
+            target_seq_name: name of target sequence against which to check
+                (target sequence is self.seqs[target_seq_name])
             seq: guide or primer sequence to lookup
             mismatches: number of mismatches to tolerate when determining
                 whether seq binds to target_seq at a position
             allow_gu_pairs: if True, tolerate G-U base pairs between
                 seq and a subsequence of target_seq
+            allow_not_all_positions: if set, the returned collection of
+                positions may not include *all* positions that seq
+                binds to; using this can significantly improve runtime
+            allow_not_fully_sensitive: if set, allow returning no positions
+                based only on k-mer lookups in the index (i.e., without
+                performing the naive, slow sliding approach)
 
         Returns:
             collection of start positions in target_seq to which seq binds;
             empty collection if seq does not bind anywhere in target_seq
         """
+        if not self.seqs_are_indexed:
+            self._index_seqs()
+
         bind_pos = set()
-        for i in range(len(target_seq) - len(seq) + 1):
+
+        target_seq = self.seqs[target_seq_name]
+        def evaluate_pos(i):
             target_subseq = target_seq[i:(i + len(seq))]
             if guide.guide_binds(seq, target_subseq, mismatches,
                     allow_gu_pairs):
                 bind_pos.add(i)
+
+        if allow_not_all_positions:
+            # Use the index of the target sequences to find potential hits,
+            # and only report these, but looking up every k-mer in seq
+            k = self.seqs_index_k
+            index = self.seqs_index[target_seq_name]
+            for j in range(len(seq) - k + 1):
+                kmer = seq[j:(j+k)]
+                for kmer_start in index[kmer]:
+                    if kmer_start - j in bind_pos:
+                        # This is already a binding positon; don't
+                        # bother checking it again
+                        continue
+                    # The k-mer starts at kmer_start, so we have to look
+                    # backwards to find the potential start of seq within
+                    # target_seq
+                    if (kmer_start - j >= 0 and
+                            kmer_start - j + len(seq) <= len(target_seq)):
+                        evaluate_pos(kmer_start - j)
+            if len(bind_pos) > 0:
+                # We have found at least 1 binding position; this may
+                # not be all but we do not need to find all
+                return bind_pos
+            if allow_not_fully_sensitive:
+                # Return bind_pos (an empty set) even without performing
+                # the fully sensitive approach
+                return bind_pos
+            # If len(bind_pos) == 0, then do the fully sensitive naive
+            # sliding approach
+
+        for i in range(len(target_seq) - len(seq) + 1):
+            evaluate_pos(i)
         return bind_pos
 
     def seqs_where_guides_bind(self, guide_seqs):
@@ -95,7 +180,7 @@ class CoverageAnalyzer:
         seqs_bound = set()
         for seq_name, target_seq in self.seqs.items():
             for guide_seq in guide_seqs:
-                bind_pos = self.find_binding_pos(target_seq, guide_seq,
+                bind_pos = self.find_binding_pos(seq_name, guide_seq,
                         self.guide_mismatches, self.allow_gu_pairs)
                 if len(bind_pos) > 0:
                     # guide_seq binds somewhere in target_seq
@@ -121,7 +206,7 @@ class CoverageAnalyzer:
             guide_bind_pos = set()
             min_guide_len_at_pos = {}
             for guide_seq in guide_seqs:
-                bind_pos = self.find_binding_pos(target_seq, guide_seq,
+                bind_pos = self.find_binding_pos(seq_name, guide_seq,
                         self.guide_mismatches, self.allow_gu_pairs)
                 guide_bind_pos.update(bind_pos)
                 for pos in bind_pos:
@@ -133,7 +218,7 @@ class CoverageAnalyzer:
             primer_left_bind_pos = set()
             min_primer_len_at_pos = {}
             for primer_seq in primer_left_seqs:
-                bind_pos = self.find_binding_pos(target_seq, primer_seq,
+                bind_pos = self.find_binding_pos(seq_name, primer_seq,
                         self.primer_mismatches, False)
                 primer_left_bind_pos.update(bind_pos)
                 for pos in bind_pos:
@@ -144,7 +229,7 @@ class CoverageAnalyzer:
                                 min_primer_len_at_pos[pos], len(primer_seq))
             primer_right_bind_pos = set()
             for primer_seq in primer_right_seqs:
-                bind_pos = self.find_binding_pos(target_seq, primer_seq,
+                bind_pos = self.find_binding_pos(seq_name, primer_seq,
                         self.primer_mismatches, False)
                 primer_right_bind_pos.update(bind_pos)
 
