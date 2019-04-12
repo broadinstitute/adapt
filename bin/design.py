@@ -232,6 +232,28 @@ def prepare_alignments(args):
                 out_name = label + '.' + str(i) + '.tsv'
                 out_tsv += [os.path.join(args.out_tsv_dir, out_name)]
 
+        if args.write_input_seqs:
+            # Write the sequences that are in the alignment being used
+            # as input
+            all_seq_names = []
+            for i in range(nc):
+                fn = os.path.join(aln_file_dir.name, str(i) + '.fasta')
+                seqs = seq_io.read_fasta(fn)
+                all_seq_names += list(seqs.keys())
+            all_seq_names = sorted(all_seq_names)
+            if label is None:
+                # args.write_input_seqs gives the path to where to write
+                # the list
+                out_file = args.write_input_seqs
+            else:
+                # Determine where to write the sequence names based on
+                # the label and args.out_tsv_dir
+                out_name = label + '.input-sequences.txt'
+                out_file = os.path.join(args.out_tsv_dir, out_name)
+            with open(out_file, 'w') as fw:
+                for name in all_seq_names:
+                    fw.write(name + '\n')
+
     # Combine all years tsv (there is one per fasta file)
     if any(f is not None for f in years_tsv_per_aln):
         years_tsv = tempfile.NamedTemporaryFile()
@@ -742,6 +764,11 @@ if __name__ == "__main__":
         help=("Path to directory in which to place output TSVs; each "
               "output TSV corresponds to a cluster for the taxon in a row "
               "in the input"))
+    input_autofile_subparser.add_argument('--write-input-seqs',
+        action='store_true',
+        help=("If set, write the sequences (accession.version) being used as "
+              "input for design to a file in OUT_TSV_DIR; the filename is "
+              "determined based on the label for each taxonomy"))
 
     # Auto prepare from arguments
     input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
@@ -756,6 +783,9 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('out_tsv',
         help=("Path to output TSVs, with one per cluster; output TSVs are "
               "OUT_TSV.{cluster-number}"))
+    input_autoargs_subparser.add_argument('--write-input-seqs',
+        help=("Path to a file to which to write the sequences "
+              "(accession.version) being used as input for design"))
 
     # Add parsers for subcommands
     for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:
