@@ -354,6 +354,8 @@ def construct_neighbors(taxid):
 def add_metadata_to_neighbors_and_filter(neighbors):
     """Fetch and add metadata to neighbors.
 
+    This only fetches for neighbors that do not have metadata set.
+
     This also filters out neighbors without a known year.
 
     Args:
@@ -362,11 +364,16 @@ def add_metadata_to_neighbors_and_filter(neighbors):
     Returns:
         neighbors, with metadata included (excluding the ones filtered out)
     """
-    # Fetch metadata for each neighbor
-    metadata = fetch_metadata([n.acc for n in neighbors])
+    # Fetch metadata for each neighbor without metadata
+    to_fetch = set(n.acc for n in neighbors if n.metadata == {})
+    if len(to_fetch) > 0:
+        metadata = fetch_metadata(to_fetch)
+    else:
+        metadata = {}
     acc_to_skip = set()
     for neighbor in neighbors:
-        neighbor.metadata = metadata[neighbor.acc]
+        if neighbor.acc in to_fetch:
+            neighbor.metadata = metadata[neighbor.acc]
         if neighbor.metadata['year'] is None:
             acc_to_skip.add(neighbor.acc)
 
