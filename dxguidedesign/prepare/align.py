@@ -351,6 +351,7 @@ def _collapse_consecutive_gaps(a, b):
 
 def curate_against_ref(seqs, ref_accs, asm=None,
         aln_identity_thres=0.5, aln_identity_ccg_thres=0.6,
+        aln_identity_long_thres=(100000, 0.9, 0.9),
         remove_ref_accs=[]):
     """Curate sequences by aligning pairwise with reference sequences.
 
@@ -376,6 +377,14 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             this fraction identity to all ref_acc in ref_accs, after collapsing
             consecutive gaps to a single gap; this should be at least
             aln_identity_thres
+        aln_identity_long_thres: if set, then adjust aln_identity_thres
+            and aln_identity_ccf_thres for long genomes. This is a tuple
+            (len, a, b) such that, if the length of the longest reference
+            sequence is >= len, then aln_identity_thres takes on the
+            value a and aln_identity_ccf_thres takes on the value b. This
+            is useful to be stronger in curating long genomes (ideally,
+            removing sequences with large structural changes), which will
+            take long to align in a multiple sequence alignment
         remove_ref_accs: a list of ref_acc, specifying to not include each
             ref_acc in the output
 
@@ -388,6 +397,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
 
     # Find each ref_acc in seqs
     ref_acc_to_key = {}
+    max_ref_seq_len = 0
     for ref_acc in ref_accs:
         if ref_acc in seqs:
             ref_acc_key = ref_acc
@@ -403,6 +413,14 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                     "that the reference accession '%s' is invalid or could not "
                     "be found") % ref_acc)
         ref_acc_to_key[ref_acc] = ref_acc_key
+        max_ref_seq_len = max(max_ref_seq_len, len(seqs[ref_acc_key]))
+
+    if aln_identity_long_thres is not None:
+        len_thres, a, b = aln_identity_long_thres
+        if max_ref_seq_len >= len_thres:
+            # This is a long sequence; be more strict in curation
+            aln_identity_thres = a
+            aln_identity_ccf_thres = b
 
     seqs_filtered = OrderedDict()
     for accver, seq in seqs.items():
