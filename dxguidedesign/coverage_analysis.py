@@ -58,7 +58,7 @@ class CoverageAnalyzer:
         self.seqs_are_indexed = False
         self.seqs_index_k = None
 
-    def _index_seqs(self, k=8, stride_by_k=False):
+    def _index_seqs(self, k=6, stride_by_k=False):
         """Construct index of seqs for faster lookups of binding positions.
 
         This constructs a dictionary d. For key 'name' in self.seqs,
