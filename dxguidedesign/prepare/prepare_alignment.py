@@ -199,6 +199,11 @@ def prepare_for(taxid, segment, ref_accs, out,
             "during curation for tax %d (segment: %s) using references %s") %
             (frac_filtered, taxid, segment, ref_accs))
 
+    # Check if there are no sequences left; if that's the case, don't
+    # proceed
+    if len(seqs_unaligned_curated) == 0:
+        raise Exception("No sequences remain after curation")
+
     # Produce clusters of unaligned sequences
     logger.info(("Clustering %d sequences"), len(seqs_unaligned_curated))
     clusters = cluster.cluster_with_minhash_signatures(
