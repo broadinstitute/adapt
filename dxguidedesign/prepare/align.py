@@ -258,14 +258,20 @@ def align(seqs, am=None):
     out_fasta = tempfile.NamedTemporaryFile()
 
     # Setup arguments to mafft
-    params = ['--maxiterate', '1000', '--preservecase']
+    params = ['--preservecase', '--thread', '-1']
     max_seq_len = max(len(seq) for seq in seqs.values())
     if len(seqs) < 10 and max_seq_len < 10000:
         # Accuracy oriented
-        params += ['--localpair']
-    else:
+        params += ['--maxiterate', '1000', '--localpair']
+    elif len(seqs) > 50000 or max_seq_len > 200000:
         # Speed oriented
-        params += ['--retree', '2']
+        params += ['--retree', '1', '--maxiterate', '0']
+    elif len(seqs) > 1000 or max_seq_len > 100000:
+        # Speed oriented
+        params += ['--retree', '2', '--maxiterate', '0']
+    else:
+        # Standard
+        params += ['--retree', '2', '--maxiterate', '2']
 
     # Call mafft
     cmd = [_mafft_exec] + params + [in_fasta.name]
