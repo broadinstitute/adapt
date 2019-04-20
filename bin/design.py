@@ -6,6 +6,7 @@ from collections import defaultdict
 import logging
 import os
 import re
+import shutil
 import tempfile
 
 from dxguidedesign import alignment
@@ -253,6 +254,20 @@ def prepare_alignments(args):
             with open(out_file, 'w') as fw:
                 for name in all_seq_names:
                     fw.write(name + '\n')
+        if args.write_input_aln:
+            # Write the alignments being used as input
+            for i in range(nc):
+                fn = os.path.join(aln_file_dir.name, str(i) + '.fasta')
+                if label is None:
+                    # args.write_input_aln gives the prefix of the path to
+                    # which to write the alignment
+                    copy_path = args.write_input_aln + '.' + str(i)
+                else:
+                    # Determine where to write the alignment based on the
+                    # label and args.out_tsv_dir
+                    out_name = label + '.' + str(i) + '.fasta'
+                    copy_path = os.path.join(args.out_tsv_dir, out_name)
+                shutil.copyfile(fn, copy_path)
 
     # Combine all years tsv (there is one per fasta file)
     if any(f is not None for f in years_tsv_per_aln):
@@ -769,6 +784,12 @@ if __name__ == "__main__":
         help=("If set, write the sequences (accession.version) being used as "
               "input for design to a file in OUT_TSV_DIR; the filename is "
               "determined based on the label for each taxonomy"))
+    input_autofile_subparser.add_argument('--write-input-aln',
+        action='store_true',
+        help=("If set, write the alignments being used as "
+              "input for design to a file in OUT_TSV_DIR; the filename is "
+              "determined based on the label for each taxonomy (they are "
+              "'[label].[cluster-number].fasta'"))
 
     # Auto prepare from arguments
     input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
@@ -786,6 +807,10 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('--write-input-seqs',
         help=("Path to a file to which to write the sequences "
               "(accession.version) being used as input for design"))
+    input_autoargs_subparser.add_argument('--write-input-aln',
+        help=("Prefix of path to files to which to write the alignments "
+              "being used as input for design; filenames are "
+              "'WRITE_INPUT_ALN.[cluster-number]'"))
 
     # Add parsers for subcommands
     for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:
