@@ -465,6 +465,58 @@ class Alignment:
 
         return consensus
 
+    def determine_most_common_sequence(self, seqs_to_consider=None,
+            skip_ambiguity=False):
+        """Determine the most common of the sequences from the alignment.
+
+        If we imagine each sequence in the alignment as existing some
+        number of times in the alignment, this effectively picks the
+        mode.
+
+        Ties are broken arbitrarily but deterministically.
+
+        Args:
+            seqs_to_consider: collection of indices of sequences to use (if
+                None, use all)
+            skip_ambiguity: if True, ignore any sequences that contain
+                an ambiguity code (i.e., only count sequences where all
+                bases are 'A', 'T', 'C', or 'G')
+
+        Returns:
+            str representing the mode of the sequences (or None if there
+            are no suitable strings)
+        """
+        if seqs_to_consider is None:
+            seqs_to_consider = range(self.num_sequences)
+
+        allowed_chars = ['A', 'T', 'C', 'G', '-']
+
+        # Convert all sequences into strings, and count the number of each
+        seqs_str = self.make_list_of_seqs(seqs_to_consider=seqs_to_consider)
+        seq_count = defaultdict(int)
+        for seq_str in seqs_str:
+            if skip_ambiguity:
+                # Skip over this sequence if it contains any base that is
+                # ambiguous
+                skip = False
+                for i in range(len(seq_str)):
+                    if seq_str[i] not in allowed_chars:
+                        skip = True
+                        break
+                if skip:
+                    continue
+
+            seq_count[seq_str] += 1
+
+        if len(seq_count) == 0:
+            # There are no suitable strings (e.g., all contain ambiguity)
+            return None
+
+        # Find the most common sequence (sort to break ties deterministically)
+        counts_sorted = sorted(list(seq_count.items()))
+        max_seq_str = max(counts_sorted, key=lambda x: x[1])[0]
+        return max_seq_str
+
     def sequences_bound_by_guide(self, gd_seq, gd_start, mismatches,
             allow_gu_pairs, required_flanking_seqs=(None, None)):
         """Determine the sequences to which a guide hybridizes.

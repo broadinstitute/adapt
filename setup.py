@@ -17,5 +17,6 @@ setup(name='dxguidedesign',
       install_requires=['numpy>=1.9.0', 'scipy>=1.0.0'],
       scripts=[
         'bin/design.py',
+        'bin/design_naively.py',
         'bin/analyze_coverage.py'
       ])

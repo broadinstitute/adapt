@@ -405,6 +405,29 @@ class TestAlignment(unittest.TestCase):
         self.assertEqual(self.a.sequences_bound_by_guide('ATCG', 0, 1, False),
                          [0,1,2,3,4])
 
+    def test_most_common_sequence_simple(self):
+        self.assertEqual(self.d_seqs_aln.determine_most_common_sequence(
+                            skip_ambiguity=False),
+                         'ATCGAA')
+        self.assertEqual(self.d_seqs_aln.determine_most_common_sequence(
+                            skip_ambiguity=True),
+                         'ATCGAA')
+
+    def test_most_common_sequence_with_ambiguity(self):
+        seqs = ['ATCNAA',
+                'ATCNAA',
+                'GGGCCC',
+                'ATCGAA',
+                'ATCNAA',
+                'ATCNAA',
+                'GGGCCC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        self.assertEqual(aln.determine_most_common_sequence(skip_ambiguity=False),
+                         'ATCNAA')
+        self.assertEqual(aln.determine_most_common_sequence(skip_ambiguity=True),
+                         'GGGCCC')
+
     def test_construct_from_0_seqs(self):
         with self.assertRaises(Exception):
             seqs = []
