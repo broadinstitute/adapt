@@ -54,14 +54,23 @@ def construct_guide_naively_at_each_pos(aln, args):
                 seqs_to_consider=seqs_to_consider, skip_ambiguity=True)
 
         # Determine the fraction of the sequences that each guide binds to
-        consensus_guide_bound = aln_for_guide.sequences_bound_by_guide(
-                consensus_guide, 0, args.guide_mismatches,
-                args.allow_gu_pairs)
-        consensus_guide_frac = float(len(consensus_guide_bound)) / aln.num_sequences
-        mode_guide_bound = aln_for_guide.sequences_bound_by_guide(
-                mode_guide, 0, args.guide_mismatches,
-                args.allow_gu_pairs)
-        mode_guide_frac = float(len(mode_guide_bound)) / aln.num_sequences
+        if consensus_guide is not None:
+            consensus_guide_bound = aln_for_guide.sequences_bound_by_guide(
+                    consensus_guide, 0, args.guide_mismatches,
+                    args.allow_gu_pairs)
+            consensus_guide_frac = float(len(consensus_guide_bound)) / aln.num_sequences
+        else:
+            consensus_guide_bound = 'None'
+            consensus_guide_frac = 0
+
+        if mode_guide is not None:
+            mode_guide_bound = aln_for_guide.sequences_bound_by_guide(
+                    mode_guide, 0, args.guide_mismatches,
+                    args.allow_gu_pairs)
+            mode_guide_frac = float(len(mode_guide_bound)) / aln.num_sequences
+        else:
+            mode_guide_bound = 'None'
+            mode_guide_frac = 0
 
         d = {'consensus': (consensus_guide, consensus_guide_frac),
              'mode': (mode_guide, mode_guide_frac)}
@@ -96,6 +105,8 @@ def find_guide_in_each_window(guides, aln_length, args):
     for i in window_start_positions:
         window_start, window_end = i, i + args.window_size
         last_guide_pos = window_end - args.guide_length
+        logger.info("Searching for a guide within window [%d, %d)" %
+                (window_start, window_end))
         
         if best_guide_pos < window_start:
             # The best guide is no longer in the window; find
@@ -131,13 +142,16 @@ def main(args):
     aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
 
     # Construct a guide at each position of the alignment
+    logger.info("Constructing guides naively at each position of alignment")
     guides = construct_guide_naively_at_each_pos(aln, args)
 
     # Find the best guide in each window (for both the
     # consensus and mode approach)
+    logger.info("Searching for consensus guides")
     consensus_guides_in_window = find_guide_in_each_window(
             [guides[i]['consensus'] for i in range(len(guides))],
             aln.seq_length, args)
+    logger.info("Searching for mode guides")
     mode_guides_in_window = find_guide_in_each_window(
             [guides[i]['mode'] for i in range(len(guides))],
             aln.seq_length, args)

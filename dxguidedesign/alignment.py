@@ -483,7 +483,8 @@ class Alignment:
                 bases are 'A', 'T', 'C', or 'G')
 
         Returns:
-            str representing the mode of the sequences
+            str representing the mode of the sequences (or None if there
+            are no suitable strings)
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
@@ -506,6 +507,10 @@ class Alignment:
                     continue
 
             seq_count[seq_str] += 1
+
+        if len(seq_count) == 0:
+            # There are no suitable strings (e.g., all contain ambiguity)
+            return None
 
         # Find the most common sequence (sort to break ties deterministically)
         counts_sorted = sorted(list(seq_count.items()))
