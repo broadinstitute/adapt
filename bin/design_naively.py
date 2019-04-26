@@ -47,11 +47,18 @@ def construct_guide_naively_at_each_pos(aln, args):
         seqs_with_gap = set(aln_for_guide.seqs_with_gap())
         seqs_to_consider = set(range(aln.num_sequences)) - seqs_with_gap
 
-        # Construct guides
-        consensus_guide = aln_for_guide.determine_consensus_sequence(
-                seqs_to_consider=seqs_to_consider)
-        mode_guide = aln_for_guide.determine_most_common_sequence(
-                seqs_to_consider=seqs_to_consider, skip_ambiguity=True)
+        frac_with_gap = float(len(seqs_with_gap)) / aln.num_sequences
+        if frac_with_gap >= args.skip_gaps:
+            # Do not bother designing a guide here; there are
+            # too many sequences with a gap
+            consensus_guide = None
+            mode_guide = None
+        else:
+            # Construct guides
+            consensus_guide = aln_for_guide.determine_consensus_sequence(
+                    seqs_to_consider=seqs_to_consider)
+            mode_guide = aln_for_guide.determine_most_common_sequence(
+                    seqs_to_consider=seqs_to_consider, skip_ambiguity=True)
 
         # Determine the fraction of the sequences that each guide binds to
         if consensus_guide is not None:
@@ -60,7 +67,7 @@ def construct_guide_naively_at_each_pos(aln, args):
                     args.allow_gu_pairs)
             consensus_guide_frac = float(len(consensus_guide_bound)) / aln.num_sequences
         else:
-            consensus_guide_bound = 'None'
+            consensus_guide = 'None'
             consensus_guide_frac = 0
 
         if mode_guide is not None:
@@ -69,7 +76,7 @@ def construct_guide_naively_at_each_pos(aln, args):
                     args.allow_gu_pairs)
             mode_guide_frac = float(len(mode_guide_bound)) / aln.num_sequences
         else:
-            mode_guide_bound = 'None'
+            mode_guide = 'None'
             mode_guide_frac = 0
 
         d = {'consensus': (consensus_guide, consensus_guide_frac),
@@ -203,6 +210,11 @@ if __name__ == "__main__":
                   "target and C in an output guide sequence matches T "
                   "in the target (since the synthesized guide is the reverse "
                   "complement of the output guide sequence)"))
+
+    # Options to skip
+    parser.add_argument('--skip-gaps', type=float, default=0.5,
+            help=("If this fraction or more of sequences at a position contain "
+                  "a gap character, do not design a guide there"))
 
     # Log levels
     parser.add_argument("--debug",
