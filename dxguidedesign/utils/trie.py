@@ -178,14 +178,17 @@ class Node:
 
         return results
 
-    def insert(self, s, leaf_info):
+    def insert(self, s, leaf_info, replace=False):
         """Insert a string into the trie rooted at this node.
 
         Args:
             s: string to insert
             leaf_info: object to store in the leaf; this must support
                 the following methods: extend(), remove(), is_empty(),
-                __contains__()
+                __contains__(), copy()
+            replace: if True, instead of calling x.leaf_info.extend(leaf_info)
+                for an existing leaf x, this replaces x.leaf_info with
+                leaf_info
         """
         curr_node = self
         for char in s:
@@ -214,8 +217,11 @@ class Node:
         if curr_node.leaf_info is not None:
             # A string s was also present in the trie; the object
             # curr_node.leaf_info should support a merge with the
-            # new leaf_info to be added
-            curr_node.leaf_info.extend(leaf_info)
+            # new leaf_info to be added (via extend())
+            if replace:
+                curr_node.leaf_info = leaf_info
+            else:
+                curr_node.leaf_info.extend(leaf_info)
         else:
             curr_node.leaf_info = leaf_info
 
@@ -400,6 +406,7 @@ class Trie:
 
     def __init__(self):
         self.root_node = Node(None)
+        self.masked = {}
 
     def insert(self, kvs):
         """Insert keys/values into the trie.
@@ -434,7 +441,45 @@ class Trie:
         return self.root_node.query(q, mismatches=mismatches,
                 gu_pairing=gu_pairing)
 
-    # TODO: mask objects x by calling self.root_node.traverse_and_find(x),
-    # storing the [(s, li)] that result, and calling self.root_node.traverse_and_remove(x)
-    # TODO: unmask all objects by calling self.root_node.insert(s, li) for all
-    # of the saved masked keys/values
+    def mask(self, d):
+        """Mask an object from all leaves and cleanup trie.
+
+        This calls x.leaf_info.remove(d) for all leaves x in the trie,
+        and cleans up the trie (i.e., removing paths that do not lead
+        to leaves).
+
+        This additionally saves information about the masked objects, so
+        that they can be unmasked (re-inserted into the trie) later.
+
+        Args:
+            d: object to remove from each leaf_info
+        """
+        # Find all (s, li) corresponding to leaves that contain d in their
+        # leaf_info; li is the full leaf_info and may contain objects
+        # that were not masked/removed but this is ok because they can
+        # be re-inserted with a replacement operation
+        masked_leaves = self.root_node.traverse_and_find(d)
+        for s, li in masked_leaves:
+            if s in self.masked:
+                # If mask() is called successively, a more recent li could
+                # replace an older one; instead, merge them via extend()
+                self.masked[s].extend(li)
+            else:
+                # Make a copy of li because it will be modified below by
+                # traverse_and_remove()
+                self.masked[s] = li.copy()
+
+        # Remove d from each leaf, and cleanup the trie
+        self.root_node.traverse_and_remove(d)
+
+    def unmask_all(self):
+        """Unmask all masked objects.
+        """
+        for s, li in self.masked.items():
+            # The leaf in the trie corresponding to string s, which had
+            # leaf_info li, had objects that were masked; replace the
+            # current one with li (an old copy)
+            self.root_node.insert(s, li, replace=True)
+
+        # Nothing is masked anymore
+        self.masked = {}

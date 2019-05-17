@@ -20,6 +20,8 @@ class LeafInfo:
             self.l.remove(x)
     def is_empty(self):
         return len(self.l) == 0
+    def copy(self):
+        return LeafInfo(list(self.l))
     def __contains__(self, x):
         return x in self.l
     def __eq__(self, other):
@@ -163,6 +165,31 @@ class TestNode(unittest.TestCase):
                 'ACC': LeafInfo([3,6]),
                 'ACG': LeafInfo([4]),
                 'GTG': LeafInfo([5]),
+                'TCC': LeafInfo([7])}
+        for query in all_3mers():
+            if query in true:
+                expected = [true[query]]
+            else:
+                expected = []
+            self.assertCountEqual(r.query(query, 0, False), expected)
+
+    def test_query_no_mismatches_without_gu_with_insert_replace(self):
+        r = trie.Node(None)
+        r.insert('AAA', LeafInfo([1]), replace=True)
+        r.insert('GGG', LeafInfo([2]), replace=True)
+        r.insert('ACC', LeafInfo([3]), replace=True)
+        r.insert('ACG', LeafInfo([4]), replace=True)
+        r.insert('GTG', LeafInfo([5]), replace=True)
+        r.insert('ACC', LeafInfo([6]), replace=True)
+        r.insert('TCC', LeafInfo([7]), replace=True)
+        r.insert('GTG', LeafInfo([8]), replace=True)
+        r.insert('ACG', LeafInfo([9]))
+
+        true = {'AAA': LeafInfo([1]),
+                'GGG': LeafInfo([2]),
+                'ACC': LeafInfo([6]),
+                'ACG': LeafInfo([4,9]),
+                'GTG': LeafInfo([8]),
                 'TCC': LeafInfo([7])}
         for query in all_3mers():
             if query in true:
@@ -454,3 +481,89 @@ class TestTrie(unittest.TestCase):
             else:
                 expected = []
             self.assertCountEqual(t.query(query, 0, False), expected)
+
+    def test_mask_and_unmask(self):
+        t = trie.Trie()
+
+        t.insert([('AAA', LeafInfo([1])),
+                  ('GGG', LeafInfo([2])),
+                  ('ACC', LeafInfo([3])),
+                  ('ACG', LeafInfo([4])),
+                  ('GTG', LeafInfo([5])),
+                  ('ACC', LeafInfo([6])),
+                  ('TCC', LeafInfo([7])),
+                  ('GAA', LeafInfo([2])),
+                  ('GCC', LeafInfo([5])),
+                  ('GCC', LeafInfo([7]))])
+
+        true = {'AAA': LeafInfo([1]),
+                'GGG': LeafInfo([2]),
+                'ACC': LeafInfo([3,6]),
+                'ACG': LeafInfo([4]),
+                'GTG': LeafInfo([5]),
+                'TCC': LeafInfo([7]),
+                'GAA': LeafInfo([2]),
+                'GCC': LeafInfo([5,7])}
+        true_orig = dict(true)
+        def check_contents():
+            # Check if the contents are as expected
+            for query in all_3mers():
+                if query in true:
+                    expected = [true[query]]
+                else:
+                    expected = []
+                self.assertCountEqual(t.query(query, 0, False), expected)
+
+        # Start by checking contents
+        check_contents()
+
+        # Repeatedly mask and check contents
+        t.mask(3)
+        true['ACC'] = LeafInfo([6])
+        check_contents()
+
+        t.mask(100)
+        check_contents()
+
+        t.mask(3)
+        check_contents()
+
+        t.mask(1)
+        del true['AAA']
+        check_contents()
+
+        t.mask(2)
+        del true['GGG']
+        del true['GAA']
+        check_contents()
+
+        t.mask(5)
+        true['GCC'] = LeafInfo([7])
+        del true['GTG']
+        check_contents()
+
+        t.mask(7)
+        del true['TCC']
+        del true['GCC']
+        check_contents()
+
+        t.mask(4)
+        del true['ACG']
+        check_contents()
+
+        t.mask(3)
+        check_contents()
+
+        t.mask(6)
+        del true['ACC']
+        check_contents()
+
+        t.mask(1)
+        check_contents()
+
+        # Unmask everything
+        t.unmask_all()
+
+        # Check contents
+        true = true_orig
+        check_contents()
