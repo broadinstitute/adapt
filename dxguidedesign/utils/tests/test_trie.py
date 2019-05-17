@@ -8,7 +8,7 @@ from dxguidedesign.utils import trie
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-class LeafInfo:
+class LeafInfo(trie.LeafInfo):
     """Mock class (wrapping a list) to use for leaf_info.
     """
     def __init__(self, l=[]):

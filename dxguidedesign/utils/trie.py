@@ -14,7 +14,24 @@ much of a benefit because: (a) k-mers are similar but with mutations throughout;
 would be insertions/deletions more tricky.
 """
 
+from abc import ABCMeta, abstractmethod
+
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
+
+
+class LeafInfo(metaclass=ABCMeta):
+    """Abstract base class of information stored at each leaf of a trie.
+    """
+    @abstractmethod
+    def extend(self, other): raise NotImplementedError
+    @abstractmethod
+    def remove(self, x): raise NotImplementedError
+    @abstractmethod
+    def is_empty(self): raise NotImplementedError
+    @abstractmethod
+    def __contains__(self, x): raise NotImplementedError
+    @abstractmethod
+    def copy(self): raise NotImplementedError
 
 
 class Node:
@@ -41,7 +58,8 @@ class Node:
         self.children = [None, None, None, None]
 
         # If this is a leaf, store a pointer to an object giving
-        # more information about the string
+        # more information about the string; this object must be a
+        # subclass of LeafInfo
         self.leaf_info = None
 
     def children_of(self, char, gu_pairing=True):
@@ -183,9 +201,8 @@ class Node:
 
         Args:
             s: string to insert
-            leaf_info: object to store in the leaf; this must support
-                the following methods: extend(), remove(), is_empty(),
-                __contains__(), copy()
+            leaf_info: object to store in the leaf; this must be a
+                subclass of LeafInfo and implement its abstract methods
             replace: if True, instead of calling x.leaf_info.extend(leaf_info)
                 for an existing leaf x, this replaces x.leaf_info with
                 leaf_info
