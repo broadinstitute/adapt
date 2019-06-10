@@ -151,7 +151,7 @@ class GuideSearcher:
             k=min(10, int(guide_length/2)))
 
     def _construct_guide_memoized(self, start, seqs_to_consider,
-            num_needed=None, use_last=False):
+            num_needed=None, use_last=False, memoize_threshold=0.1):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
         Args:
@@ -164,11 +164,47 @@ class GuideSearcher:
             use_last: if set, check for a memoized result by using the last
                 key constructed (it is assumed that seqs_to_consider and
                 num_needed are identical to the last provided values)
+            memoize_threshold: only memoize results when the total fraction
+                of sequences in seqs_to_consider (compared to the whole
+                alignment) exceeds this threshold
 
         Returns:
             result of alignment.Alignment.construct_guide() (except the
             covered_seqs returned here is a set, rather than a list)
         """
+        def construct_p():
+            try:
+                p = self.aln.construct_guide(start, self.guide_length,
+                        seqs_to_consider, self.mismatches, self.allow_gu_pairs,
+                        self.guide_clusterer, num_needed=num_needed,
+                        missing_threshold=self.missing_threshold,
+                        guide_is_suitable_fn=self.guide_is_suitable_fn,
+                        required_flanking_seqs=self.required_flanking_seqs)
+            except alignment.CannotConstructGuideError:
+                p = None
+            return p
+
+        # Only memoize results if this is being computed for a sufficiently
+        # high fraction of sequences; for cases where seqs_to_consider
+        # represents a small fraction of all sequences, we are less likely
+        # to re-encounter the same seqs_to_consider in the future (so
+        # there is little need to memoize the result) and the call to
+        # construct_guide() should be relatively quick (so it is ok to have
+        # to repeat the call if we do re-encounter the same seqs_to_consider)
+        num_seqs_to_consider = sum(len(v) for k, v in seqs_to_consider.items())
+        frac_seqs_to_consider = float(num_seqs_to_consider) / self.aln.num_sequences
+        should_memoize = frac_seqs_to_consider >= memoize_threshold
+
+        if not should_memoize:
+            # Construct the guide and return it; do not memoize the result
+            p = construct_p()
+            if p is not None:
+                gd, covered_seqs = p
+                # Convert covered_seqs in p to a set to be consistent with the
+                # below
+                p = (gd, set(covered_seqs))
+            return p
+
         if use_last:
             # key (defined below) can be large and slow to hash; therefore,
             # assume that the last computed key is identical to the one that
@@ -199,10 +235,9 @@ class GuideSearcher:
                 inner_dict = {}
                 self._memoized_guides[key] = inner_dict
 
-        # TODO set threshold so that we only store calls where
-        # seqs_to_consider is a large enough fraction of all seqs
-
         if start in inner_dict:
+            # The result has been memoized
+
             p_memoized = inner_dict[start]
 
             # covered_seqs in p was compressed before memoizing it; decompress
@@ -214,14 +249,13 @@ class GuideSearcher:
                 covered_seqs = index_compress.decompress_ranges(covered_seqs_compressed)
                 p = (gd, covered_seqs)
         else:
-            try:
-                p = self.aln.construct_guide(start, self.guide_length,
-                        seqs_to_consider, self.mismatches, self.allow_gu_pairs,
-                        self.guide_clusterer, num_needed=num_needed,
-                        missing_threshold=self.missing_threshold,
-                        guide_is_suitable_fn=self.guide_is_suitable_fn,
-                        required_flanking_seqs=self.required_flanking_seqs)
+            # The result is not memoized; compute it and memoize it
 
+            p = construct_p()
+
+            if p is None:
+                p_to_memoize = None
+            else:
                 # Compress covered_seqs in p before memoizing it, because it
                 # may contain mostly contiguous indices
                 gd, covered_seqs = p
@@ -232,9 +266,6 @@ class GuideSearcher:
                 # returns a set, and a set is needed anyway by the caller of
                 # this method, be consistent and use a set for covered_seqs
                 p = (gd, set(covered_seqs))
-            except alignment.CannotConstructGuideError:
-                p = None
-                p_to_memoize = None
             inner_dict[start] = p_to_memoize
 
         self._memoized_guides_last_inner_dict = inner_dict
