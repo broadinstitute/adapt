@@ -192,6 +192,28 @@ class TestGuideSearch(unittest.TestCase):
         for key in self.a._memoized_guides.keys():
             self.assertNotIn(100, self.a._memoized_guides[key])
 
+    def test_construct_guide_memoized_a_use_last(self):
+        # Use the use_last argument
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 5}, use_last=False),
+                         ('ATCG', [0,1,2,3]))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=False),
+                         ('ATCG', [0,1,2,3]))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=True),
+                         ('ATCG', [0,1,2,3]))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=False),
+                         ('ATCG', [0,1,2,3]))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=True),
+                         ('ATCG', [0,1,2,3]))
+
+        self.a._cleanup_memoized_guides(0)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(0, self.a._memoized_guides[key])
+
     def test_find_optimal_guide_in_window(self):
         self.assertEqual(self.c._find_optimal_guide_in_window(
                             1, 1 + self.c_window_size,

@@ -102,6 +102,7 @@ class GuideSearcher:
         # Because calls to alignment.Alignment.construct_guide() are expensive
         # and are repeated very often, memoize the output
         self._memoized_guides = defaultdict(dict)
+        self._memoized_guides_last_inner_dict = None
 
         # Save the positions of selected guides in the alignment so these can
         # be easily revisited. In case a guide sequence appears in multiple
@@ -149,7 +150,7 @@ class GuideSearcher:
             k=min(10, int(guide_length/2)))
 
     def _construct_guide_memoized(self, start, seqs_to_consider,
-            num_needed=None):
+            num_needed=None, use_last=False):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
         Args:
@@ -159,34 +160,49 @@ class GuideSearcher:
             num_needed: dict mapping universe group ID to the number of
                 sequences from the group that are left to cover in order to
                 achieve the desired partial cover
+            use_last: if set, check for a memoized result by using the last
+                key constructed (it is assumed that seqs_to_consider and
+                num_needed are identical to the last provided values)
 
         Returns:
             result of alignment.Alignment.construct_guide()
         """
-        # Make frozen version of both dicts; note that values in
-        # seqs_to_consider may be sets that need to be frozen
-        seqs_to_consider_frozen = set()
-        for k, v in seqs_to_consider.items():
-            seqs_to_consider_frozen.add((k, frozenset(v)))
-        seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
-        if num_needed is None:
-            num_needed_frozen = None
+        if use_last:
+            # key (defined below) can be large and slow to hash; therefore,
+            # assume that the last computed key is identical to the one that
+            # would be computed here (i.e., seqs_to_consider and num_needed
+            # are the same), and use the last inner dict to avoid having to hash
+            # key
+            assert self._memoized_guides_last_inner_dict is not None
+            inner_dict = self._memoized_guides_last_inner_dict
         else:
-            num_needed_frozen = frozenset(num_needed.items())
+            # Make frozen version of both dicts; note that values in
+            # seqs_to_consider may be sets that need to be frozen
+            seqs_to_consider_frozen = set()
+            n = 0
+            for k, v in seqs_to_consider.items():
+                seqs_to_consider_frozen.add((k, frozenset(v)))
+                n += len(v)
+            seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
+            if num_needed is None:
+                num_needed_frozen = None
+            else:
+                num_needed_frozen = frozenset(num_needed.items())
 
-        # TODO self._last_memoized_guides = self._memoized_guides[key] and
-        # add an argument to this
-        # function (use_last) to just use self._last_memoized_guides
-        # to avoid having to hash seqs_to_consider and num_needed
+            key = (seqs_to_consider_frozen, num_needed_frozen)
+            if key in self._memoized_guides:
+                inner_dict = self._memoized_guides[key]
+            else:
+                inner_dict = {}
+                self._memoized_guides[key] = inner_dict
+
         # TODO compress seqs_to_consider and the covered_seqs output of
         # construct_guide
         # TODO set threshold so that we only store calls where
         # seqs_to_consider is a large enough fraction of all seqs
 
-        key = (seqs_to_consider_frozen, num_needed_frozen)
-        if (key in self._memoized_guides and
-                start in self._memoized_guides[key]):
-            return self._memoized_guides[key][start]
+        if start in inner_dict:
+            p = inner_dict[start]
         else:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
@@ -197,8 +213,10 @@ class GuideSearcher:
                         required_flanking_seqs=self.required_flanking_seqs)
             except alignment.CannotConstructGuideError:
                 p = None
-            self._memoized_guides[key][start] = p
-            return p
+            inner_dict[start] = p
+
+        self._memoized_guides_last_inner_dict = inner_dict
+        return p
 
     def _cleanup_memoized_guides(self, pos):
         """Remove a position that is stored in self._memoized_guides.
@@ -284,8 +302,15 @@ class GuideSearcher:
                 # so skip this guide
                 p = None
             else:
+                # After the first call to self._construct_guide_memoized in
+                # this window, seqs_to_consider and num_needed will all be
+                # the same as the first call, so tell the function to
+                # take advantage of this (by avoiding hashing these
+                # dicts)
+                use_last = pos > start
+
                 p = self._construct_guide_memoized(pos, seqs_to_consider,
-                    num_needed)
+                    num_needed, use_last=use_last)
 
             if p is None:
                 # There is no suitable guide at pos
