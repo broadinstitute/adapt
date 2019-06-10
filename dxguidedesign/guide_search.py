@@ -6,6 +6,7 @@ import logging
 import math
 
 from dxguidedesign import alignment
+from dxguidedesign.utils import index_compress
 from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -165,7 +166,8 @@ class GuideSearcher:
                 num_needed are identical to the last provided values)
 
         Returns:
-            result of alignment.Alignment.construct_guide()
+            result of alignment.Alignment.construct_guide() (except the
+            covered_seqs returned here is a set, rather than a list)
         """
         if use_last:
             # key (defined below) can be large and slow to hash; therefore,
@@ -179,10 +181,11 @@ class GuideSearcher:
             # Make frozen version of both dicts; note that values in
             # seqs_to_consider may be sets that need to be frozen
             seqs_to_consider_frozen = set()
-            n = 0
             for k, v in seqs_to_consider.items():
-                seqs_to_consider_frozen.add((k, frozenset(v)))
-                n += len(v)
+                # Compress the sequence indices, which, in many cases, are
+                # mostly contiguous
+                v_compressed = index_compress.compress_mostly_contiguous(v)
+                seqs_to_consider_frozen.add((k, frozenset(v_compressed)))
             seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
             if num_needed is None:
                 num_needed_frozen = None
@@ -196,13 +199,20 @@ class GuideSearcher:
                 inner_dict = {}
                 self._memoized_guides[key] = inner_dict
 
-        # TODO compress seqs_to_consider and the covered_seqs output of
-        # construct_guide
         # TODO set threshold so that we only store calls where
         # seqs_to_consider is a large enough fraction of all seqs
 
         if start in inner_dict:
-            p = inner_dict[start]
+            p_memoized = inner_dict[start]
+
+            # covered_seqs in p was compressed before memoizing it; decompress
+            # it before returning it
+            if p_memoized is None:
+                p = None
+            else:
+                gd, covered_seqs_compressed = p_memoized
+                covered_seqs = index_compress.decompress_ranges(covered_seqs_compressed)
+                p = (gd, covered_seqs)
         else:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
@@ -211,9 +221,21 @@ class GuideSearcher:
                         missing_threshold=self.missing_threshold,
                         guide_is_suitable_fn=self.guide_is_suitable_fn,
                         required_flanking_seqs=self.required_flanking_seqs)
+
+                # Compress covered_seqs in p before memoizing it, because it
+                # may contain mostly contiguous indices
+                gd, covered_seqs = p
+                covered_seqs_compressed = index_compress.compress_mostly_contiguous(covered_seqs)
+                p_to_memoize = (gd, covered_seqs_compressed)
+
+                # Since index_compress.decompress_ranges(covered_seqs_compressed)
+                # returns a set, and a set is needed anyway by the caller of
+                # this method, be consistent and use a set for covered_seqs
+                p = (gd, set(covered_seqs))
             except alignment.CannotConstructGuideError:
                 p = None
-            inner_dict[start] = p
+                p_to_memoize = None
+            inner_dict[start] = p_to_memoize
 
         self._memoized_guides_last_inner_dict = inner_dict
         return p
@@ -318,7 +340,6 @@ class GuideSearcher:
                     max_guide_cover = (None, set(), None, 0)
             else:
                 gd, covered_seqs = p
-                covered_seqs = set(covered_seqs)
 
                 # Calculate a score for this guide based on the partial
                 # coverage it achieves across the groups
