@@ -107,7 +107,8 @@ class PrimerSearcher(guide_search.GuideSearcher):
         super().__init__(aln, primer_length, mismatches,
                          cover_frac, missing_data_params,
                          seq_groups=seq_groups,
-                         allow_gu_pairs=False)
+                         allow_gu_pairs=False,
+                         do_not_memoize_guides=True)
 
     def seqs_bound_by_primers(self, primers):
         """Determine the sequences in the alignment bound by the primers.

@@ -24,7 +24,8 @@ class GuideSearcher:
     def __init__(self, aln, guide_length, mismatches, cover_frac,
                  missing_data_params, guide_is_suitable_fn=None,
                  seq_groups=None, required_guides={}, blacklisted_ranges={},
-                 allow_gu_pairs=False, required_flanking_seqs=(None, None)):
+                 allow_gu_pairs=False, required_flanking_seqs=(None, None),
+                 do_not_memoize_guides=False):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -64,6 +65,10 @@ class GuideSearcher:
                 the guide (in the target, not the guide) that must be
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
+            do_not_memoize_guides: if True, never memoize the results of
+                aln.construct_guide() and always compute the guide (this can
+                be useful if we know the memoized result will never be used
+                and memoizing it may be slow)
         """
         if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
@@ -104,6 +109,7 @@ class GuideSearcher:
         # and are repeated very often, memoize the output
         self._memoized_guides = defaultdict(dict)
         self._memoized_guides_last_inner_dict = None
+        self.do_not_memoize_guides = do_not_memoize_guides
 
         # Save the positions of selected guides in the alignment so these can
         # be easily revisited. In case a guide sequence appears in multiple
@@ -195,7 +201,7 @@ class GuideSearcher:
         frac_seqs_to_consider = float(num_seqs_to_consider) / self.aln.num_sequences
         should_memoize = frac_seqs_to_consider >= memoize_threshold
 
-        if not should_memoize:
+        if not should_memoize or self.do_not_memoize_guides:
             # Construct the guide and return it; do not memoize the result
             p = construct_p()
             if p is not None:
