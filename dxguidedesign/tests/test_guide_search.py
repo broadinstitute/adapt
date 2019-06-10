@@ -115,22 +115,31 @@ class TestGuideSearch(unittest.TestCase):
                       [('ATCG', [2,3]), ('ACCG', [2,3]), ('AGCG', [4])])
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {4}}),
                          ('AGCG', [4]))
-        self.assertIn(0, self.a._memoized_guides)
-        self.assertIn((frozenset({(0, frozenset({0,1,2,3,4}))}), None),
-            self.a._memoized_guides[0])
-        self.assertIn((frozenset({(0, frozenset({2,3,4}))}), None),
-            self.a._memoized_guides[0])
-        self.assertIn((frozenset({(0, frozenset({4}))}), None),
-            self.a._memoized_guides[0])
+
+        key = (frozenset({(0, frozenset({0,1,2,3,4}))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(0, self.a._memoized_guides[key])
+
+        key = (frozenset({(0, frozenset({2,3,4}))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(0, self.a._memoized_guides[key])
+
+        key = (frozenset({(0, frozenset({4}))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(0, self.a._memoized_guides[key])
+
         self.assertEqual(self.a._construct_guide_memoized(2, {0: {0,1,2,3,4}}),
                          ('CGAA', [0,2,4]))
         self.assertEqual(self.a._construct_guide_memoized(2, {0: {3}}),
                          ('CGAT', [3]))
-        self.assertIn(2, self.a._memoized_guides)
-        self.assertIn((frozenset({(0, frozenset({0,1,2,3,4}))}), None),
-            self.a._memoized_guides[2])
-        self.assertIn((frozenset({(0, frozenset({3}))}), None),
-            self.a._memoized_guides[2])
+
+        key = (frozenset({(0, frozenset({0,1,2,3,4}))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(2, self.a._memoized_guides[key])
+
+        key = (frozenset({(0, frozenset({3}))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(2, self.a._memoized_guides[key])
 
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}}),
                          ('ATCG', [0,1,2,3]))
@@ -144,9 +153,12 @@ class TestGuideSearch(unittest.TestCase):
                          ('CGAT', [3]))
 
         self.a._cleanup_memoized_guides(2)
-        self.assertNotIn(2, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(2, self.a._memoized_guides[key])
+
         self.a._cleanup_memoized_guides(100)
-        self.assertNotIn(100, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(100, self.a._memoized_guides[key])
 
     def test_construct_guide_memoized_b(self):
         self.assertIsNone(self.b._construct_guide_memoized(0, {0: {1}}))
@@ -173,9 +185,12 @@ class TestGuideSearch(unittest.TestCase):
                          ('ATCG', [0,1,2,3]))
 
         self.a._cleanup_memoized_guides(0)
-        self.assertNotIn(0, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(0, self.a._memoized_guides[key])
+
         self.a._cleanup_memoized_guides(100)
-        self.assertNotIn(100, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(100, self.a._memoized_guides[key])
 
     def test_find_optimal_guide_in_window(self):
         self.assertEqual(self.c._find_optimal_guide_in_window(

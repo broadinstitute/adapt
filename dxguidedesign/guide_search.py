@@ -174,10 +174,19 @@ class GuideSearcher:
         else:
             num_needed_frozen = frozenset(num_needed.items())
 
+        # TODO self._last_memoized_guides = self._memoized_guides[key] and
+        # add an argument to this
+        # function (use_last) to just use self._last_memoized_guides
+        # to avoid having to hash seqs_to_consider and num_needed
+        # TODO compress seqs_to_consider and the covered_seqs output of
+        # construct_guide
+        # TODO set threshold so that we only store calls where
+        # seqs_to_consider is a large enough fraction of all seqs
+
         key = (seqs_to_consider_frozen, num_needed_frozen)
-        if (start in self._memoized_guides and
-                key in self._memoized_guides[start]):
-            return self._memoized_guides[start][key]
+        if (key in self._memoized_guides and
+                start in self._memoized_guides[key]):
+            return self._memoized_guides[key][start]
         else:
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
@@ -188,7 +197,7 @@ class GuideSearcher:
                         required_flanking_seqs=self.required_flanking_seqs)
             except alignment.CannotConstructGuideError:
                 p = None
-            self._memoized_guides[start][key] = p
+            self._memoized_guides[key][start] = p
             return p
 
     def _cleanup_memoized_guides(self, pos):
@@ -200,8 +209,15 @@ class GuideSearcher:
             pos: start position that no longer needs to be memoized (i.e., where
                 guides covering at that start position are no longer needed)
         """
-        if pos in self._memoized_guides:
-            del self._memoized_guides[pos]
+        keys_to_rm = set()
+        for key in self._memoized_guides.keys():
+            if pos in self._memoized_guides[key]:
+                del self._memoized_guides[key][pos]
+            if len(self._memoized_guides[key]) == 0:
+                keys_to_rm.add(key)
+
+        for key in keys_to_rm:
+            del self._memoized_guides[key]
 
     def _guide_overlaps_blacklisted_range(self, gd_pos):
         """Determine whether a guide would overlap a blacklisted range.
