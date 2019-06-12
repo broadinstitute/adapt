@@ -109,6 +109,8 @@ class GuideSearcher:
         # and are repeated very often, memoize the output
         self._memoized_guides = defaultdict(dict)
         self._memoized_guides_last_inner_dict = None
+        self._memoized_guides_last_inner_dict_key = None
+        self._memoized_guides_num_removed_since_last_resize = 0
         self.do_not_memoize_guides = do_not_memoize_guides
 
         # Save the positions of selected guides in the alignment so these can
@@ -240,6 +242,7 @@ class GuideSearcher:
             else:
                 inner_dict = {}
                 self._memoized_guides[key] = inner_dict
+            self._memoized_guides_last_inner_dict_key = key
 
         if start in inner_dict:
             # The result has been memoized
@@ -277,24 +280,64 @@ class GuideSearcher:
         self._memoized_guides_last_inner_dict = inner_dict
         return p
 
-    def _cleanup_memoized_guides(self, pos):
+    def _cleanup_memoized_guides(self, pos, frac_removed_until_resize=0.1):
         """Remove a position that is stored in self._memoized_guides.
 
         This should be called when the position no longer needs to be stored.
 
+        Python only resizes dicts on insertions (and, seemingly, only after
+        reaching a sufficiently large size); see
+        https://github.com/python/cpython/blob/master/Objects/dictnotes.txt
+        In this case, it may never resize or resize too infrequently,
+        especially for the inner dicts. It appears in many cases to never
+        resize. Therefore, this "resizes" the self._memoized_guides dict at
+        certain cleanups by copying all the content over to a new dict,
+        effectively forcing it to shrink its memory usage. It does this
+        by computing the number of elements that have been removed from the
+        data structure relative to its current total number of elements,
+        and resizing when this fraction exceeds `frac_removed_until_resize`.
+        Since the total number of elements should stay roughly constant
+        as we scan along the alignment (i.e., pos increases), this fraction
+        should grow over time. At each resizing, the fraction will drop back
+        down to 0.
+
         Args:
             pos: start position that no longer needs to be memoized (i.e., where
                 guides covering at that start position are no longer needed)
+            frac_removed_until_resize: resize the self._memoized_guides
+                data structure when the total number of elements removed
+                due to cleanup exceeds this fraction of the total size
         """
         keys_to_rm = set()
         for key in self._memoized_guides.keys():
             if pos in self._memoized_guides[key]:
                 del self._memoized_guides[key][pos]
+                self._memoized_guides_num_removed_since_last_resize += 1
             if len(self._memoized_guides[key]) == 0:
                 keys_to_rm.add(key)
 
         for key in keys_to_rm:
             del self._memoized_guides[key]
+
+        # Decide whether to resize
+        total_size = sum(len(self._memoized_guides[k])
+                for k in self._memoized_guides.keys())
+        if total_size > 0:
+            frac_removed = float(self._memoized_guides_num_removed_since_last_resize) / total_size
+            logger.debug(("Deciding to resize with a fraction %f removed "
+                "(%d / %d)"), frac_removed,
+                self._memoized_guides_num_removed_since_last_resize,
+                total_size)
+            if frac_removed >= frac_removed_until_resize:
+                # Resize self._memoized_guides by copying all content to a new dict
+                new_memoized_guides = defaultdict(dict)
+                for key in self._memoized_guides.keys():
+                    for i in self._memoized_guides[key].keys():
+                        new_memoized_guides[key][i] = self._memoized_guides[key][i]
+                    if key == self._memoized_guides_last_inner_dict_key:
+                        self._memoized_guides_last_inner_dict = new_memoized_guides[key]
+                self._memoized_guides = new_memoized_guides
+                self._memoized_guides_num_removed_since_last_resize = 0
 
     def _guide_overlaps_blacklisted_range(self, gd_pos):
         """Determine whether a guide would overlap a blacklisted range.
