@@ -398,7 +398,8 @@ def curate_against_ref(seqs, ref_accs, asm=None,
         dict mapping sequence accession.version to sequences, filtered by
         ones that can align reasonably well with some ref_acc in ref_accs
     """
-    logger.debug(("Curating %d sequences against references %s") %
+    logger.info(("Curating %d sequences against references %s "
+        "(this can take a while if alignment stats are not memoized)") %
         (len(seqs), ref_accs))
 
     # Find each ref_acc in seqs
