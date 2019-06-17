@@ -421,7 +421,8 @@ def design_for_id(args):
             ts = target_search.TargetSearcher(ps, gs,
                 max_primers_at_site=args.max_primers_at_site,
                 max_target_length=args.max_target_length,
-                cost_weights=args.cost_fn_weights)
+                cost_weights=args.cost_fn_weights,
+                guides_should_cover_over_all_seqs=args.gp_over_all_seqs)
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets)
         else:
@@ -503,8 +504,8 @@ if __name__ == "__main__":
               "by the selected guides. If complete-targets is used, then "
               "this is the fraction of sequences *that are bound by the "
               "primers* that must be covered (so, in total, >= "
-              "(GUIDE_COVER_FRAC * PRIMER_COVER_FRAC) sequences will be "
-              "covered)."))
+              "(GUIDE_COVER_FRAC * (2 * PRIMER_COVER_FRAC - 1)) sequences will "
+              "be covered)."))
 
     # Automatically setting desired coverage of target sequences based
     # on their year
@@ -691,6 +692,17 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('--best-n-targets', type=int, default=10,
         help=("Only compute and output up to this number of targets. Note "
               "that runtime will generally be longer for higher values"))
+    parser_ct_args.add_argument('--gp-over-all-seqs',
+        action='store_true',
+        help=("If set, design the guides so as to cover GUIDE_COVER_FRAC "
+              "of *all* sequences, rather than GUIDE_COVER_FRAC of just "
+              "the sequences covered by the primers. This changes the "
+              "behavior of -gp/--guide-cover-frac. It may lead to "
+              "more than the optimal number of guides because it requires "
+              "covering more sequences. However, it may improve runtime "
+              "because the the sequences to consider for guide design will "
+              "be more similar across amplicons and therefore designs can "
+              "be more easily memoized."))
     ###########################################################################
 
     ###########################################################################

@@ -24,7 +24,8 @@ class TargetSearcher:
     """Methods to search for targets over a genome."""
 
     def __init__(self, ps, gs, max_primers_at_site=None,
-            max_target_length=None, cost_weights=None):
+            max_target_length=None, cost_weights=None,
+            guides_should_cover_over_all_seqs=False):
         """
         Args:
             ps: PrimerSearcher object
@@ -36,6 +37,10 @@ class TargetSearcher:
                 most this; or None for no limit
             cost_weights: a tuple giving weights in the cost function
                 in the order (primers, window, guides)
+            guides_should_cover_over_all_seqs: design guides so as to cover
+                the specified fraction (gs.cover_frac) of *all* sequences,
+                rather than gs.cover_frac of only sequences bound by the
+                primers
         """
         self.ps = ps
         self.gs = gs
@@ -47,6 +52,8 @@ class TargetSearcher:
         self.cost_weight_primers = cost_weights[0]
         self.cost_weight_window = cost_weights[1]
         self.cost_weight_guides = cost_weights[2]
+
+        self.guides_should_cover_over_all_seqs = guides_should_cover_over_all_seqs
 
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.ps.
@@ -191,18 +198,32 @@ class TargetSearcher:
                 "be in the best %d targets; looking for guides within this"),
                 window_start, window_end, best_n)
 
-            # Find the sequences that are bound by some primer in p1 AND
-            # some primer in p2
-            p1_bound_seqs = self.ps.seqs_bound_by_primers(p1.primers_in_cover)
-            p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
-            primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
+            # Determine what set of sequences the guides should cover
+            if self.guides_should_cover_over_all_seqs:
+                # Design across the entire collection of sequences
+                # This may lead to more guides being designed than if only
+                # designing across primer_bound_seqs (below) because more
+                # sequences must be considered in the design
+                # But this can improve runtime because the seqs_to_consider
+                # used by self.gs in the design will be more constant
+                # across different windows, which will enable it to better
+                # take advantage of memoization (in self.gs._memoized_guides)
+                # during the design
+                guide_seqs_to_consider = None
+            else:
+                # Find the sequences that are bound by some primer in p1 AND
+                # some primer in p2
+                p1_bound_seqs = self.ps.seqs_bound_by_primers(p1.primers_in_cover)
+                p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
+                primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
+                guide_seqs_to_consider = primer_bound_seqs
 
             # Find guides in the window, only searching across
-            # the sequences in primer_bound_seqs
+            # the sequences in guide_seqs_to_consider
             try:
                 guides = self.gs._find_guides_that_cover_in_window(
                     window_start, window_end,
-                    only_consider=primer_bound_seqs)
+                    only_consider=guide_seqs_to_consider)
             except guide_search.CannotAchieveDesiredCoverageError:
                 # No more suitable guides; skip this window
                 continue

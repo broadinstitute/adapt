@@ -8,6 +8,7 @@ import unittest
 from dxguidedesign import alignment
 from dxguidedesign import guide_search
 from dxguidedesign.utils import guide
+from dxguidedesign.utils import index_compress
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -106,76 +107,116 @@ class TestGuideSearch(unittest.TestCase):
 
     def test_construct_guide_memoized_a(self):
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertIn(self.a._construct_guide_memoized(0, {0: {2,3,4}}),
-                      [('ATCG', [2,3]), ('ACCG', [2,3]), ('AGCG', [4])])
+                      [('ATCG', {2,3}), ('ACCG', {2,3}), ('AGCG', {4})])
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {4}}),
-                         ('AGCG', [4]))
-        self.assertIn(0, self.a._memoized_guides)
-        self.assertIn((frozenset({(0, frozenset({0,1,2,3,4}))}), None),
-            self.a._memoized_guides[0])
-        self.assertIn((frozenset({(0, frozenset({2,3,4}))}), None),
-            self.a._memoized_guides[0])
-        self.assertIn((frozenset({(0, frozenset({4}))}), None),
-            self.a._memoized_guides[0])
+                         ('AGCG', {4}))
+
+        def ic(idx):
+            return index_compress.compress_mostly_contiguous(idx)
+
+        key = (frozenset({(0, frozenset(ic({0,1,2,3,4})))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(0, self.a._memoized_guides[key])
+
+        key = (frozenset({(0, frozenset(ic({2,3,4})))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(0, self.a._memoized_guides[key])
+
+        key = (frozenset({(0, frozenset(ic({4})))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(0, self.a._memoized_guides[key])
+
         self.assertEqual(self.a._construct_guide_memoized(2, {0: {0,1,2,3,4}}),
-                         ('CGAA', [0,2,4]))
+                         ('CGAA', {0,2,4}))
         self.assertEqual(self.a._construct_guide_memoized(2, {0: {3}}),
-                         ('CGAT', [3]))
-        self.assertIn(2, self.a._memoized_guides)
-        self.assertIn((frozenset({(0, frozenset({0,1,2,3,4}))}), None),
-            self.a._memoized_guides[2])
-        self.assertIn((frozenset({(0, frozenset({3}))}), None),
-            self.a._memoized_guides[2])
+                         ('CGAT', {3}))
+
+        key = (frozenset({(0, frozenset(ic({0,1,2,3,4})))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(2, self.a._memoized_guides[key])
+
+        key = (frozenset({(0, frozenset(ic({3})))}), None)
+        self.assertIn(key, self.a._memoized_guides)
+        self.assertIn(2, self.a._memoized_guides[key])
 
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertIn(self.a._construct_guide_memoized(0, {0: {2,3,4}}),
-                      [('ATCG', [2,3]), ('ACCG', [2,3]), ('AGCG', [4])])
+                      [('ATCG', {2,3}), ('ACCG', {2,3}), ('AGCG', {4})])
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {4}}),
-                         ('AGCG', [4]))
+                         ('AGCG', {4}))
         self.assertEqual(self.a._construct_guide_memoized(2, {0: {0,1,2,3,4}}),
-                         ('CGAA', [0,2,4]))
+                         ('CGAA', {0,2,4}))
         self.assertEqual(self.a._construct_guide_memoized(2, {0: {3}}),
-                         ('CGAT', [3]))
+                         ('CGAT', {3}))
 
         self.a._cleanup_memoized_guides(2)
-        self.assertNotIn(2, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(2, self.a._memoized_guides[key])
+
         self.a._cleanup_memoized_guides(100)
-        self.assertNotIn(100, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(100, self.a._memoized_guides[key])
 
     def test_construct_guide_memoized_b(self):
         self.assertIsNone(self.b._construct_guide_memoized(0, {0: {1}}))
         self.assertEqual(self.b._construct_guide_memoized(0, {0: {0,1}}),
-                         ('ATCG', [0]))
+                         ('ATCG', {0}))
         
         self.assertIsNone(self.b._construct_guide_memoized(0, {0: {1}}))
         self.assertEqual(self.b._construct_guide_memoized(0, {0: {0,1}}),
-                         ('ATCG', [0]))
+                         ('ATCG', {0}))
 
     def test_construct_guide_memoized_a_with_needed(self):
         # Use the num_needed argument
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
                             {0: 5}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
                             {0: 3}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
                             {0: 5}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
                             {0: 3}),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
 
         self.a._cleanup_memoized_guides(0)
-        self.assertNotIn(0, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(0, self.a._memoized_guides[key])
+
         self.a._cleanup_memoized_guides(100)
-        self.assertNotIn(100, self.a._memoized_guides)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(100, self.a._memoized_guides[key])
+
+    def test_construct_guide_memoized_a_use_last(self):
+        # Use the use_last argument
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 5}, use_last=False),
+                         ('ATCG', {0,1,2,3}))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=False),
+                         ('ATCG', {0,1,2,3}))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=True),
+                         ('ATCG', {0,1,2,3}))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=False),
+                         ('ATCG', {0,1,2,3}))
+        self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 3}, use_last=True),
+                         ('ATCG', {0,1,2,3}))
+
+        self.a._cleanup_memoized_guides(0)
+        for key in self.a._memoized_guides.keys():
+            self.assertNotIn(0, self.a._memoized_guides[key])
 
     def test_find_optimal_guide_in_window(self):
         self.assertEqual(self.c._find_optimal_guide_in_window(

@@ -6,6 +6,7 @@ import logging
 import math
 
 from dxguidedesign import alignment
+from dxguidedesign.utils import index_compress
 from dxguidedesign.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -23,7 +24,8 @@ class GuideSearcher:
     def __init__(self, aln, guide_length, mismatches, cover_frac,
                  missing_data_params, guide_is_suitable_fn=None,
                  seq_groups=None, required_guides={}, blacklisted_ranges={},
-                 allow_gu_pairs=False, required_flanking_seqs=(None, None)):
+                 allow_gu_pairs=False, required_flanking_seqs=(None, None),
+                 do_not_memoize_guides=False):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -63,6 +65,10 @@ class GuideSearcher:
                 the guide (in the target, not the guide) that must be
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
+            do_not_memoize_guides: if True, never memoize the results of
+                aln.construct_guide() and always compute the guide (this can
+                be useful if we know the memoized result will never be used
+                and memoizing it may be slow)
         """
         if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
@@ -102,6 +108,10 @@ class GuideSearcher:
         # Because calls to alignment.Alignment.construct_guide() are expensive
         # and are repeated very often, memoize the output
         self._memoized_guides = defaultdict(dict)
+        self._memoized_guides_last_inner_dict = None
+        self._memoized_guides_last_inner_dict_key = None
+        self._memoized_guides_num_removed_since_last_resize = 0
+        self.do_not_memoize_guides = do_not_memoize_guides
 
         # Save the positions of selected guides in the alignment so these can
         # be easily revisited. In case a guide sequence appears in multiple
@@ -149,7 +159,7 @@ class GuideSearcher:
             k=min(10, int(guide_length/2)))
 
     def _construct_guide_memoized(self, start, seqs_to_consider,
-            num_needed=None):
+            num_needed=None, use_last=False, memoize_threshold=0.1):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
         Args:
@@ -159,26 +169,18 @@ class GuideSearcher:
             num_needed: dict mapping universe group ID to the number of
                 sequences from the group that are left to cover in order to
                 achieve the desired partial cover
+            use_last: if set, check for a memoized result by using the last
+                key constructed (it is assumed that seqs_to_consider and
+                num_needed are identical to the last provided values)
+            memoize_threshold: only memoize results when the total fraction
+                of sequences in seqs_to_consider (compared to the whole
+                alignment) exceeds this threshold
 
         Returns:
-            result of alignment.Alignment.construct_guide()
+            result of alignment.Alignment.construct_guide() (except the
+            covered_seqs returned here is a set, rather than a list)
         """
-        # Make frozen version of both dicts; note that values in
-        # seqs_to_consider may be sets that need to be frozen
-        seqs_to_consider_frozen = set()
-        for k, v in seqs_to_consider.items():
-            seqs_to_consider_frozen.add((k, frozenset(v)))
-        seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
-        if num_needed is None:
-            num_needed_frozen = None
-        else:
-            num_needed_frozen = frozenset(num_needed.items())
-
-        key = (seqs_to_consider_frozen, num_needed_frozen)
-        if (start in self._memoized_guides and
-                key in self._memoized_guides[start]):
-            return self._memoized_guides[start][key]
-        else:
+        def construct_p():
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
                         seqs_to_consider, self.mismatches, self.allow_gu_pairs,
@@ -188,20 +190,154 @@ class GuideSearcher:
                         required_flanking_seqs=self.required_flanking_seqs)
             except alignment.CannotConstructGuideError:
                 p = None
-            self._memoized_guides[start][key] = p
             return p
 
-    def _cleanup_memoized_guides(self, pos):
+        # Only memoize results if this is being computed for a sufficiently
+        # high fraction of sequences; for cases where seqs_to_consider
+        # represents a small fraction of all sequences, we are less likely
+        # to re-encounter the same seqs_to_consider in the future (so
+        # there is little need to memoize the result) and the call to
+        # construct_guide() should be relatively quick (so it is ok to have
+        # to repeat the call if we do re-encounter the same seqs_to_consider)
+        num_seqs_to_consider = sum(len(v) for k, v in seqs_to_consider.items())
+        frac_seqs_to_consider = float(num_seqs_to_consider) / self.aln.num_sequences
+        should_memoize = frac_seqs_to_consider >= memoize_threshold
+
+        if not should_memoize or self.do_not_memoize_guides:
+            # Construct the guide and return it; do not memoize the result
+            p = construct_p()
+            if p is not None:
+                gd, covered_seqs = p
+                # Convert covered_seqs in p to a set to be consistent with the
+                # below
+                p = (gd, set(covered_seqs))
+            return p
+
+        if use_last:
+            # key (defined below) can be large and slow to hash; therefore,
+            # assume that the last computed key is identical to the one that
+            # would be computed here (i.e., seqs_to_consider and num_needed
+            # are the same), and use the last inner dict to avoid having to hash
+            # key
+            assert self._memoized_guides_last_inner_dict is not None
+            inner_dict = self._memoized_guides_last_inner_dict
+        else:
+            # Make frozen version of both dicts; note that values in
+            # seqs_to_consider may be sets that need to be frozen
+            seqs_to_consider_frozen = set()
+            for k, v in seqs_to_consider.items():
+                # Compress the sequence indices, which, in many cases, are
+                # mostly contiguous
+                v_compressed = index_compress.compress_mostly_contiguous(v)
+                seqs_to_consider_frozen.add((k, frozenset(v_compressed)))
+            seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
+            if num_needed is None:
+                num_needed_frozen = None
+            else:
+                num_needed_frozen = frozenset(num_needed.items())
+
+            key = (seqs_to_consider_frozen, num_needed_frozen)
+            if key in self._memoized_guides:
+                inner_dict = self._memoized_guides[key]
+            else:
+                inner_dict = {}
+                self._memoized_guides[key] = inner_dict
+            self._memoized_guides_last_inner_dict_key = key
+
+        if start in inner_dict:
+            # The result has been memoized
+
+            p_memoized = inner_dict[start]
+
+            # covered_seqs in p was compressed before memoizing it; decompress
+            # it before returning it
+            if p_memoized is None:
+                p = None
+            else:
+                gd, covered_seqs_compressed = p_memoized
+                covered_seqs = index_compress.decompress_ranges(covered_seqs_compressed)
+                p = (gd, covered_seqs)
+        else:
+            # The result is not memoized; compute it and memoize it
+
+            p = construct_p()
+
+            if p is None:
+                p_to_memoize = None
+            else:
+                # Compress covered_seqs in p before memoizing it, because it
+                # may contain mostly contiguous indices
+                gd, covered_seqs = p
+                covered_seqs_compressed = index_compress.compress_mostly_contiguous(covered_seqs)
+                p_to_memoize = (gd, covered_seqs_compressed)
+
+                # Since index_compress.decompress_ranges(covered_seqs_compressed)
+                # returns a set, and a set is needed anyway by the caller of
+                # this method, be consistent and use a set for covered_seqs
+                p = (gd, set(covered_seqs))
+            inner_dict[start] = p_to_memoize
+
+        self._memoized_guides_last_inner_dict = inner_dict
+        return p
+
+    def _cleanup_memoized_guides(self, pos, frac_removed_until_resize=0.1):
         """Remove a position that is stored in self._memoized_guides.
 
         This should be called when the position no longer needs to be stored.
 
+        Python only resizes dicts on insertions (and, seemingly, only after
+        reaching a sufficiently large size); see
+        https://github.com/python/cpython/blob/master/Objects/dictnotes.txt
+        In this case, it may never resize or resize too infrequently,
+        especially for the inner dicts. It appears in many cases to never
+        resize. Therefore, this "resizes" the self._memoized_guides dict at
+        certain cleanups by copying all the content over to a new dict,
+        effectively forcing it to shrink its memory usage. It does this
+        by computing the number of elements that have been removed from the
+        data structure relative to its current total number of elements,
+        and resizing when this fraction exceeds `frac_removed_until_resize`.
+        Since the total number of elements should stay roughly constant
+        as we scan along the alignment (i.e., pos increases), this fraction
+        should grow over time. At each resizing, the fraction will drop back
+        down to 0.
+
         Args:
             pos: start position that no longer needs to be memoized (i.e., where
                 guides covering at that start position are no longer needed)
+            frac_removed_until_resize: resize the self._memoized_guides
+                data structure when the total number of elements removed
+                due to cleanup exceeds this fraction of the total size
         """
-        if pos in self._memoized_guides:
-            del self._memoized_guides[pos]
+        keys_to_rm = set()
+        for key in self._memoized_guides.keys():
+            if pos in self._memoized_guides[key]:
+                del self._memoized_guides[key][pos]
+                self._memoized_guides_num_removed_since_last_resize += 1
+            if len(self._memoized_guides[key]) == 0:
+                keys_to_rm.add(key)
+
+        for key in keys_to_rm:
+            del self._memoized_guides[key]
+
+        # Decide whether to resize
+        total_size = sum(len(self._memoized_guides[k])
+                for k in self._memoized_guides.keys())
+        if total_size > 0:
+            frac_removed = float(self._memoized_guides_num_removed_since_last_resize) / total_size
+            logger.debug(("Deciding to resize with a fraction %f removed "
+                "(%d / %d)"), frac_removed,
+                self._memoized_guides_num_removed_since_last_resize,
+                total_size)
+            if frac_removed >= frac_removed_until_resize:
+                # Resize self._memoized_guides by copying all content to a new dict
+                new_memoized_guides = defaultdict(dict)
+                for key in self._memoized_guides.keys():
+                    for i in self._memoized_guides[key].keys():
+                        new_memoized_guides[key][i] = self._memoized_guides[key][i]
+                    if key == self._memoized_guides_last_inner_dict_key:
+                        self._memoized_guides_last_inner_dict = new_memoized_guides[key]
+                self._memoized_guides = new_memoized_guides
+                self._memoized_guides_num_removed_since_last_resize = 0
 
     def _guide_overlaps_blacklisted_range(self, gd_pos):
         """Determine whether a guide would overlap a blacklisted range.
@@ -268,8 +404,15 @@ class GuideSearcher:
                 # so skip this guide
                 p = None
             else:
+                # After the first call to self._construct_guide_memoized in
+                # this window, seqs_to_consider and num_needed will all be
+                # the same as the first call, so tell the function to
+                # take advantage of this (by avoiding hashing these
+                # dicts)
+                use_last = pos > start
+
                 p = self._construct_guide_memoized(pos, seqs_to_consider,
-                    num_needed)
+                    num_needed, use_last=use_last)
 
             if p is None:
                 # There is no suitable guide at pos
@@ -277,7 +420,6 @@ class GuideSearcher:
                     max_guide_cover = (None, set(), None, 0)
             else:
                 gd, covered_seqs = p
-                covered_seqs = set(covered_seqs)
 
                 # Calculate a score for this guide based on the partial
                 # coverage it achieves across the groups
