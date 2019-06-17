@@ -422,7 +422,7 @@ def design_for_id(args):
                 max_primers_at_site=args.max_primers_at_site,
                 max_target_length=args.max_target_length,
                 cost_weights=args.cost_fn_weights,
-                guides_should_cover_all_seqs=args.guides_should_cover_all_seqs)
+                guides_should_cover_over_all_seqs=args.gp_over_all_seqs)
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets)
         else:
@@ -692,7 +692,7 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('--best-n-targets', type=int, default=10,
         help=("Only compute and output up to this number of targets. Note "
               "that runtime will generally be longer for higher values"))
-    parser_ct_args.add_argument('--guides-should-cover-all-seqs',
+    parser_ct_args.add_argument('--gp-over-all-seqs',
         action='store_true',
         help=("If set, design the guides so as to cover GUIDE_COVER_FRAC "
               "of *all* sequences, rather than GUIDE_COVER_FRAC of just "

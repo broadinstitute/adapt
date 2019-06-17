@@ -25,7 +25,7 @@ class TargetSearcher:
 
     def __init__(self, ps, gs, max_primers_at_site=None,
             max_target_length=None, cost_weights=None,
-            guides_should_cover_all_seqs=False):
+            guides_should_cover_over_all_seqs=False):
         """
         Args:
             ps: PrimerSearcher object
@@ -37,7 +37,7 @@ class TargetSearcher:
                 most this; or None for no limit
             cost_weights: a tuple giving weights in the cost function
                 in the order (primers, window, guides)
-            guides_should_cover_all_seqs: design guides so as to cover
+            guides_should_cover_over_all_seqs: design guides so as to cover
                 the specified fraction (gs.cover_frac) of *all* sequences,
                 rather than gs.cover_frac of only sequences bound by the
                 primers
@@ -53,7 +53,7 @@ class TargetSearcher:
         self.cost_weight_window = cost_weights[1]
         self.cost_weight_guides = cost_weights[2]
 
-        self.guides_should_cover_all_seqs = guides_should_cover_all_seqs
+        self.guides_should_cover_over_all_seqs = guides_should_cover_over_all_seqs
 
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.ps.
@@ -199,7 +199,7 @@ class TargetSearcher:
                 window_start, window_end, best_n)
 
             # Determine what set of sequences the guides should cover
-            if self.guides_should_cover_all_seqs:
+            if self.guides_should_cover_over_all_seqs:
                 # Design across the entire collection of sequences
                 # This may lead to more guides being designed than if only
                 # designing across primer_bound_seqs (below) because more
