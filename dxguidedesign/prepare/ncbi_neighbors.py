@@ -522,10 +522,15 @@ def parse_genbank_xml_for_source_features(fn):
 
     Returns:
         dict {accession: [(qualifier name, qualifier value)]}
+        Note that in some cases, the qualifier value can be None.
     """
     doc = minidom.parse(fn)
     def parse_xml_node_value(element, tag_name):
-        return element.getElementsByTagName(tag_name)[0].firstChild.nodeValue
+        els = element.getElementsByTagName(tag_name)
+        if len(els) == 0:
+            return None
+        else:
+            return els[0].firstChild.nodeValue
 
     source_features = defaultdict(list)
 
