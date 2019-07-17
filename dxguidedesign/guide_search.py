@@ -397,6 +397,7 @@ class GuideSearcher:
         # fit completely within the window
         search_end = end - self.guide_length + 1
 
+        called_construct_guide = False
         max_guide_cover = None
         for pos in range(start, search_end):
             if self._guide_overlaps_blacklisted_range(pos):
@@ -409,10 +410,11 @@ class GuideSearcher:
                 # the same as the first call, so tell the function to
                 # take advantage of this (by avoiding hashing these
                 # dicts)
-                use_last = pos > start
+                use_last = pos > start and called_construct_guide
 
                 p = self._construct_guide_memoized(pos, seqs_to_consider,
                     num_needed, use_last=use_last)
+                called_construct_guide = True
 
             if p is None:
                 # There is no suitable guide at pos
