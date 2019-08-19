@@ -238,7 +238,7 @@ If you have questions, please create an [issue](https://github.com/broadinstitut
 ADAPT is not yet published.
 If you find it useful to your work, please let me know and use the following citations:
   * Metsky HC _et al_. End-to-end sequence design for comprehensive diagnostics (ADAPT). Manuscript in preparation.
-  * Metsky HC _et al_. Capturing sequence diversity in metagenomes with comprehensive and scalable probe design. _Nature Biotechnology_, **37**(2), 160&ndash;168 (2019). doi: [10.1038/s41587-018-0006-x](https://www.nature.com/articles/s41587-018-0006-x)
+  * Metsky HC and Siddle KJ _et al_. Capturing sequence diversity in metagenomes with comprehensive and scalable probe design. _Nature Biotechnology_, **37**(2), 160&ndash;168 (2019). doi: [10.1038/s41587-018-0006-x](https://www.nature.com/articles/s41587-018-0006-x)
 
 ## License
 
