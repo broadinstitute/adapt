@@ -12,8 +12,8 @@ import itertools
 import logging
 import math
 
-from dxguidedesign import guide_search
-from dxguidedesign import primer_search
+from adapt import guide_search
+from adapt import primer_search
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

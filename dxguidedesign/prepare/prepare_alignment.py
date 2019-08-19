@@ -9,10 +9,10 @@ import logging
 import os
 import random
 
-from dxguidedesign.prepare import align
-from dxguidedesign.prepare import cluster
-from dxguidedesign.prepare import ncbi_neighbors
-from dxguidedesign.utils import seq_io
+from adapt.prepare import align
+from adapt.prepare import cluster
+from adapt.prepare import ncbi_neighbors
+from adapt.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

@@ -6,7 +6,7 @@ import logging
 import tempfile
 import unittest
 
-from dxguidedesign.utils import seq_io
+from adapt.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

@@ -5,7 +5,7 @@ from collections import OrderedDict
 import tempfile
 import unittest
 
-from dxguidedesign.prepare import align
+from adapt.prepare import align
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

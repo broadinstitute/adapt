@@ -7,9 +7,9 @@ This can be used as a baseline for the output of design.py.
 import argparse
 import logging
 
-from dxguidedesign import alignment
-from dxguidedesign.utils import log
-from dxguidedesign.utils import seq_io
+from adapt import alignment
+from adapt.utils import log
+from adapt.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

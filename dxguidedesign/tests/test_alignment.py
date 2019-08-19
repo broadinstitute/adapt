@@ -4,9 +4,9 @@
 import random
 import unittest
 
-from dxguidedesign import alignment
-from dxguidedesign.utils import guide
-from dxguidedesign.utils import lsh
+from adapt import alignment
+from adapt.utils import guide
+from adapt.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

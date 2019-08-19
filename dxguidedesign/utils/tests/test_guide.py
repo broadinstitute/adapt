@@ -3,7 +3,7 @@
 
 import unittest
 
-from dxguidedesign.utils import guide
+from adapt.utils import guide
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

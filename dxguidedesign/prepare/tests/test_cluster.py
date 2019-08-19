@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 import scipy
 
-from dxguidedesign.prepare import cluster
+from adapt.prepare import cluster
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
