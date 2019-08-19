@@ -11,7 +11,7 @@ import operator
 import numpy as np
 from scipy.cluster import hierarchy
 
-from dxguidedesign.utils import lsh
+from adapt.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

@@ -3,7 +3,7 @@
 
 import unittest
 
-from dxguidedesign.utils import index_compress
+from adapt.utils import index_compress
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

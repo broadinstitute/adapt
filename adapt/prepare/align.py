@@ -10,7 +10,7 @@ import re
 import subprocess
 import tempfile
 
-from dxguidedesign.utils import seq_io
+from adapt.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

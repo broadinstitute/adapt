@@ -5,9 +5,9 @@ import logging
 import random
 import unittest
 
-from dxguidedesign import alignment
-from dxguidedesign import primer_search
-from dxguidedesign.utils import guide
+from adapt import alignment
+from adapt import primer_search
+from adapt.utils import guide
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

@@ -9,16 +9,16 @@ import re
 import shutil
 import tempfile
 
-from dxguidedesign import alignment
-from dxguidedesign import guide_search
-from dxguidedesign.prepare import align
-from dxguidedesign.prepare import prepare_alignment
-from dxguidedesign import primer_search
-from dxguidedesign import target_search
-from dxguidedesign.utils import guide
-from dxguidedesign.utils import log
-from dxguidedesign.utils import seq_io
-from dxguidedesign.utils import year_cover
+from adapt import alignment
+from adapt import guide_search
+from adapt.prepare import align
+from adapt.prepare import prepare_alignment
+from adapt import primer_search
+from adapt import target_search
+from adapt.utils import guide
+from adapt.utils import log
+from adapt.utils import seq_io
+from adapt.utils import year_cover
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

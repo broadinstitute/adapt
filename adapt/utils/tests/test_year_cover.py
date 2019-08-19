@@ -5,7 +5,7 @@ import logging
 import tempfile
 import unittest
 
-from dxguidedesign.utils import year_cover
+from adapt.utils import year_cover
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

@@ -5,9 +5,9 @@ from collections import defaultdict
 import logging
 import math
 
-from dxguidedesign import alignment
-from dxguidedesign.utils import index_compress
-from dxguidedesign.utils import lsh
+from adapt import alignment
+from adapt.utils import index_compress
+from adapt.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

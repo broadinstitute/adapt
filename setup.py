@@ -1,15 +1,15 @@
-"""Setup script for the dxguidedesign distribution using Distutils.
+"""Setup script for the adapt distribution using Distutils.
 """
 
 from setuptools import find_packages
 from setuptools import setup
 
-import dxguidedesign
+import adapt
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-setup(name='dxguidedesign',
+setup(name='adapt',
       description='Tools to design guides for diagnostics',
       author='Hayden Metsky',
       author_email='hayden@mit.edu',

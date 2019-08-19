@@ -5,7 +5,7 @@ This makes heavy use of the guide_search module.
 
 import logging
 
-from dxguidedesign import guide_search
+from adapt import guide_search
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

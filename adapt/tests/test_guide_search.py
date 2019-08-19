@@ -5,10 +5,10 @@ import logging
 import random
 import unittest
 
-from dxguidedesign import alignment
-from dxguidedesign import guide_search
-from dxguidedesign.utils import guide
-from dxguidedesign.utils import index_compress
+from adapt import alignment
+from adapt import guide_search
+from adapt.utils import guide
+from adapt.utils import index_compress
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

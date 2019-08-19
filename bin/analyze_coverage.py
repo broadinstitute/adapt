@@ -4,10 +4,10 @@
 import argparse
 import logging
 
-from dxguidedesign import coverage_analysis
-from dxguidedesign.prepare import ncbi_neighbors
-from dxguidedesign.utils import log
-from dxguidedesign.utils import seq_io
+from adapt import coverage_analysis
+from adapt.prepare import ncbi_neighbors
+from adapt.utils import log
+from adapt.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

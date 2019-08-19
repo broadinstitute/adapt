@@ -4,7 +4,7 @@
 import logging
 import unittest
 
-from dxguidedesign import coverage_analysis
+from adapt import coverage_analysis
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 

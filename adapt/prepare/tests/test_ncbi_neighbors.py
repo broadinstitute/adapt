@@ -3,7 +3,7 @@
 
 import unittest
 
-from dxguidedesign.prepare import ncbi_neighbors as nn
+from adapt.prepare import ncbi_neighbors as nn
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
