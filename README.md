@@ -1,7 +1,7 @@
-CATCH-dx
-========
+ADAPT
+=====
 
-**CATCH-dx** is a Python package for designing crRNAs that comprehensively account for microbial sequence diversity.
+**ADAPT** is a Python package for designing crRNAs that comprehensively account for microbial sequence diversity.
 <br/>
 
 The method and software are not yet published.
@@ -10,12 +10,12 @@ However, the problems they solve do share some similarity with the problems solv
 
 ### Table of contents
 
-* [Setting up CATCH-dx](#setting-up-catch-dx)
+* [Setting up ADAPT](#setting-up-adapt)
   * [Dependencies](#dependencies)
   * [Setting up a conda environment](#setting-up-a-conda-environment)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
-* [Using CATCH-dx](#using-catch-dx)
+* [Using ADAPT](#using-adapt)
   * [Designing guides](#designing-guides)
   * [Common options](#common-options)
   * [Output](#output)
@@ -26,18 +26,18 @@ However, the problems they solve do share some similarity with the problems solv
 * [License](#license)
 <br/>
 
-# Setting up CATCH-dx
+# Setting up ADAPT
 
 ## Dependencies
 
-CATCH-dx requires:
+ADAPT requires:
 * [Python](https://www.python.org) &gt;= 3.5
 * [NumPy](http://www.numpy.org) &gt;= 1.9.0
 * [SciPy](https://www.scipy.org) &gt;= 1.0.0
 
-Installing CATCH-dx with `pip`, as described below, will install NumPy and SciPy if they are not already installed.
+Installing ADAPT with `pip`, as described below, will install NumPy and SciPy if they are not already installed.
 
-If using alignment features in subcommands below, CATCH-dx also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
+If using alignment features in subcommands below, ADAPT also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
 
 ## Setting up a conda environment
 
@@ -54,20 +54,20 @@ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
 
-Once you have conda, you can [create](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands) an environment for CATCH-dx with Python 3.7:
+Once you have conda, you can [create](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands) an environment for ADAPT with Python 3.7:
 ```bash
-conda create -n catchdx python=3.7
+conda create -n adapt python=3.7
 ```
-Then, you can activate the `catchdx` environment:
+Then, you can activate the `adapt` environment:
 ```bash
-conda activate catchdx
+conda activate adapt
 ```
-After the environment is created and activated, you can install CATCH-dx as described below.
-You will need to activate the environment each time you use CATCH-dx.
+After the environment is created and activated, you can install ADAPT as described below.
+You will need to activate the environment each time you use ADAPT.
 
 ## Downloading and installing
 
-An easy way to setup CATCH-dx is to clone the repository and install the package with `pip`:
+An easy way to setup ADAPT is to clone the repository and install the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/diagnostic-guide-design.git
 cd diagnostic-guide-design
@@ -83,7 +83,7 @@ To execute all unit tests, run:
 python -m unittest discover
 ```
 
-# Using CATCH-dx
+# Using ADAPT
 
 ## Designing guides
 
@@ -131,7 +131,7 @@ See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
 Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
 * `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
 Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
-CATCH-dx does not output guides that hit group/taxons other than the one for which they are being designed.
+ADAPT does not output guides that hit group/taxons other than the one for which they are being designed.
 Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
 (Default: 2 for ID_M, 0.05 for ID_FRAC.)
 * `--specific-against [alignment] [alignment ...]`: Design guides to be specific against the provided alignments (in FASTA format).
@@ -181,7 +181,7 @@ See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the fo
 
 ## Output
 
-The files output by CATCH-dx are TSV files, but vary in format depending on SEARCH-TYPE and INPUT-TYPE.
+The files output by ADAPT are TSV files, but vary in format depending on SEARCH-TYPE and INPUT-TYPE.
 There is a separate TSV file for each taxon.
 
 When SEARCH-TYPE is `sliding-window`, each row corresponds to a window in the alignment and the columns give information about the guides designed for that window.
@@ -229,17 +229,17 @@ See [Output](#output) above for a description of this file.
 
 ## Contributing
 
-I welcome contributions to CATCH-dx.
+I welcome contributions to ADAPT.
 This can be in the form of an [issue](https://github.com/broadinstitute/diagnostic-guide-design/issues) or [pull request](https://github.com/broadinstitute/diagnostic-guide-design/pulls).
 If you have questions, please create an [issue](https://github.com/broadinstitute/diagnostic-guide-design/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
 
 ## Citation
 
-CATCH-dx is not yet published.
+ADAPT is not yet published.
 If you find it useful to your work, please let me know and use the following citations:
-  * Metsky HC _et al_. Continuous crRNA design for comprehensive diagnostics (CATCH-dx). Manuscript in preparation.
+  * Metsky HC _et al_. End-to-end sequence design for comprehensive diagnostics (ADAPT). Manuscript in preparation.
   * Metsky HC _et al_. Capturing sequence diversity in metagenomes with comprehensive and scalable probe design. _Nature Biotechnology_, **37**(2), 160&ndash;168 (2019). doi: [10.1038/s41587-018-0006-x](https://www.nature.com/articles/s41587-018-0006-x)
 
 ## License
 
-CATCH-dx is licensed under the terms of the [MIT license](./LICENSE).
+ADAPT is licensed under the terms of the [MIT license](./LICENSE).
