@@ -69,8 +69,8 @@ You will need to activate the environment each time you use ADAPT.
 
 An easy way to setup ADAPT is to clone the repository and install the package with `pip`:
 ```bash
-git clone git@github.com:broadinstitute/diagnostic-guide-design.git
-cd diagnostic-guide-design
+git clone git@github.com:broadinstitute/adapt.git
+cd adapt
 pip install -e .
 ```
 Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
@@ -230,8 +230,8 @@ See [Output](#output) above for a description of this file.
 ## Contributing
 
 I welcome contributions to ADAPT.
-This can be in the form of an [issue](https://github.com/broadinstitute/diagnostic-guide-design/issues) or [pull request](https://github.com/broadinstitute/diagnostic-guide-design/pulls).
-If you have questions, please create an [issue](https://github.com/broadinstitute/diagnostic-guide-design/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
+This can be in the form of an [issue](https://github.com/broadinstitute/adapt/issues) or [pull request](https://github.com/broadinstitute/adapt/pulls).
+If you have questions, please create an [issue](https://github.com/broadinstitute/adapt/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
 
 ## Citation
 
