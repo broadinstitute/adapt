@@ -537,6 +537,10 @@ def parse_genbank_xml_for_source_features(fn):
     seqs = doc.getElementsByTagName('GBSeq')
     for seq in seqs:
         accession = parse_xml_node_value(seq, 'GBSeq_primary-accession')
+
+        create_date = parse_xml_node_value(seq, 'GBSeq_create-date')
+        source_features[accession].append(('create_date', create_date))
+
         feature_table = seq.getElementsByTagName('GBSeq_feature-table')[0]
         for feature in feature_table.getElementsByTagName('GBFeature'):
             feature_key = parse_xml_node_value(feature, 'GBFeature_key')
@@ -577,9 +581,10 @@ def fetch_metadata(accessions):
     metadata = {}
     for accession, feats in source_features.items():
         year = None
+        entry_create_year = None
         country = None
         for (name, value) in feats:
-            if name == 'collection_date':
+            if name == 'collection_date' or name == 'create_date':
                 # Parse the year
                 year_m = year_p.search(value)
                 if year_m is None:
@@ -594,13 +599,17 @@ def fetch_metadata(accessions):
                     if year is not None and feat_year != year:
                         raise Exception(("Inconsistent year for "
                             "accession %s") % accession)
-                year = feat_year
+                if name == 'collection_date':
+                    year = feat_year
+                if name == 'create_date':
+                    entry_create_year = feat_year
             if name == 'country':
                 if country is not None and value != country:
                     raise Exception(("Inconsistent country for "
                         "accession %s") % accession)
                 country = value
-        metadata[accession] = {'country': country, 'year': year}
+        metadata[accession] = {'country': country, 'year': year,
+                'entry_create_year': entry_create_year}
 
     # Close the tempfile
     xml_tf.close()
