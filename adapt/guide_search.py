@@ -8,6 +8,7 @@ import math
 from adapt import alignment
 from adapt.utils import index_compress
 from adapt.utils import lsh
+from adapt.utils import predict_activity
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -25,7 +26,8 @@ class GuideSearcher:
                  missing_data_params, guide_is_suitable_fn=None,
                  seq_groups=None, required_guides={}, blacklisted_ranges={},
                  allow_gu_pairs=False, required_flanking_seqs=(None, None),
-                 do_not_memoize_guides=False):
+                 do_not_memoize_guides=False,
+                 predict_activity_model_path=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -69,6 +71,10 @@ class GuideSearcher:
                 aln.construct_guide() and always compute the guide (this can
                 be useful if we know the memoized result will never be used
                 and memoizing it may be slow)
+            predict_activity_model_path: if set, path to a directory containing
+                model hyperparameters and trained weights to use for predicting
+                guide-target activity; only use guides where the activity
+                is sufficiently high. If None, do not predict activity.
         """
         if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
@@ -158,6 +164,13 @@ class GuideSearcher:
             lsh.HammingDistanceFamily(guide_length),
             k=min(10, int(guide_length/2)))
 
+        # Load a model to predict activity
+        if predict_activity_model_path is not None:
+            self.predictor = predict_activity.construct_predictor(
+                    predict_activity_model_path)
+        else:
+            self.predictor = None
+
     def _construct_guide_memoized(self, start, seqs_to_consider,
             num_needed=None, use_last=False, memoize_threshold=0.1):
         """Make a memoized call to alignment.Alignment.construct_guide().
@@ -187,7 +200,8 @@ class GuideSearcher:
                         self.guide_clusterer, num_needed=num_needed,
                         missing_threshold=self.missing_threshold,
                         guide_is_suitable_fn=self.guide_is_suitable_fn,
-                        required_flanking_seqs=self.required_flanking_seqs)
+                        required_flanking_seqs=self.required_flanking_seqs,
+                        predictor=self.predictor)
             except alignment.CannotConstructGuideError:
                 p = None
             return p
