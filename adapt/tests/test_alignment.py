@@ -236,8 +236,6 @@ class TestAlignment(unittest.TestCase):
                          ('CGAT', [0,1,2,3]))
         self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 3, False, None),
                          ('CGAT', [0,1,2,3,4]))
-        self.assertEqual(self.b.construct_guide(2, 4, {0: {2,4}}, 1, False, None),
-                         ('CGAC', []))
         self.assertEqual(self.b.construct_guide(2, 4, {0: {2,4}}, 2, False, None),
                          ('CGAC', [2,4]))
         self.assertIn(self.b.construct_guide(2, 4, {0: {2,3,4}}, 2, False, None),
@@ -245,6 +243,10 @@ class TestAlignment(unittest.TestCase):
         with self.assertRaises(alignment.CannotConstructGuideError):
             # Should fail when 'N' is all that exists at a position
             self.b.construct_guide(0, 4, {0: {1,3,4}}, 0, False, None)
+        with self.assertRaises(alignment.CannotConstructGuideError):
+            # Should fail when a potential guide (here, 'CGAC') cannot
+            # bind to any sequence because they all have 'N' somewhere
+            self.b.construct_guide(2, 4, {0: {2,4}}, 1, False, None)
 
     def test_construct_guide_c(self):
         with self.assertRaises(alignment.CannotConstructGuideError):
@@ -328,6 +330,50 @@ class TestAlignment(unittest.TestCase):
         with self.assertRaises(alignment.CannotConstructGuideError):
             aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
                 guide_is_suitable_fn=f)
+
+    def test_construct_guide_with_predictor(self):
+        seqs = ['GTATCAAAT',
+                'ATACCAAAA',
+                'GTATCAAAT',
+                'GTATCAAAT']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        guide_length = 6
+        seqs_to_consider = {0: {0, 1, 2, 3}}
+        guide_clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length),
+            k=3)
+
+        # The best guide is 'GTATCA'
+        p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer)
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'GTATCA')
+        self.assertEqual(covered_seqs, [0, 2, 3])
+
+        # Only predict guides starting with 'A' to be active
+        class PredictorTest:
+            def __init__(self):
+                self.context_nt = 0
+            def evaluate(self, target_with_context, guide):
+                return guide[0] == 'A'
+        predictor = PredictorTest()
+        # Now the best guide is 'ATACCA'
+        p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
+            predictor=predictor)
+        gd, covered_seqs = p
+        self.assertEqual(gd, 'ATACCA')
+        self.assertEqual(covered_seqs, [1])
+
+        # Only predictor guides starting with 'C' to be active
+        class PredictorTest:
+            def __init__(self):
+                self.context_nt = 0
+            def evaluate(self, target_with_context, guide):
+                return guide[0] == 'C'
+        predictor = PredictorTest()
+        # Now there is no suitable guide
+        with self.assertRaises(alignment.CannotConstructGuideError):
+            aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
+                predictor=predictor)
 
     def test_construct_guide_with_required_flanking(self):
         seqs = ['TCAAAT',
