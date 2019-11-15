@@ -290,21 +290,38 @@ class Alignment:
                     all_seqs_to_consider, include_idx=True)
 
         if predictor is not None:
-            # Memoize evaluations
+            # Memoize activity evaluations
             pair_eval = {}
         def determine_binding_and_active_seqs(gd_sequence):
             binding_seqs = []
-            for i, (seq, seq_idx) in enumerate(seq_rows):
-                if guide.guide_binds(gd_sequence, seq, mismatches,
-                        allow_gu_pairs):
-                    if predictor is not None:
+            if predictor is not None:
+                # Determine what calls to make to predictor.evaluate(); it
+                # is best to batch these
+                pairs_to_eval = set()
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if guide.guide_binds(gd_sequence, seq, mismatches,
+                            allow_gu_pairs):
                         seq_with_context, _ = seq_rows_with_context[i]
                         pair = (seq_with_context, gd_sequence)
                         if pair not in pair_eval:
-                            pair_eval[pair] = predictor.evaluate(seq_with_context, gd_sequence)
+                            pairs_to_eval.add(pair)
+                # Evaluate activity
+                pairs_to_eval = list(pairs_to_eval)
+                evals = predictor.evaluate(pairs_to_eval)
+                for pair, y in zip(pairs_to_eval, evals):
+                    pair_eval[pair] = y
+                # Fill in binding_seqs
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if guide.guide_binds(gd_sequence, seq, mismatches,
+                            allow_gu_pairs):
+                        seq_with_context, _ = seq_rows_with_context[i]
+                        pair = (seq_with_context, gd_sequence)
                         if pair_eval[pair]:
                             binding_seqs += [seq_idx]
-                    else:
+            else:
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if guide.guide_binds(gd_sequence, seq, mismatches,
+                            allow_gu_pairs):
                         binding_seqs += [seq_idx]
             return binding_seqs
 
@@ -358,6 +375,11 @@ class Alignment:
         best_gd_binding_seqs = None
         best_gd_score = 0
         for cluster_idxs in clusters_ordered:
+            if best_gd_score > seq_idxs_score(cluster_idxs):
+                # The guide from this cluster is unlikely (or impossible)
+                # to exceed the current score; stop early
+                break
+
             gd = aln_for_guide.determine_consensus_sequence(
                 cluster_idxs)
             if guide_is_suitable_fn is not None:
@@ -394,7 +416,7 @@ class Alignment:
                     continue
                 if predictor is not None:
                     s_with_context, _ = seq_rows_with_context[i]
-                    if predictor.evaluate(s_with_context, s) is False:
+                    if predictor.evaluate([(s_with_context, s)])[0] is False:
                         # s is not active against itself; skip it
                         continue
                 # s has no ambiguity and is a suitable guide; use it
