@@ -26,22 +26,21 @@ class Predictor:
         self.activity_thres = activity_thres
         self.context_nt = model.context_nt
 
-    def evaluate(self, target_with_context, guide):
+    def evaluate(self, pairs):
         """Determine whether or not a guide-target pair has sufficient
         activity. 
 
         Args:
-            target_with_context: target sequence with self.context_nt
-                nt on each side
-            guide: guide sequence
+            pairs: list of tuples (target with context, guide)
 
         Returns:
-            False/True indicating whether the predicted activity of
-            the guide-target pair exceeds self.activity_thres
+            list of False/True indicating whether the predicted activity of
+            each guide-target pair exceeds self.activity_thres
         """
-        pred_activity = predictor.pred_from_nt(self.model,
-                target_with_context, guide)
-        return pred_activity >= self.activity_thres
+        if len(pairs) == 0:
+            return []
+        pred_activity = predictor.pred_from_nt(self.model, pairs)
+        return [pa >= self.activity_thres for pa in pred_activity]
 
 
 def construct_predictor(model_path, context_nt=10):
@@ -68,3 +67,4 @@ def construct_predictor(model_path, context_nt=10):
     model = predictor.load_model_for_cas13_regression_on_active(
             model_path, params)
     return Predictor(model)
+

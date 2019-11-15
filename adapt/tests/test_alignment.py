@@ -353,8 +353,11 @@ class TestAlignment(unittest.TestCase):
         class PredictorTest:
             def __init__(self):
                 self.context_nt = 0
-            def evaluate(self, target_with_context, guide):
-                return guide[0] == 'A'
+            def evaluate(self, pairs):
+                y = []
+                for target, guide in pairs:
+                    y += [guide[0] == 'A']
+                return y
         predictor = PredictorTest()
         # Now the best guide is 'ATACCA'
         p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
@@ -367,8 +370,11 @@ class TestAlignment(unittest.TestCase):
         class PredictorTest:
             def __init__(self):
                 self.context_nt = 0
-            def evaluate(self, target_with_context, guide):
-                return guide[0] == 'C'
+            def evaluate(self, pairs):
+                y = []
+                for target, guide in pairs:
+                    y += [guide[0] == 'C']
+                return y
         predictor = PredictorTest()
         # Now there is no suitable guide
         with self.assertRaises(alignment.CannotConstructGuideError):
