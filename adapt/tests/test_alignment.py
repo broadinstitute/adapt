@@ -361,10 +361,26 @@ class TestAlignment(unittest.TestCase):
         predictor = PredictorTest()
         # Now the best guide is 'ATACCA'
         p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-            predictor=predictor)
+            predictor=predictor, stop_early=False)
         gd, covered_seqs = p
         self.assertEqual(gd, 'ATACCA')
         self.assertEqual(covered_seqs, [1])
+
+        # Only predict guides starting with 'A' to be active, and impose an
+        # early stopping criterion
+        class PredictorTest:
+            def __init__(self):
+                self.context_nt = 0
+            def evaluate(self, pairs):
+                y = []
+                for target, guide in pairs:
+                    y += [guide[0] == 'A']
+                return y
+        predictor = PredictorTest()
+        # With early stopping, it will not find a guide
+        with self.assertRaises(alignment.CannotConstructGuideError):
+            aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
+                predictor=predictor, stop_early=True)
 
         # Only predictor guides starting with 'C' to be active
         class PredictorTest:

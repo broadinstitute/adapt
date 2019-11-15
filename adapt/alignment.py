@@ -164,7 +164,7 @@ class Alignment:
             allow_gu_pairs, guide_clusterer, num_needed=None,
             missing_threshold=1, guide_is_suitable_fn=None,
             required_flanking_seqs=(None, None),
-            predictor=None):
+            predictor=None, stop_early=True):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -203,6 +203,8 @@ class Alignment:
                 object, with evaluate() function to predict activity and
                 determine whether a guide has sufficiently high activity
                 for a target. If None, do not predict activity.
+            stop_early: if True, impose early stopping criteria while iterating
+                over clusters to improve runtime
 
         Returns:
             tuple (x, y) where:
@@ -294,7 +296,9 @@ class Alignment:
             pair_eval = {}
         def determine_binding_and_active_seqs(gd_sequence):
             binding_seqs = []
+            num_bound = 0
             if predictor is not None:
+                num_passed_predict_active = 0
                 # Determine what calls to make to predictor.evaluate(); it
                 # is best to batch these
                 pairs_to_eval = set()
@@ -314,16 +318,20 @@ class Alignment:
                 for i, (seq, seq_idx) in enumerate(seq_rows):
                     if guide.guide_binds(gd_sequence, seq, mismatches,
                             allow_gu_pairs):
+                        num_bound += 1
                         seq_with_context, _ = seq_rows_with_context[i]
                         pair = (seq_with_context, gd_sequence)
                         if pair_eval[pair]:
+                            num_passed_predict_active += 1
                             binding_seqs += [seq_idx]
             else:
+                num_passed_predict_active = None
                 for i, (seq, seq_idx) in enumerate(seq_rows):
                     if guide.guide_binds(gd_sequence, seq, mismatches,
                             allow_gu_pairs):
+                        num_bound += 1
                         binding_seqs += [seq_idx]
-            return binding_seqs
+            return binding_seqs, num_bound, num_passed_predict_active
 
         # Define a score function (higher is better) for a collection of
         # sequences covered by a guide
@@ -374,10 +382,12 @@ class Alignment:
         best_gd = None
         best_gd_binding_seqs = None
         best_gd_score = 0
+        stopped_early = False
         for cluster_idxs in clusters_ordered:
-            if best_gd_score > seq_idxs_score(cluster_idxs):
-                # The guide from this cluster is unlikely (or impossible)
-                # to exceed the current score; stop early
+            if stop_early and best_gd_score > seq_idxs_score(cluster_idxs):
+                # The guide from this cluster is unlikely to exceed the current
+                # score; stop early
+                stopped_early = True
                 break
 
             gd = aln_for_guide.determine_consensus_sequence(
@@ -392,12 +402,29 @@ class Alignment:
                 continue
             # Determine the sequences that are bound by this guide (and
             # where it is 'active', if predictor is set)
-            binding_seqs = determine_binding_and_active_seqs(gd)
+            binding_seqs, num_bound, num_passed_predict_active = \
+                    determine_binding_and_active_seqs(gd)
             score = seq_idxs_score(binding_seqs)
             if score > best_gd_score:
                 best_gd = gd
                 best_gd_binding_seqs = binding_seqs
                 best_gd_score = score
+
+            # Impose an early stopping criterion if predictor is
+            # used, because using it is slow
+            if predictor is not None and stop_early:
+                if (num_bound >= 0.5*len(cluster_idxs) and
+                        num_passed_predict_active < 0.1*len(cluster_idxs)):
+                    # gd binds (according to guide.guide_binds()) many
+                    # sequences, but is not predicted to be active against
+                    # many; it is likely that this region is poor according to
+                    # the predictor (e.g., due to sequence composition). Rather
+                    # than trying other clusters at this site, just skip it.
+                    # Note that this is just a heuristic; it can help runtime
+                    # when the predictor is used, but is not needed and may
+                    # hurt the optimality of the solution
+                    stopped_early = True
+                    break
         gd = best_gd
         binding_seqs = best_gd_binding_seqs
 
@@ -405,7 +432,7 @@ class Alignment:
         # binds to any of the sequences. In this case, simply go through all
         # sequences and find the first that has no ambiguity and is suitable
         # and active, and make this the guide
-        if gd is None:
+        if gd is None and not stopped_early:
             for i, (s, idx) in enumerate(seq_rows):
                 if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) != len(s):
                     # s has ambiguity; skip it
@@ -416,12 +443,12 @@ class Alignment:
                     continue
                 if predictor is not None:
                     s_with_context, _ = seq_rows_with_context[i]
-                    if predictor.evaluate([(s_with_context, s)])[0] is False:
+                    if not predictor.evaluate([(s_with_context, s)])[0]:
                         # s is not active against itself; skip it
                         continue
                 # s has no ambiguity and is a suitable guide; use it
                 gd = s
-                binding_seqs = determine_binding_and_active_seqs(gd)
+                binding_seqs, _, _ = determine_binding_and_active_seqs(gd)
                 break
 
         if gd is None:
