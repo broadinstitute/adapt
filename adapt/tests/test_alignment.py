@@ -353,7 +353,7 @@ class TestAlignment(unittest.TestCase):
         class PredictorTest:
             def __init__(self):
                 self.context_nt = 0
-            def evaluate(self, pairs):
+            def evaluate(self, start_pos, pairs):
                 y = []
                 for target, guide in pairs:
                     y += [guide[0] == 'A']
@@ -371,7 +371,7 @@ class TestAlignment(unittest.TestCase):
         class PredictorTest:
             def __init__(self):
                 self.context_nt = 0
-            def evaluate(self, pairs):
+            def evaluate(self, start_pos, pairs):
                 y = []
                 for target, guide in pairs:
                     y += [guide[0] == 'A']
@@ -386,7 +386,7 @@ class TestAlignment(unittest.TestCase):
         class PredictorTest:
             def __init__(self):
                 self.context_nt = 0
-            def evaluate(self, pairs):
+            def evaluate(self, start_pos, pairs):
                 y = []
                 for target, guide in pairs:
                     y += [guide[0] == 'C']

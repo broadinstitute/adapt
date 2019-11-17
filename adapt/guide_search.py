@@ -315,6 +315,8 @@ class GuideSearcher:
         should grow over time. At each resizing, the fraction will drop back
         down to 0.
 
+        This also cleans up memoizations in the predictor, if that was set.
+
         Args:
             pos: start position that no longer needs to be memoized (i.e., where
                 guides covering at that start position are no longer needed)
@@ -352,6 +354,10 @@ class GuideSearcher:
                         self._memoized_guides_last_inner_dict = new_memoized_guides[key]
                 self._memoized_guides = new_memoized_guides
                 self._memoized_guides_num_removed_since_last_resize = 0
+
+        # Cleanup the predictor's memoizations at this position
+        if self.predictor is not None:
+            self.predictor.cleanup_memoized(pos)
 
     def _guide_overlaps_blacklisted_range(self, gd_pos):
         """Determine whether a guide would overlap a blacklisted range.

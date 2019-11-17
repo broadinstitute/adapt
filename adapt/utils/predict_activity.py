@@ -15,6 +15,9 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
 class Predictor:
+    """This calls the activity model and memoizes results.
+    """
+
     def __init__(self, model, activity_thres=-1.0):
         """
         Args:
@@ -26,7 +29,43 @@ class Predictor:
         self.activity_thres = activity_thres
         self.context_nt = model.context_nt
 
-    def evaluate(self, pairs):
+        # Memoize evaluations, organized by guide start position:
+        #   {guide start: {pair: result of evaluation}}
+        self._memoized_evaluations = {}
+
+    def evaluate(self, start_pos, pairs):
+        """Evaluate guide-target pairs, with memoized results.
+
+        Args:
+            start_pos: start position of all guides in pairs
+            pairs: list of tuples (target with context, guide)
+
+        Returns:
+            results of self.call() on these pairs
+        """
+        if start_pos not in self._memoized_evaluations:
+            self._memoized_evaluations[start_pos] = {}
+        mem = self._memoized_evaluations[start_pos]
+
+        # Determine which pairs do not have memoized results, and call
+        # these
+        unique_pairs_to_evaluate = [pair for pair in set(pairs) if pair not in mem]
+        evaluations = self.call(unique_pairs_to_evaluate)
+        for pair, e in zip(unique_pairs_to_evaluate, evaluations):
+            mem[pair] = e
+
+        return [mem[pair] for pair in pairs]
+
+    def cleanup_memoized(self, start_pos):
+        """Cleanup memoizations no longer needed at a start position.
+
+        Args:
+            start_pos: start position of all guides to remove
+        """
+        if start_pos in self._memoized_evaluations:
+            del self._memoized_evaluations[start_pos]
+
+    def call(self, pairs):
         """Determine whether or not a guide-target pair has sufficient
         activity. 
 

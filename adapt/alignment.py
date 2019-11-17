@@ -301,17 +301,15 @@ class Alignment:
                 num_passed_predict_active = 0
                 # Determine what calls to make to predictor.evaluate(); it
                 # is best to batch these
-                pairs_to_eval = set()
+                pairs_to_eval = []
                 for i, (seq, seq_idx) in enumerate(seq_rows):
                     if guide.guide_binds(gd_sequence, seq, mismatches,
                             allow_gu_pairs):
                         seq_with_context, _ = seq_rows_with_context[i]
                         pair = (seq_with_context, gd_sequence)
-                        if pair not in pair_eval:
-                            pairs_to_eval.add(pair)
+                        pairs_to_eval += [pair]
                 # Evaluate activity
-                pairs_to_eval = list(pairs_to_eval)
-                evals = predictor.evaluate(pairs_to_eval)
+                evals = predictor.evaluate(start, pairs_to_eval)
                 for pair, y in zip(pairs_to_eval, evals):
                     pair_eval[pair] = y
                 # Fill in binding_seqs
@@ -443,7 +441,7 @@ class Alignment:
                     continue
                 if predictor is not None:
                     s_with_context, _ = seq_rows_with_context[i]
-                    if not predictor.evaluate([(s_with_context, s)])[0]:
+                    if not predictor.evaluate(start, [(s_with_context, s)])[0]:
                         # s is not active against itself; skip it
                         continue
                 # s has no ambiguity and is a suitable guide; use it
