@@ -152,7 +152,7 @@ def ncbi_influenza_genomes_url():
     Returns:
         str representing download URL
     """
-    url = 'ftp://ftp.ncbi.nih.gov/genomes/INFLUENZA/genomeset.dat.gz'
+    url = 'ftp://ftp.ncbi.nih.gov/genomes/INFLUENZA/influenza_na.dat.gz'
     return url
 
 
@@ -430,25 +430,27 @@ def construct_influenza_genome_neighbors(taxid):
 
     According to the README on NCBI's influenza database FTP site:
     ```
-    The genomeset.dat file contains information for sequences of viruses with a
-    complete set of segments in full-length (or nearly
-    full-length).  Those of the same virus are grouped together (using an internal
-    group ID that is shown in the last column of the file) and separated by an
-    empty line from those of other viruses.
+    The influenza_na.dat and influenza_aa.dat files have an additional field in
+    the last column to indicate the completeness of a sequence - "c" for
+    complete sequences that include start and stop codons; "nc" for nearly
+    complete sequences that are missing only start and/or stop codons; "p" for
+    partial sequences.
     ```
-    fetch_influenza_genomes_table() returns genomeset.dat filtered for
+    fetch_influenza_genomes_table() returns influenza_na.dat filtered for
     a given species name.
 
-    According to that same README, the columns are:
+    The columns are:
     ```
     GenBank accession number[tab]Host[tab]Genome segment number or protein name
     [tab]Subtype[tab]Country[tab]Year/month/date[tab]Sequence length
-    [tab]Virus name[tab]Age[tab]Gender
+    [tab]Virus name[tab]Age[tab]Gender[tab]Completeness indicator (last field)
     ```
+
+    This keeps only complete or near-complete sequences.
 
     Args:
         taxid: taxonomic ID for an influenza species; must be influenza A
-            or B species
+            or B or C species
 
     Returns:
         list of Neighbor objects
@@ -457,16 +459,19 @@ def construct_influenza_genome_neighbors(taxid):
                  "with tax %d") % taxid)
 
     influenza_species = {11320: 'Influenza A virus',
-                         11520: 'Influenza B virus'}
+                         11520: 'Influenza B virus',
+                         11552: 'Influenza C virus'}
     if taxid not in influenza_species:
         raise ValueError(("Taxid (%d) must be for either influenza A or "
-                          "influenza B virus species") % taxid)
+                          "B or C virus species") % taxid)
     species_name = influenza_species[taxid]
 
     influenza_lineages = {11320: ('Orthomyxoviridae', 'Alphainfluenzavirus',
                                   'Influenza A virus'),
                           11520: ('Orthomyxoviridae', 'Betainfluenzavirus',
-                                  'Influenza B virus')}
+                                  'Influenza B virus'),
+                          11552: ('Orthomyxoviridae', 'Gammainfluenzavirus',
+                                  'Influenza C virus')}
     lineage = influenza_lineages[taxid]
 
     # Construct a pattern to match years in a date (1000--2999)
@@ -490,6 +495,11 @@ def construct_influenza_genome_neighbors(taxid):
         date = ls[5]
         seq_len = int(ls[6])
         name = ls[7]
+        completeness = ls[-1]
+
+        # Only keep if this is complete or near-complete
+        if completeness not in ['c', 'nc']:
+            continue
 
         # Parse the year
         year_m = year_p.search(date)
