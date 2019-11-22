@@ -148,22 +148,28 @@ def fetch_neighbors_table(taxid):
             yield line_rstrip
 
 
-def ncbi_influenza_genomes_url():
+def ncbi_influenza_genomes_url(database='genomeset'):
     """Construct URL for downloading NCBI influenza genomes database.
+
+    Args:
+        database: db to use; 'genomeset' or 'influenza_na'
 
     Returns:
         str representing download URL
     """
-    url = 'ftp://ftp.ncbi.nih.gov/genomes/INFLUENZA/influenza_na.dat.gz'
+    url = 'ftp://ftp.ncbi.nih.gov/genomes/INFLUENZA/'
+    assert database in ['genomeset', 'influenza_na']
+    url += database + '.dat.gz'
     return url
 
 
-def fetch_influenza_genomes_table(species_name):
+def fetch_influenza_genomes_table(species_name, database):
     """Fetch influenza genome table from NCBI.
 
     Args:
         species_name: filter to keep only lines that contain this species
             name
+        database: db to use; 'genomeset' or 'influenza_na'
 
     Yields:
         lines, where each line is from the genome database table and
@@ -173,7 +179,7 @@ def fetch_influenza_genomes_table(species_name):
         species_name)
     species_name_lower = species_name.lower()
 
-    url = ncbi_influenza_genomes_url()
+    url = ncbi_influenza_genomes_url(database)
     r = urlopen_with_tries(url)
     raw_data = gzip.GzipFile(fileobj=r).read()
     for line in raw_data.decode('utf-8').split('\n'):
@@ -438,8 +444,15 @@ def construct_influenza_genome_neighbors(taxid):
     complete sequences that are missing only start and/or stop codons; "p" for
     partial sequences.
     ```
-    fetch_influenza_genomes_table() returns influenza_na.dat filtered for
-    a given species name.
+    ```
+    The genomeset.dat file contains information for sequences of viruses with
+    a complete set of segments in full-length (or nearly full-length).  Those
+    of the same virus are grouped together (using an internal group ID that is
+    shown in the last column of the file) and separated by an empty line from
+    those of other viruses.
+    ```
+    fetch_influenza_genomes_table() returns influenza_na.dat or
+    genomeset.dat (as specified), filtered for a given species name.
 
     The columns are:
     ```
@@ -447,6 +460,7 @@ def construct_influenza_genome_neighbors(taxid):
     [tab]Subtype[tab]Country[tab]Year/month/date[tab]Sequence length
     [tab]Virus name[tab]Age[tab]Gender[tab]Completeness indicator (last field)
     ```
+    (the last column is only in influenza_na.dat)
 
     This keeps only complete or near-complete sequences.
 
@@ -482,8 +496,18 @@ def construct_influenza_genome_neighbors(taxid):
     # Determine the current year
     curr_year = int(datetime.datetime.now().year)
 
+    # Choose a database to pull from; note that 11552 is only in
+    # influenza_na. 11320 and 11520 are in influenza_na and
+    # genomeset. influenza_na has more sequences, whereas
+    # genomeset is about ~1/2 the size but more highly curated for
+    # genomes
+    if taxid == 11320 or taxid == 11520:
+        database = 'genomeset'
+    elif taxid == 11552:
+        database = 'influenza_na'
+
     neighbors = []
-    for line in fetch_influenza_genomes_table(species_name):
+    for line in fetch_influenza_genomes_table(species_name, database):
         if len(line.strip()) == 0:
             continue
 
@@ -497,11 +521,13 @@ def construct_influenza_genome_neighbors(taxid):
         date = ls[5]
         seq_len = int(ls[6])
         name = ls[7]
-        completeness = ls[-1]
 
-        # Only keep if this is complete or near-complete
-        if completeness not in ['c', 'nc']:
-            continue
+        if database == 'influenza_na':
+            # These include partial sequences; cut them out - i.e., only
+            # keep this sequence if it is complete or near-complete
+            completeness = ls[-1]
+            if completeness not in ['c', 'nc']:
+                continue
 
         # Parse the year
         year_m = year_p.search(date)
