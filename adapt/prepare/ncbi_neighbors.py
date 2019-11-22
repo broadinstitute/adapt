@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
-        max_num_tries=7, read=False):
+        max_num_tries=10, read=False):
     """
     Open a URL via urllib with repeated tries.
 
@@ -57,11 +57,13 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
                 return raw_data
             else:
                 return r
-        except (urllib.error.HTTPError, http.client.HTTPException):
+        except (urllib.error.HTTPError, http.client.HTTPException,
+                urllib.error.URLError):
             if num_tries == max_num_tries:
                 # This was the last allowed try
-                logger.warning(("Encountered HTTPError or HTTPException %d "
-                    "times (the maximum allowed) when opening url: %s"),
+                logger.warning(("Encountered HTTPError or HTTPException or "
+                    "URLError %d times (the maximum allowed) when opening "
+                    "url: %s"),
                     num_tries, url)
                 raise
             else:
