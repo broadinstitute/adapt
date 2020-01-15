@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
-        max_num_tries=7, read=False):
+        max_num_tries=10, read=False):
     """
     Open a URL via urllib with repeated tries.
 
@@ -57,11 +57,13 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
                 return raw_data
             else:
                 return r
-        except (urllib.error.HTTPError, http.client.HTTPException):
+        except (urllib.error.HTTPError, http.client.HTTPException,
+                urllib.error.URLError):
             if num_tries == max_num_tries:
                 # This was the last allowed try
-                logger.warning(("Encountered HTTPError or HTTPException %d "
-                    "times (the maximum allowed) when opening url: %s"),
+                logger.warning(("Encountered HTTPError or HTTPException or "
+                    "URLError %d times (the maximum allowed) when opening "
+                    "url: %s"),
                     num_tries, url)
                 raise
             else:
@@ -146,22 +148,28 @@ def fetch_neighbors_table(taxid):
             yield line_rstrip
 
 
-def ncbi_influenza_genomes_url():
+def ncbi_influenza_genomes_url(database='genomeset'):
     """Construct URL for downloading NCBI influenza genomes database.
+
+    Args:
+        database: db to use; 'genomeset' or 'influenza_na'
 
     Returns:
         str representing download URL
     """
-    url = 'ftp://ftp.ncbi.nih.gov/genomes/INFLUENZA/genomeset.dat.gz'
+    url = 'ftp://ftp.ncbi.nih.gov/genomes/INFLUENZA/'
+    assert database in ['genomeset', 'influenza_na']
+    url += database + '.dat.gz'
     return url
 
 
-def fetch_influenza_genomes_table(species_name):
+def fetch_influenza_genomes_table(species_name, database):
     """Fetch influenza genome table from NCBI.
 
     Args:
         species_name: filter to keep only lines that contain this species
             name
+        database: db to use; 'genomeset' or 'influenza_na'
 
     Yields:
         lines, where each line is from the genome database table and
@@ -171,7 +179,7 @@ def fetch_influenza_genomes_table(species_name):
         species_name)
     species_name_lower = species_name.lower()
 
-    url = ncbi_influenza_genomes_url()
+    url = ncbi_influenza_genomes_url(database)
     r = urlopen_with_tries(url)
     raw_data = gzip.GzipFile(fileobj=r).read()
     for line in raw_data.decode('utf-8').split('\n'):
@@ -430,25 +438,35 @@ def construct_influenza_genome_neighbors(taxid):
 
     According to the README on NCBI's influenza database FTP site:
     ```
-    The genomeset.dat file contains information for sequences of viruses with a
-    complete set of segments in full-length (or nearly
-    full-length).  Those of the same virus are grouped together (using an internal
-    group ID that is shown in the last column of the file) and separated by an
-    empty line from those of other viruses.
+    The influenza_na.dat and influenza_aa.dat files have an additional field in
+    the last column to indicate the completeness of a sequence - "c" for
+    complete sequences that include start and stop codons; "nc" for nearly
+    complete sequences that are missing only start and/or stop codons; "p" for
+    partial sequences.
     ```
-    fetch_influenza_genomes_table() returns genomeset.dat filtered for
-    a given species name.
+    ```
+    The genomeset.dat file contains information for sequences of viruses with
+    a complete set of segments in full-length (or nearly full-length).  Those
+    of the same virus are grouped together (using an internal group ID that is
+    shown in the last column of the file) and separated by an empty line from
+    those of other viruses.
+    ```
+    fetch_influenza_genomes_table() returns influenza_na.dat or
+    genomeset.dat (as specified), filtered for a given species name.
 
-    According to that same README, the columns are:
+    The columns are:
     ```
     GenBank accession number[tab]Host[tab]Genome segment number or protein name
     [tab]Subtype[tab]Country[tab]Year/month/date[tab]Sequence length
-    [tab]Virus name[tab]Age[tab]Gender
+    [tab]Virus name[tab]Age[tab]Gender[tab]Completeness indicator (last field)
     ```
+    (the last column is only in influenza_na.dat)
+
+    This keeps only complete or near-complete sequences.
 
     Args:
         taxid: taxonomic ID for an influenza species; must be influenza A
-            or B species
+            or B or C species
 
     Returns:
         list of Neighbor objects
@@ -457,16 +475,19 @@ def construct_influenza_genome_neighbors(taxid):
                  "with tax %d") % taxid)
 
     influenza_species = {11320: 'Influenza A virus',
-                         11520: 'Influenza B virus'}
+                         11520: 'Influenza B virus',
+                         11552: 'Influenza C virus'}
     if taxid not in influenza_species:
         raise ValueError(("Taxid (%d) must be for either influenza A or "
-                          "influenza B virus species") % taxid)
+                          "B or C virus species") % taxid)
     species_name = influenza_species[taxid]
 
     influenza_lineages = {11320: ('Orthomyxoviridae', 'Alphainfluenzavirus',
                                   'Influenza A virus'),
                           11520: ('Orthomyxoviridae', 'Betainfluenzavirus',
-                                  'Influenza B virus')}
+                                  'Influenza B virus'),
+                          11552: ('Orthomyxoviridae', 'Gammainfluenzavirus',
+                                  'Influenza C virus')}
     lineage = influenza_lineages[taxid]
 
     # Construct a pattern to match years in a date (1000--2999)
@@ -475,8 +496,18 @@ def construct_influenza_genome_neighbors(taxid):
     # Determine the current year
     curr_year = int(datetime.datetime.now().year)
 
+    # Choose a database to pull from; note that 11552 is only in
+    # influenza_na. 11320 and 11520 are in influenza_na and
+    # genomeset. influenza_na has more sequences, whereas
+    # genomeset is about ~1/2 the size but more highly curated for
+    # genomes
+    if taxid == 11320 or taxid == 11520:
+        database = 'genomeset'
+    elif taxid == 11552:
+        database = 'influenza_na'
+
     neighbors = []
-    for line in fetch_influenza_genomes_table(species_name):
+    for line in fetch_influenza_genomes_table(species_name, database):
         if len(line.strip()) == 0:
             continue
 
@@ -490,6 +521,13 @@ def construct_influenza_genome_neighbors(taxid):
         date = ls[5]
         seq_len = int(ls[6])
         name = ls[7]
+
+        if database == 'influenza_na':
+            # These include partial sequences; cut them out - i.e., only
+            # keep this sequence if it is complete or near-complete
+            completeness = ls[-1]
+            if completeness not in ['c', 'nc']:
+                continue
 
         # Parse the year
         year_m = year_p.search(date)
