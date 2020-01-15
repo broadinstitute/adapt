@@ -171,7 +171,7 @@ class TestNode(unittest.TestCase):
                 expected = [true[query]]
             else:
                 expected = []
-            self.assertCountEqual(r.query(query, 0, False), expected)
+            self.assertCountEqual(r.query(query, 0, 0, False), expected)
 
     def test_query_no_mismatches_without_gu_with_insert_replace(self):
         r = trie.Node(None)
@@ -196,7 +196,7 @@ class TestNode(unittest.TestCase):
                 expected = [true[query]]
             else:
                 expected = []
-            self.assertCountEqual(r.query(query, 0, False), expected)
+            self.assertCountEqual(r.query(query, 0, 0, False), expected)
 
     def test_query_no_mismatches_with_gu(self):
         r = trie.Node(None)
@@ -210,19 +210,19 @@ class TestNode(unittest.TestCase):
         r.insert('ATC', LeafInfo([8]))
 
         # 'A' can match 'A' or 'G'
-        self.assertCountEqual(r.query('AAA', 0, True),
+        self.assertCountEqual(r.query('AAA', 0, 0, True),
                 [LeafInfo([1]), LeafInfo([2])])
-        self.assertCountEqual(r.query('ATG', 0, True),
+        self.assertCountEqual(r.query('ATG', 0, 0, True),
                 [LeafInfo([5])])
 
         # 'G' can only match 'G'
-        self.assertCountEqual(r.query('GGG', 0, True),
+        self.assertCountEqual(r.query('GGG', 0, 0, True),
                 [LeafInfo([2])])
 
         # 'C' can match 'T'
-        self.assertCountEqual(r.query('CCC', 0, True),
+        self.assertCountEqual(r.query('CCC', 0, 0, True),
                 [LeafInfo([7])])
-        self.assertCountEqual(r.query('ACC', 0, True),
+        self.assertCountEqual(r.query('ACC', 0, 0, True),
                 [LeafInfo([3,6]), LeafInfo([8])])
 
     def test_query_1_mismatch_without_gu(self):
@@ -255,7 +255,7 @@ class TestNode(unittest.TestCase):
                     'TTTATTT': [LeafInfo([10]), LeafInfo([11])],
                     'ATTTTTT': [LeafInfo([10])]}
         for query, expected_value in expected.items():
-            self.assertCountEqual(r.query(query, 1, False), expected_value)
+            self.assertCountEqual(r.query(query, 0, 1, False), expected_value)
 
     def test_query_1_mismatch_with_gu(self):
         r = trie.Node(None)
@@ -287,7 +287,7 @@ class TestNode(unittest.TestCase):
                     'TTTATTT': [LeafInfo([10]), LeafInfo([11]), LeafInfo([12])],
                     'ATTTTTT': [LeafInfo([10])]}
         for query, expected_value in expected.items():
-            self.assertCountEqual(r.query(query, 1, True), expected_value)
+            self.assertCountEqual(r.query(query, 0, 1, True), expected_value)
 
     def test_remove_and_reinsert(self):
         r = trie.Node(None)
@@ -311,7 +311,7 @@ class TestNode(unittest.TestCase):
                 expected = [true[query]]
             else:
                 expected = []
-            self.assertCountEqual(r.query(query, 0, False), expected)
+            self.assertCountEqual(r.query(query, 0, 0, False), expected)
 
         # Remove a few strings
         self.assertTrue(r.remove('GGG'))
@@ -329,7 +329,7 @@ class TestNode(unittest.TestCase):
                 expected = [true_with_removals[query]]
             else:
                 expected = []
-            self.assertCountEqual(r.query(query, 0, False), expected)
+            self.assertCountEqual(r.query(query, 0, 0, False), expected)
 
         # Re-insert the removed strings
         r.insert('GGG', LeafInfo([2]))
@@ -343,7 +343,7 @@ class TestNode(unittest.TestCase):
                 expected = [true[query]]
             else:
                 expected = []
-            self.assertCountEqual(r.query(query, 0, False), expected)
+            self.assertCountEqual(r.query(query, 0, 0, False), expected)
 
     def test_traverse_and_find(self):
         r = trie.Node(None)
@@ -401,7 +401,7 @@ class TestNode(unittest.TestCase):
                     expected = [true[query]]
                 else:
                     expected = []
-                self.assertCountEqual(r.query(query, 0, False), expected)
+                self.assertCountEqual(r.query(query, 0, 0, False), expected)
 
         # Start by checking contents
         check_contents()
