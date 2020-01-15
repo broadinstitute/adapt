@@ -163,7 +163,8 @@ class Alignment:
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
             allow_gu_pairs, guide_clusterer, num_needed=None,
             missing_threshold=1, guide_is_suitable_fn=None,
-            required_flanking_seqs=(None, None)):
+            required_flanking_seqs=(None, None),
+            predictor=None, stop_early=True):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -198,6 +199,12 @@ class Alignment:
                 the guide (in the target, not the guide) that must be
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
+            predictor: if set, a adapt.utils.predict_activity.Predictor
+                object, with evaluate() function to predict activity and
+                determine whether a guide has sufficiently high activity
+                for a target. If None, do not predict activity.
+            stop_early: if True, impose early stopping criteria while iterating
+                over clusters to improve runtime
 
         Returns:
             tuple (x, y) where:
@@ -233,6 +240,18 @@ class Alignment:
 
         aln_for_guide = self.extract_range(start, start + guide_length)
 
+        if predictor is not None:
+            # Extract the target sequences, including context to use with
+            # prediction
+            if (start - predictor.context_nt < 0 or
+                    start + guide_length + predictor.context_nt > self.seq_length):
+                raise CannotConstructGuideError(("The context needed for "
+                    "the target to predict activity falls outside the "
+                    "range of the alignment at this position"))
+            aln_for_guide_with_context = self.extract_range(
+                    start - predictor.context_nt,
+                    start + guide_length + predictor.context_nt)
+
         # Before modifying seqs_to_consider, make a copy of it
         seqs_to_consider_cp = {}
         for group_id in seqs_to_consider.keys():
@@ -243,7 +262,10 @@ class Alignment:
 
         # Ignore any sequences in the alignment that have a gap in
         # this region
-        seqs_with_gap = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
+        if predictor is not None:
+            seqs_with_gap = set(aln_for_guide_with_context.seqs_with_gap(all_seqs_to_consider))
+        else:
+            seqs_with_gap = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
         for group_id in seqs_to_consider.keys():
             seqs_to_consider[group_id].difference_update(seqs_with_gap)
         all_seqs_to_consider = set.union(*seqs_to_consider.values())
@@ -265,124 +287,171 @@ class Alignment:
 
         seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
             include_idx=True)
+        if predictor is not None:
+            seq_rows_with_context = aln_for_guide_with_context.make_list_of_seqs(
+                    all_seqs_to_consider, include_idx=True)
+
+        if predictor is not None:
+            # Memoize activity evaluations
+            pair_eval = {}
+        def determine_binding_and_active_seqs(gd_sequence):
+            binding_seqs = []
+            num_bound = 0
+            if predictor is not None:
+                num_passed_predict_active = 0
+                # Determine what calls to make to predictor.evaluate(); it
+                # is best to batch these
+                pairs_to_eval = []
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if guide.guide_binds(gd_sequence, seq, mismatches,
+                            allow_gu_pairs):
+                        seq_with_context, _ = seq_rows_with_context[i]
+                        pair = (seq_with_context, gd_sequence)
+                        pairs_to_eval += [pair]
+                # Evaluate activity
+                evals = predictor.evaluate(start, pairs_to_eval)
+                for pair, y in zip(pairs_to_eval, evals):
+                    pair_eval[pair] = y
+                # Fill in binding_seqs
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if guide.guide_binds(gd_sequence, seq, mismatches,
+                            allow_gu_pairs):
+                        num_bound += 1
+                        seq_with_context, _ = seq_rows_with_context[i]
+                        pair = (seq_with_context, gd_sequence)
+                        if pair_eval[pair]:
+                            num_passed_predict_active += 1
+                            binding_seqs += [seq_idx]
+            else:
+                num_passed_predict_active = None
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if guide.guide_binds(gd_sequence, seq, mismatches,
+                            allow_gu_pairs):
+                        num_bound += 1
+                        binding_seqs += [seq_idx]
+            return binding_seqs, num_bound, num_passed_predict_active
+
+        # Define a score function (higher is better) for a collection of
+        # sequences covered by a guide
+        if num_needed is not None:
+            # This is the number of sequences it contains that are needed to
+            # achieve the partial cover; we can compute this by summing over
+            # the number of needed sequences it contains, taken across the
+            # groups in the universe
+            # Memoize the scores because this computation might be expensive
+            seq_idxs_scores = {}
+            def seq_idxs_score(seq_idxs):
+                seq_idxs = set(seq_idxs)
+                tc = tuple(seq_idxs)
+                if tc in seq_idxs_scores:
+                    return seq_idxs_scores[tc]
+                score = 0
+                for group_id, needed in num_needed.items():
+                    contained_in_seq_idxs = seq_idxs & seqs_to_consider[group_id]
+                    score += min(needed, len(contained_in_seq_idxs))
+                seq_idxs_scores[tc] = score
+                return score
+        else:
+            # Score by the number of sequences it contains
+            def seq_idxs_score(seq_idxs):
+                return len(seq_idxs)
 
         # First construct the optimal guide to cover the sequences. This would be
         # a string x that maximizes the number of sequences s_i such that x and
         # s_i are equal to within 'mismatches' mismatches; it's called the "max
         # close string" or "close to most strings" problem. For simplicity, let's
         # do the following: cluster the sequences (just the portion with
-        # potential guides) with LSH, pick a cluster (the "best" cluster)
-        # according to some heuristic, and take the consensus of that cluster.
-        # In particular, we'll do this by sorting the clusters (from best
-        # to worst) and taking the consensus until it yields a suitable
-        # guide.
+        # potential guides) with LSH, choose a guide for each cluster to be
+        # the consensus of that cluster, and choose the one (across clusters)
+        # that has the highest score
         if guide_clusterer is None:
             # Don't cluster; instead, draw the consensus from all the
             # sequences. Effectively, treat it as there being just one
             # cluster, which consists of all sequences to consider
             clusters_ordered = [all_seqs_to_consider]
         else:
-            # Cluster and pick the cluster that contains the highest number
-            # of needed sequences to achieve the partial cover
             # Cluster the sequences
             clusters = guide_clusterer.cluster(seq_rows)
 
-            # Define a score function for each cluster
-            if num_needed is not None:
-                # Score a cluster (higher is better) by the number of
-                # sequences it contains that are needed to achieve the
-                # partial cover; do this by summing over the number
-                # of needed sequences it contains, taken across the
-                # groups in the universe
-                # Memoize the scores because this computation might be
-                # expensive
-                cluster_scores = {}
-                def cluster_score(cluster_idxs):
-                    tc = tuple(cluster_idxs)
-                    if tc in cluster_scores:
-                        return cluster_scores[tc]
-                    score = 0
-                    for group_id, needed in num_needed.items():
-                        contained_in_cluster = cluster_idxs & seqs_to_consider[group_id]
-                        score += min(needed, len(contained_in_cluster))
-                    cluster_scores[tc] = score
-                    return score
-            else:
-                # Score a cluster by the number of sequences it contains
-                def cluster_score(cluster_idxs):
-                    return len(cluster_idxs)
-
             # Sort the clusters by score, from highest to lowest
-            clusters_ordered = sorted(clusters, key=cluster_score, reverse=True)
+            # Here, the score is determined by the sequences in the cluster
+            clusters_ordered = sorted(clusters, key=seq_idxs_score, reverse=True)
 
-        # Create a guide from each cluster, until one is suitable
-        selected_cluster_idxs = None
-        if guide_is_suitable_fn is None:
-            # Create a guide from the best cluster (first in the list)
-            selected_cluster_idxs = clusters_ordered[0]
-            consensus = aln_for_guide.determine_consensus_sequence(
-                selected_cluster_idxs)
-            gd = consensus
-        else:
-            gd = None
-            for cluster_idxs in clusters_ordered:
-                consensus = aln_for_guide.determine_consensus_sequence(
-                    cluster_idxs)
-                if guide_is_suitable_fn(consensus) is True:
-                    gd = consensus
-                    selected_cluster_idxs = cluster_idxs
+        best_gd = None
+        best_gd_binding_seqs = None
+        best_gd_score = 0
+        stopped_early = False
+        for cluster_idxs in clusters_ordered:
+            if stop_early and best_gd_score > seq_idxs_score(cluster_idxs):
+                # The guide from this cluster is unlikely to exceed the current
+                # score; stop early
+                stopped_early = True
+                break
+
+            gd = aln_for_guide.determine_consensus_sequence(
+                cluster_idxs)
+            if guide_is_suitable_fn is not None:
+                if guide_is_suitable_fn(gd) is False:
+                    # Skip this cluster
+                    continue
+            if 'N' in gd:
+                # Skip this; all sequences at a position in this cluster
+                # are 'N'
+                continue
+            # Determine the sequences that are bound by this guide (and
+            # where it is 'active', if predictor is set)
+            binding_seqs, num_bound, num_passed_predict_active = \
+                    determine_binding_and_active_seqs(gd)
+            score = seq_idxs_score(binding_seqs)
+            if score > best_gd_score:
+                best_gd = gd
+                best_gd_binding_seqs = binding_seqs
+                best_gd_score = score
+
+            # Impose an early stopping criterion if predictor is
+            # used, because using it is slow
+            if predictor is not None and stop_early:
+                if (num_bound >= 0.5*len(cluster_idxs) and
+                        num_passed_predict_active < 0.1*len(cluster_idxs)):
+                    # gd binds (according to guide.guide_binds()) many
+                    # sequences, but is not predicted to be active against
+                    # many; it is likely that this region is poor according to
+                    # the predictor (e.g., due to sequence composition). Rather
+                    # than trying other clusters at this site, just skip it.
+                    # Note that this is just a heuristic; it can help runtime
+                    # when the predictor is used, but is not needed and may
+                    # hurt the optimality of the solution
+                    stopped_early = True
                     break
-            if gd is None:
-                raise CannotConstructGuideError("No guides are suitable")
+        gd = best_gd
+        binding_seqs = best_gd_binding_seqs
 
-        # If all that exists at a position in the alignment is 'N', then do
-        # not attempt to cover the sequences because we do not know which
-        # base to put in the guide at that position. In this case, the
-        # consensus will have 'N' at that position.
-        if 'N' in gd:
-            raise CannotConstructGuideError("A position has all 'N'")
-
-        def determine_binding_seqs(gd_sequence):
-            binding_seqs = []
-            for seq, seq_idx in seq_rows:
-                if guide.guide_binds(gd_sequence, seq, mismatches,
-                        allow_gu_pairs):
-                    binding_seqs += [seq_idx]
-            return binding_seqs
-
-        binding_seqs = determine_binding_seqs(gd)
-
-        # It's possible that the consensus sequence (guide) of a cluster does
-        # not bind to any of the sequences. In this case, simply select the first
-        # sequence from the selected cluster that has no ambiguity and make this
-        # the guide; this is guaranteed to have at least one binding sequence
-        # (itself)
-        if len(binding_seqs) == 0:
-            suitable_guides = []
-            for s, idx in seq_rows:
-                if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) == len(s):
-                    if (guide_is_suitable_fn is not None and
-                            guide_is_suitable_fn(s) is False):
-                        # Skip s, which is not suitable
+        # It's possible that the consensus sequence (guide) of no cluster
+        # binds to any of the sequences. In this case, simply go through all
+        # sequences and find the first that has no ambiguity and is suitable
+        # and active, and make this the guide
+        if gd is None and not stopped_early:
+            for i, (s, idx) in enumerate(seq_rows):
+                if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) != len(s):
+                    # s has ambiguity; skip it
+                    continue
+                if (guide_is_suitable_fn is not None and
+                        guide_is_suitable_fn(s) is False):
+                    # Skip s, which is not suitable
+                    continue
+                if predictor is not None:
+                    s_with_context, _ = seq_rows_with_context[i]
+                    if not predictor.evaluate(start, [(s_with_context, s)])[0]:
+                        # s is not active against itself; skip it
                         continue
-                    # s has no ambiguity and is a suitable guide
-                    if idx in selected_cluster_idxs:
-                        # Pick s as the guide
-                        gd = s
-                        binding_seqs = determine_binding_seqs(gd)
-                        break
-                    else:
-                        suitable_guides += [s]
-            if len(binding_seqs) == 0:
-                # All sequences in the selected cluster have ambiguity, so now
-                # simply pick any suitable guide
-                if len(suitable_guides) > 0:
-                    gd = suitable_guides[0]
-                    binding_seqs = determine_binding_seqs(gd)
+                # s has no ambiguity and is a suitable guide; use it
+                gd = s
+                binding_seqs, _, _ = determine_binding_and_active_seqs(gd)
+                break
 
-            # If it made it here, then all of the sequences have ambiguity
-            # (so none are suitable guides); gd will remain the consensus and
-            # binding_seqs will still be empty
+        if gd is None:
+            raise CannotConstructGuideError(("No guides are suitable or "
+                "active"))
 
         return (gd, binding_seqs)
 
