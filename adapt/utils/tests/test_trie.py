@@ -3,7 +3,7 @@
 
 import unittest
 
-from dxguidedesign.utils import trie
+from adapt.utils import trie
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
