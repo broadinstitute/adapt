@@ -1,15 +1,13 @@
 """Load and use a model to predict activity of a guide-target pair.
 
-This is a crude, temporary module -- it hard codes a path to a separate
-directory from which to load modules that enable prediction.
+The function construct_predictor() has a crude and temporary approach, with
+a hard-coded path to a separate directory from which to load modules that
+enable prediction. That implementation is currently commented out.
 """
 
 import os
 import pickle
 import sys
-
-sys.path.append(os.path.join(os.path.expanduser("~"), "adapt-seq-design"))
-import predictor
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -18,14 +16,17 @@ class Predictor:
     """This calls the activity model and memoizes results.
     """
 
-    def __init__(self, model, activity_thres=-1.0):
+    def __init__(self, model, pred_from_nt_fn, activity_thres=-1.0):
         """
         Args:
             model: model object with a call() function
+            pred_from_nt_fn: function that accepts list of guide-target pairs
+                (in nucleotide space) and outputs predicted activities
             activity_thres: call predicted activity >= this threshold
                 to be positive
         """
         self.model = model
+        self.pred_from_nt_fn = pred_from_nt_fn
         self.activity_thres = activity_thres
         self.context_nt = model.context_nt
 
@@ -78,7 +79,7 @@ class Predictor:
         """
         if len(pairs) == 0:
             return []
-        pred_activity = predictor.pred_from_nt(self.model, pairs)
+        pred_activity = self.pred_from_nt_fn(pairs)
         return [pa >= self.activity_thres for pa in pred_activity]
 
 
@@ -92,6 +93,10 @@ def construct_predictor(model_path, context_nt=10):
     Returns:
         Predictor object
     """
+    raise NotImplementedError(("Not yet implemented in a general way; "
+        "manually edit this function to use"))
+
+    """
     load_path_params = os.path.join(model_path,
             'model.params.pkl')
     with open(load_path_params, 'rb') as f:
@@ -101,9 +106,18 @@ def construct_predictor(model_path, context_nt=10):
     for k, v in saved_params.items():
         params[k] = v
 
+    # Load predictor module from separate directory
+    sys.path.append(os.path.join(os.path.expanduser("~"), "adapt-seq-design"))
+    import predictor
+
     predictor.set_seed(1)
 
+    # Load model and define function for predicting from nucleotide sequence
     model = predictor.load_model_for_cas13_regression_on_active(
             model_path, params)
-    return Predictor(model)
+    def pred_from_nt(pairs):
+        return predictor.pred_from_nt(model, pairs)
+
+    return Predictor(model, pred_from_nt)
+    """
 
