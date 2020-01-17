@@ -26,6 +26,7 @@ However, the problems share some similarity with the problems solved by CATCH, w
   * [Output](#output)
 * [Examples](#examples)
   * [Designing with sliding window against a single target](#designing-with-sliding-window-against-a-single-target)
+  * [Designing end-to-end against a single target](#designing-end-to-end-against-a-single-target)
 * [Contributing](#contributing)
 * [Citation](#citation)
 * [License](#license)
@@ -238,6 +239,28 @@ From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest
 
 It outputs a file, `guides.tsv`, that contains constructed guide sequences.
 See [Output](#output) above for a description of this file.
+
+## Designing end-to-end against a single target
+
+ADAPT can automatically download and curate sequences during design, and search efficiently over the space of genomic regions to find primers/amplicons as well as guides.
+For example:
+```bash
+design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
+```
+downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
+You must fill in `MAFFT_PATH` with an executable.
+
+This designs primers and a minimal collection of guides within the amplicons they bind, such that:
+* guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
+* guides capture 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`)
+
+It outputs a file, `guides.tsv.0`, that contains the best 10 design choices (`--best-n-targets 10`) as measured by a cost function.
+See [Output](#output) above for a description of this file.
+
+This randomly selects 100 sequences (`--sample-seqs 100`) prior to design to speed the process for this example; the command should take about 10 minutes to run in full.
+You can set `--verbose` to obtain more detailed output.
+
+Note that this example does not account for taxon-specificity or predicted activity of designs.
 
 # Contributing
 
