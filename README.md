@@ -1,4 +1,4 @@
-# ADAPT
+# ADAPT &nbsp;&middot;&nbsp; [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 #### Adaptive Design by Astutely Patrolling Targets
 
 ADAPT is a software package for designing optimal nucleic acid diagnostics.
@@ -11,7 +11,7 @@ ADAPT is a software package for designing optimal nucleic acid diagnostics.
 The methods and software are not yet published.
 However, the problems share some similarity with the problems solved by CATCH, which is described in [_Nature Biotechnology_](https://www.nature.com/articles/s41587-018-0006-x) and available publicly on [GitHub](https://github.com/broadinstitute/catch).
 <br/>
-
+<br/>
 
 ### Table of contents
 
@@ -236,7 +236,7 @@ From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest
 * are 28 nt long (`-gl 28`)
 * capture 95% of all input sequences (`-gp 0.95`) tolerating up to 1 mismatch (`-gm 1`)
 
-It outputs a file, `guides.tsv`, that contain constructed guide sequences.
+It outputs a file, `guides.tsv`, that contains constructed guide sequences.
 See [Output](#output) above for a description of this file.
 
 # Contributing
