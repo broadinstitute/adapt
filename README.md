@@ -189,6 +189,10 @@ See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the fo
 The files output by ADAPT are TSV files, but vary in format depending on SEARCH-TYPE and INPUT-TYPE.
 There is a separate TSV file for each taxon.
 
+For all cases, see `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and how to specify paths to the output TSV files.
+
+### Sliding window
+
 When SEARCH-TYPE is `sliding-window`, each row corresponds to a window in the alignment and the columns give information about the guides designed for that window.
 The columns are:
 * `window-start`/`window-end`: Start (inclusive) and end (exclusive) positions of this window in the alignment.
@@ -202,15 +206,18 @@ By default, when SEARCH-TYPE is `sliding-window`, the rows in the output are sor
 If you include the `--sort` argument to [`design.py`](./bin/design.py), it will sort the rows in the output so that the "best" choices of windows are on top.
 It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.
 
+### Complete targets
+
 When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and crRNA combination) and there are additional columns giving information about primer pairs.
 There is also a `cost` column, giving the cost of each target according to `--cost-fn-weights`.
 The rows in the output are sorted by the cost (ascending, so that better targets are on top).
 
 When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV file for each cluster of input sequences.
 
-For all cases, see `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and how to specify paths to the output TSV files.
+### Complementarity
 
-Note that output sequences are directly from the input sequences; guide sequences should be reverse complements of the output!
+Note that output sequences are in the same sense as the input sequences.
+Synthesized guide sequences should be reverse complements of the output!
 
 # Examples
 
@@ -232,17 +239,17 @@ From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest
 It outputs a file, `guides.tsv`, that contain constructed guide sequences.
 See [Output](#output) above for a description of this file.
 
-## Contributing
+# Contributing
 
 We welcome contributions to ADAPT.
 This can be in the form of an [issue](https://github.com/broadinstitute/adapt/issues) or [pull request](https://github.com/broadinstitute/adapt/pulls).
 If you have questions, please create an [issue](https://github.com/broadinstitute/adapt/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
 
-## Citation
+# Citation
 
 ADAPT is not yet published.
 If you find it useful to your work, please let us know and inquire about how to cite it.
 
-## License
+# License
 
 ADAPT is licensed under the terms of the [MIT license](./LICENSE).
