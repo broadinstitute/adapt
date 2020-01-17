@@ -101,9 +101,9 @@ design.py [SEARCH-TYPE] [INPUT-TYPE] ...
 
 SEARCH-TYPE is one of:
 
-* `sliding-window`: Search for crRNAs within a sliding window of a fixed size, and output an optimal crRNA set for each window.
-* `complete-targets`: Search for primer pairs and crRNAs between them.
-Output the top _N_ targets, where each target contains primer pairs and crRNAs between them.
+* `sliding-window`: Search for guides within a sliding window of a fixed size, and output an optimal guide set for each window.
+* `complete-targets`: Search for primer pairs and guides between them.
+Output the top _N_ targets, where each target contains primer pairs and guides between them.
 
 INPUT-TYPE is one of:
 
@@ -111,7 +111,7 @@ INPUT-TYPE is one of:
 If more than one file is provided, the search performs differential identification across the taxa.
 * `auto-from-file`: The input is a file containing a list of taxon IDs and related information.
 This fetches sequences for those taxa, then curates, clusters and aligns the sequences for each taxon, and finally uses the generated alignments as input for design.
-The search finds crRNAs for differential identification across the taxa.
+The search finds guides for differential identification across the taxa.
 * `auto-from-args`: The input is a single taxonomic ID, and related information, provided as command-line arguments.
 This fetches sequences for the taxon, then curates, clusters and aligns the sequences, and finally uses the generated alignment as input for design.
 
@@ -208,7 +208,7 @@ It sorts by `count` (ascending) followed by `score` (descending), so that window
 
 ### Complete targets
 
-When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and crRNA combination) and there are additional columns giving information about primer pairs.
+When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and guide combination) and there are additional columns giving information about primer pairs.
 There is also a `cost` column, giving the cost of each target according to `--cost-fn-weights`.
 The rows in the output are sorted by the cost (ascending, so that better targets are on top).
 
