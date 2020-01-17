@@ -63,6 +63,21 @@ class TrieSpace:
         """
         return self.tries.items()
 
+    def mask(self, d):
+        """Mask an object from all leaves in all tries.
+
+        Args:
+            d: object to remove from all leaves
+        """
+        for sig, t in self.all_tries():
+            t.mask(d)
+
+    def unmask_all(self):
+        """Unmask all masked objects.
+        """
+        for sig, t in self.all_tries():
+            t.unmask_all()
+
 
 def _signatures_with_mismatches(sig, m):
     """Generate signatures within m mismatches given a signature.
@@ -219,6 +234,19 @@ class TrieSpaceOfKmersFullSig(TrieSpaceOfKmers):
         leaf_union = kmer_leaf.KmerLeaf.union(all_results)
         return leaf_union.d
 
+    def mask(self, taxid):
+        """Mask taxid from data structure.
+
+        Args:
+            taxid: taxonomic identifier to mask
+        """
+        self.ts.mask(taxid)
+
+    def unmask_all(self):
+        """Unmask all taxonomic identifiers.
+        """
+        self.ts.unmask_all()
+
 
 class TrieSpaceOfKmersSplitSig(TrieSpaceOfKmers):
     """Space of tries storing k-mers, key'd by each half of a k-mer.
@@ -305,3 +333,19 @@ class TrieSpaceOfKmersSplitSig(TrieSpaceOfKmers):
 
         leaf_union = kmer_leaf.KmerLeaf.union(all_results)
         return leaf_union.d
+
+    def mask(self, taxid):
+        """Mask taxid from data structure.
+
+        Args:
+            taxid: taxonomic identifier to mask
+        """
+        self.ts_0.mask(taxid)
+        self.ts_1.mask(taxid)
+
+    def unmask_all(self):
+        """Unmask all taxonomic identifiers.
+        """
+        self.ts_0.unmask_all()
+        self.ts_1.unmask_all()
+
