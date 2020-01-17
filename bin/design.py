@@ -628,12 +628,16 @@ if __name__ == "__main__":
         help=("Require the given sequence on the 5' protospacer flanking "
               "site (PFS) of each designed guide; this tolerates ambiguity "
               "in the sequence (e.g., 'H' requires 'A', 'C', or 'T', or, "
-              "equivalently, avoids guides flanked by 'G')"))
+              "equivalently, avoids guides flanked by 'G'). Note that "
+              "this is the 5' end in the target sequence (not the spacer "
+              "sequence)."))
     base_subparser.add_argument('--require-flanking3',
         help=("Require the given sequence on the 3' protospacer flanking "
               "site (PFS) of each designed guide; this tolerates ambiguity "
               "in the sequence (e.g., 'H' requires 'A', 'C', or 'T', or, "
-              "equivalently, avoids guides flanked by 'G')"))
+              "equivalently, avoids guides flanked by 'G'). Note that "
+              "this is the 3' end in the target sequence (not the spacer "
+              "sequence)."))
 
     # Use a model to predict activity
     base_subparser.add_argument('--predict-activity-model-path',
