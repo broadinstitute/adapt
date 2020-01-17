@@ -14,6 +14,7 @@ from adapt import guide_search
 from adapt.prepare import align
 from adapt.prepare import prepare_alignment
 from adapt import primer_search
+from adapt.specificity import alignment_query
 from adapt import target_search
 from adapt.utils import guide
 from adapt.utils import log
@@ -346,7 +347,7 @@ def design_for_id(args):
     if num_taxa > 1:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
-        aq = alignment.AlignmentQuerier(alns, args.guide_length,
+        aq = alignment_query.AlignmentQuerier(alns, args.guide_length,
             args.diff_id_mismatches, allow_gu_pairs)
         aq.setup()
     else:
