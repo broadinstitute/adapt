@@ -1,12 +1,17 @@
-ADAPT
-=====
+# ADAPT
+#### Adaptive Design by Astutely Patrolling Targets
 
-**ADAPT** is a Python package for designing crRNAs that comprehensively account for microbial sequence diversity.
+ADAPT is a software package for designing optimal nucleic acid diagnostics.
+
+* **End-to-end**: ADAPT connects directly with publicly available genome databases, downloading and curating their data, so designs can be made rapidly and always account for the latest known microbial diversity.
+* **Comprehensive**: ADAPT optimally accounts for the full scope of known sequence diversity across input taxa, so designs are both minimal in size and effective against variable targets.
+* **Sensitive**: ADAPT can incorporate a predictive model of activity, so designs are predicted to be highly active against targets.
+* **Specific**: ADAPT enforces high specificity against set non-targeted taxa, so designs are more likely to be accurate in distinguishing between related taxa.
+
+The methods and software are not yet published.
+However, the problems share some similarity with the problems solved by CATCH, which is described in [_Nature Biotechnology_](https://www.nature.com/articles/s41587-018-0006-x) and available publicly on [GitHub](https://github.com/broadinstitute/catch).
 <br/>
 
-The method and software are not yet published.
-However, the problems they solve do share some similarity with the problems solved by CATCH, which is described in [_Nature Biotechnology_](https://www.nature.com/articles/s41587-018-0006-x) and available on [GitHub](https://github.com/broadinstitute/catch).
-<br/>
 
 ### Table of contents
 
@@ -229,16 +234,14 @@ See [Output](#output) above for a description of this file.
 
 ## Contributing
 
-I welcome contributions to ADAPT.
+We welcome contributions to ADAPT.
 This can be in the form of an [issue](https://github.com/broadinstitute/adapt/issues) or [pull request](https://github.com/broadinstitute/adapt/pulls).
 If you have questions, please create an [issue](https://github.com/broadinstitute/adapt/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
 
 ## Citation
 
 ADAPT is not yet published.
-If you find it useful to your work, please let me know and use the following citations:
-  * Metsky HC _et al_. End-to-end sequence design for comprehensive diagnostics (ADAPT). Manuscript in preparation.
-  * Metsky HC and Siddle KJ _et al_. Capturing sequence diversity in metagenomes with comprehensive and scalable probe design. _Nature Biotechnology_, **37**(2), 160&ndash;168 (2019). doi: [10.1038/s41587-018-0006-x](https://www.nature.com/articles/s41587-018-0006-x)
+If you find it useful to your work, please let us know and inquire about how to cite it.
 
 ## License
 
