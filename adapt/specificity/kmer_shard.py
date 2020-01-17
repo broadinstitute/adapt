@@ -172,7 +172,7 @@ def _split_signatures_with_mismatches(kmer, half, m):
     return _signatures_with_mismatches(sig, m)
 
 
-class TrieSpaceOfKmers:
+class TrieSpaceOfKmers(metaclass=ABCMeta):
     """Abstract class for a space of tries storing k-mers, key'd by signatures
     computed from those k-mers.
     """

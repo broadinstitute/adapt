@@ -347,8 +347,8 @@ def design_for_id(args):
     if num_taxa > 1:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
-        aq = alignment_query.AlignmentQuerier(alns, args.guide_length,
-            args.diff_id_mismatches, allow_gu_pairs)
+        aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(alns,
+                args.guide_length, args.diff_id_mismatches, allow_gu_pairs)
         aq.setup()
     else:
         logger.info(("Only one taxon was provided, so not constructing "

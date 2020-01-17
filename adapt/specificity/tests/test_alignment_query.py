@@ -10,8 +10,8 @@ from adapt.specificity import alignment_query
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-class TestAlignmentQuerier(unittest.TestCase):
-    """Tests the AlignmentQuerier class.
+class TestAlignmentQuerierWithLSHNearNeighbor(unittest.TestCase):
+    """Tests the AlignmentQuerierWithLSHNearNeighbor class.
     """
 
     def setUp(self):
@@ -34,8 +34,8 @@ class TestAlignmentQuerier(unittest.TestCase):
         aln_c = alignment.Alignment.from_list_of_seqs(aln_c_seqs)
 
         alns = [aln_a, aln_b, aln_c]
-        self.aq = alignment_query.AlignmentQuerier(alns, 5, 1, False, k=3,
-            reporting_prob=0.95)
+        self.aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(
+                alns, 5, 1, False, k=3, reporting_prob=0.95)
         self.aq.setup()
 
     def test_frac_of_aln_hit_by_guide(self):
@@ -74,8 +74,8 @@ class TestAlignmentQuerier(unittest.TestCase):
                           'ATCGA--TAATGG',
                           'ATGGA--TAATGG']
         gappy_aln = alignment.Alignment.from_list_of_seqs(gappy_aln_seqs)
-        gappy_aq = alignment_query.AlignmentQuerier([gappy_aln], 5, 1, False, k=3,
-            reporting_prob=0.95)
+        gappy_aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(
+                [gappy_aln], 5, 1, False, k=3, reporting_prob=0.95)
         gappy_aq.setup()
 
         # GGGGG should hit no sequences

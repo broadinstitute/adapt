@@ -1,6 +1,7 @@
 """Classes for querying the specificity of guides against target sequences.
 """
 
+from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 import logging
 
@@ -12,9 +13,79 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
-class AlignmentQuerier:
+class AlignmentQuerier(metaclass=ABCMeta):
+    """Abstract class supporting queries for potential guide sequences.
+    """
+
+    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs):
+        """
+        Args:
+            alns: list of Alignment objects
+            guide_length: length of guide sequences
+            dist_thres: detect a queried guide sequence as hitting a
+                sequence in an alignment if it is within a distance
+                of dist_thres (where the distance is measured with
+                guide.seq_mismatches if G-U base pairing is disabled, and
+                guide.seq_mismatches_with_gu_pairs if G-U base pairing
+                is enabled; effectively these are Hamming distance either
+                tolerating or not tolerating G-U base pairing)
+            allow_gu_pairs: if True, tolerate G-U base pairs when computing
+                whether a guide binds to a target -- i.e., be sensitive to
+                G-U pairing when computing mismatches or, in other words,
+                do not count a G-U pair as a mismatch
+        """
+        self.alns = alns
+        self.guide_length = guide_length
+        self.dist_thres = dist_thres
+        self.allow_gu_pairs = allow_gu_pairs
+
+    @abstractmethod
+    def setup(self): raise NotImplementedError
+
+    @abstractmethod
+    def mask_aln(self, aln_idx): raise NotImplementedError
+
+    @abstractmethod
+    def unmask_all_aln(self): raise NotImplementedError
+
+    @abstractmethod
+    def frac_of_aln_hit_by_guide(self, guide): raise NotImplementedError
+
+    def guide_is_specific_to_alns(self, guide, aln_idxs, frac_hit_thres):
+        """Determine if guide is specific to a particular alignment.
+
+        Note that this does *not* verify whether guide hits the alignment
+        with an index in aln_idx -- only that it does not hit all the others.
+
+        Args:
+            guide: guide sequence to check
+            aln_idxs: check if guide is specific to all the alignments with
+                these indices (self.alns[aln_idxx[i]])
+            frac_hit_thres: say that a guide "hits" an alignment A if the
+                fraction of sequences in A that it hits is > this value
+
+        Returns:
+            True iff guide does not hit alignments other than aln_idx
+        """
+        frac_of_aln_hit = self.frac_of_aln_hit_by_guide(guide)
+        for j, frac in enumerate(frac_of_aln_hit):
+            if j in aln_idxs:
+                # This frac is for alignment in aln_idxs; it should be high and
+                # is irrelevant for specificity (but we won't check that
+                # it is high)
+                # Note that if aln_idxs[i] has already been masked, then this
+                # check should not be necessary (j should never equal
+                # aln_idxs[i])
+                continue
+            if frac > frac_hit_thres:
+                # guide hits too many sequences in alignment j
+                return False
+        return True
+
+
+class AlignmentQuerierWithLSHNearNeighbor(AlignmentQuerier):
     """Supports queries for potential guide sequences across a set of
-    alignments.
+    alignments using near-neighbor lookups with LSH.
 
     This uses LSH to find near neighbors of queried guide sequences. It
     constructs a data structure containing all subsequences in a given
@@ -42,17 +113,7 @@ class AlignmentQuerier:
                  reporting_prob=0.95):
         """
         Args:
-            alns: list of Alignment objects
-            guide_length: length of guide sequences
-            dist_thres: detect a queried guide sequence as hitting a
-                sequence in an alignment if it is within a distance
-                of dist_thres (where the distance is measured with
-                guide.seq_mismatches if G-U base pairing is disabled, and
-                guide.seq_mismatches_with_gu_pairs is G-U base pairing
-                is enabled; effectively these are Hamming distance either
-                tolerating or not tolerating G-U base pairing)
-            allow_gu_pairs: if True, tolerate G-U base pairs when computing
-                whether a guide binds to a target
+            [See AlignmentQuerier.__init__()]
             k: number of hash functions to draw from a family of
                 hash functions for amplification; each hash function is then
                 the concatenation (h_1, h_2, ..., h_k)
@@ -62,8 +123,7 @@ class AlignmentQuerier:
                 concatenation of k functions drawn from the family) to achieve
                 this probability
         """
-        self.alns = alns
-        self.guide_length = guide_length
+        super().__init__(alns, guide_length, dist_thres, allow_gu_pairs)
 
         if allow_gu_pairs:
             # Measure distance while tolerating G-U base pairing, and
@@ -180,35 +240,4 @@ class AlignmentQuerier:
             frac_hit = float(num_hit) / aln.num_sequences
             frac_of_aln_hit += [frac_hit]
         return frac_of_aln_hit
-
-    def guide_is_specific_to_alns(self, guide, aln_idxs, frac_hit_thres):
-        """Determine if guide is specific to a particular alignment.
-
-        Note that this does *not* verify whether guide hits the alignment
-        with an index in aln_idx -- only that it does not hit all the others.
-
-        Args:
-            guide: guide sequence to check
-            aln_idxs: check if guide is specific to all the alignments with
-                these indices (self.alns[aln_idxx[i]])
-            frac_hit_thres: say that a guide "hits" an alignment A if the
-                fraction of sequences in A that it hits is > this value
-
-        Returns:
-            True iff guide does not hit alignments other than aln_idx
-        """
-        frac_of_aln_hit = self.frac_of_aln_hit_by_guide(guide)
-        for j, frac in enumerate(frac_of_aln_hit):
-            if j in aln_idxs:
-                # This frac is for alignment in aln_idxs; it should be high and
-                # is irrelevant for specificity (but we won't check that
-                # it is high)
-                # Note that if aln_idxs[i] has already been masked, then this
-                # check should not be necessary (j should never equal
-                # aln_idxs[i])
-                continue
-            if frac > frac_hit_thres:
-                # guide hits too many sequences in alignment j
-                return False
-        return True
 
