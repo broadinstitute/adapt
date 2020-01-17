@@ -178,10 +178,16 @@ class TrieSpaceOfKmers(metaclass=ABCMeta):
     """
 
     @abstractmethod
-    def build(self, kmers): raise NotImplementedError
+    def add(self, kmers): raise NotImplementedError
 
     @abstractmethod
     def query(self, q, m, gu_pairing): raise NotImplementedError
+
+    @abstractmethod
+    def mask(self, taxid): raise NotImplementedError
+
+    @abstractmethod
+    def unmask_all(self): raise NotImplementedError
 
 
 class TrieSpaceOfKmersFullSig(TrieSpaceOfKmers):
@@ -190,14 +196,14 @@ class TrieSpaceOfKmersFullSig(TrieSpaceOfKmers):
 
     def __init__(self):
         self.ts = TrieSpace()
+        self.kmer_len = None
 
-    def build(self, kmers):
-        """Build space of tries.
+    def add(self, kmers):
+        """Add to space of tries.
 
         Args:
-            kmers: iterator over (k-mer: {(taxonomy identifier, sequence id)})
+            kmers: iterator over (k-mer, {(taxonomy identifier, sequence id)})
         """
-        self.kmer_len = None
         for kmer, seqs_with_kmer in kmers:
             if self.kmer_len is None:
                 self.kmer_len = len(kmer)
@@ -258,14 +264,15 @@ class TrieSpaceOfKmersSplitSig(TrieSpaceOfKmers):
         # TrieSpace containing second 1/2 of k-mer, reverse direction
         self.ts_1 = TrieSpace()
 
-    def build(self, kmers):
-        """Build space of tries.
+        self.kmer_len = None
+
+    def add(self, kmers):
+        """Add to space of tries.
 
         Args:
             kmers: iterator over (k-mer, {(taxonomy identifier, sequence id)})
                 where the latter describes the sequences containing the k-mer
         """
-        self.kmer_len = None
         for kmer, seqs_with_kmer in kmers:
             if self.kmer_len is None:
                 self.kmer_len = len(kmer)

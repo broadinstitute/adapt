@@ -59,9 +59,11 @@ class TestTrieSpaceOfKmers(unittest.TestCase):
     def build(self, cls):
         # cls is the class to instantiate
         tsok = cls()
-        tsok.build([
+        tsok.add([
             ('ATCGAT', {(0,1), (0,2), (0,4), (1,1)}),
-            ('ATAAAT', {(0,3), (2,1)}),
+            ('ATAAAT', {(0,3), (2,1)})
+        ])
+        tsok.add([
             ('GGGGGG', {(3,1), (3,2)}),
             ('TTCGAT', {(0,5), (1,2)})
         ])
