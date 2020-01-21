@@ -101,10 +101,6 @@ def construct_predictor(model_path, context_nt=10, activity_thres=None):
     Returns:
         Predictor object
     """
-    raise NotImplementedError(("Not yet implemented in a general way; "
-        "manually edit this function to use"))
-
-    """
     load_path_params = os.path.join(model_path,
             'model.params.pkl')
     with open(load_path_params, 'rb') as f:
@@ -127,4 +123,3 @@ def construct_predictor(model_path, context_nt=10, activity_thres=None):
         return predictor.pred_from_nt(model, pairs)
 
     return Predictor(model, pred_from_nt, activity_thres=activity_thres)
-    """
