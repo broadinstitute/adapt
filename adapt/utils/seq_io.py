@@ -289,3 +289,41 @@ def read_accessions_for_taxonomies(fn):
             accs[(tax_id, segment)].append(accession)
     return accs
 
+
+def read_sequences_for_taxonomies(fn):
+    """Read sequences for different taxonomies
+
+    The columns must be, in order:
+        1) a taxonomic (e.g., species) ID from NCBI
+        2) a segment label, or 'None' if unsegmented
+        3) a path to a FASTA file containing sequences
+
+    Args:
+        fn: path to TSV file, where each row corresponds to a taxonomy
+
+    Returns:
+        dict {(taxonomic-id, segment): dict of sequences}
+    """
+    seqs = defaultdict(list)
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 3:
+                raise Exception(("Input fasta TSV must have 3 columns"))
+
+            try:
+                tax_id = int(ls[0])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[0])
+
+            segment = ls[1]
+            if segment.lower() == 'none':
+                segment = None
+
+            fasta_path = ls[2]
+            seqs_for_tax = read_fasta(fasta_path)
+            seqs[(tax_id, segment)] = seqs_for_tax
+            print(seqs_for_tax.keys())
+    return seqs
+

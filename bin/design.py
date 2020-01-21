@@ -181,6 +181,13 @@ def prepare_alignments(args):
     else:
         accessions_to_use = None
 
+    # Read specified sequences, if provided
+    if args.use_fasta:
+        sequences_to_use = seq_io.read_sequences_for_taxonomies(
+                args.use_fasta)
+    else:
+        sequences_to_use = None
+
     # Construct alignments for each taxonomy
     in_fasta = []
     taxid_for_fasta = []
@@ -204,13 +211,27 @@ def prepare_alignments(args):
         else:
             accessions_to_use_for_tax = None
 
+        if sequences_to_use is not None:
+            if (tax_id, segment) in sequences_to_use:
+                sequences_to_use_for_tax = sequences_to_use[(tax_id, segment)]
+            else:
+                sequences_to_use_for_tax = None
+        else:
+            sequences_to_use_for_tax = None
+
+        if (accessions_to_use_for_tax is not None and
+                sequences_to_use_for_tax is not None):
+            raise Exception(("Cannot use both --use-accessions and "
+                "--use-fasta for the same taxonomy"))
+
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             sample_seqs=args.sample_seqs, prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name,
             cluster_threshold=args.cluster_threshold,
-            accessions_to_use=accessions_to_use_for_tax)
+            accessions_to_use=accessions_to_use_for_tax,
+            sequences_to_use=sequences_to_use_for_tax)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -787,6 +808,11 @@ if __name__ == "__main__":
               "or 'None' if unsegmented; (3) accession. Each row specifies "
               "an accession to use in the input, and values for columns 1 "
               "and 2 can appear in multiple rows."))
+    input_auto_common_subparser.add_argument('--use-fasta',
+        help=("If set, use sequences in fasta instead of fetching neighbors "
+              "for the given taxonomic ID(s). This provides a path to a TSV "
+              "file with 3 columns: (1) a taxonomic ID; (2) segment label, "
+              "or 'None' if unsegmented; (3) path to FASTA."))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)
