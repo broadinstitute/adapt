@@ -178,17 +178,6 @@ def prepare_alignments(args):
     if args.use_accessions:
         accessions_to_use = seq_io.read_accessions_for_taxonomies(
                 args.use_accessions)
-
-        # Verify there is at least one accession for each taxonomic grouping
-        for _, tax_id, segment, _ in taxs:
-            if (tax_id, segment) not in accessions_to_use:
-                if segment is None:
-                    raise Exception(("--use-accessions was specified, but "
-                        "there are no accessions for taxid %d"), tax_id)
-                else:
-                    raise Exception(("--use-accessions was specified, but "
-                        "there are no accessions for taxid %d and segment '%s'"),
-                        tax_id, segment)
     else:
         accessions_to_use = None
 
@@ -208,7 +197,10 @@ def prepare_alignments(args):
             years_tsv_tmp_name = None
 
         if accessions_to_use is not None:
-            accessions_to_use_for_tax = accessions_to_use[(tax_id, segment)]
+            if (tax_id, segment) in accessions_to_use:
+                accessions_to_use_for_tax = accessions_to_use[(tax_id, segment)]
+            else:
+                accessions_to_use_for_tax = None
         else:
             accessions_to_use_for_tax = None
 
