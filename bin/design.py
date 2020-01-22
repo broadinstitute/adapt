@@ -132,14 +132,15 @@ def prepare_alignments(args):
         args: namespace of arguments provided to this executable
 
     Returns:
-        tuple (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs out_tsv) in
-        which in_fasta is a list of paths to fasta files each containing an
+        tuple (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for)
+        in which in_fasta is a list of paths to fasta files each containing an
         alignment, taxid_for_fasta[i] gives a taxon id for in_fasta[i],
         years_tsv gives a tempfile storing a tsv file containing a year for
         each sequence across all the fasta files (only if
         args.cover_by_year_decay is set), aln_tmp_dirs is a list of temp
-        directories that need to be cleaned up, and out_tsv[i] is a path to the
-        file at which to write the output for in_fasta[i]
+        directories that need to be cleaned up, out_tsv[i] is a path to the
+        file at which to write the output for in_fasta[i], and design_for[i]
+        indicates whether to actually design for in_fasta[i] (True/False)
     """
     logger.info(("Setting up to prepare alignments"))
 
@@ -188,12 +189,20 @@ def prepare_alignments(args):
     else:
         sequences_to_use = None
 
+    # Only design for certain taxonomies, if provided
+    if args.only_design_for:
+        taxs_to_design_for = seq_io.read_taxonomies_to_design_for(
+                args.only_design_for)
+    else:
+        taxs_to_design_for = None
+
     # Construct alignments for each taxonomy
     in_fasta = []
     taxid_for_fasta = []
     years_tsv_per_aln = []
     aln_tmp_dirs = []
     out_tsv = []
+    design_for = []
     for label, tax_id, segment, ref_accs in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -223,6 +232,11 @@ def prepare_alignments(args):
                 sequences_to_use_for_tax is not None):
             raise Exception(("Cannot use both --use-accessions and "
                 "--use-fasta for the same taxonomy"))
+
+        if taxs_to_design_for is None:
+            design_for += [True]
+        else:
+            design_for += [(tax_id, segment) in taxs_to_design_for]
 
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
@@ -295,7 +309,7 @@ def prepare_alignments(args):
     else:
         years_tsv = None
 
-    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv
+    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for
 
 
 def design_for_id(args):
@@ -372,6 +386,10 @@ def design_for_id(args):
         taxid = args.taxid_for_fasta[i]
         logger.info(("Finding guides for alignment %d (of %d), which is in "
             "taxon %d"), i + 1, num_aln_for_design, taxid)
+
+        if args.design_for[i] is False:
+            logger.info("Skipping design for this alignment")
+            continue
 
         aln = alns[i]
         seq_groups = seq_groups_per_input[i]
@@ -465,10 +483,11 @@ def main(args):
                     args.out_tsv_dir)
 
         # Prepare input alignments, stored in temp fasta files
-        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv = prepare_alignments(args)
+        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for = prepare_alignments(args)
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
         args.out_tsv = out_tsv
+        args.design_for = design_for
 
         if args.cover_by_year_decay:
             # args.cover_by_year_decay contains two parameters: the year
@@ -813,6 +832,10 @@ if __name__ == "__main__":
               "for the given taxonomic ID(s). This provides a path to a TSV "
               "file with 3 columns: (1) a taxonomic ID; (2) segment label, "
               "or 'None' if unsegmented; (3) path to FASTA."))
+    input_auto_common_subparser.add_argument('--only-design-for',
+        help=("If set, only design for given taxonomies. This provides a "
+              "path to a TSV file with 2 columns: (1) a taxonomid ID; (2) "
+              "segment label, if 'None' if unsegmented"))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)
