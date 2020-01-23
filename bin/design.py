@@ -458,6 +458,7 @@ def design_for_id(args):
                                               seq_groups=seq_groups)
             ts = target_search.TargetSearcher(ps, gs,
                 max_primers_at_site=args.max_primers_at_site,
+                primer_gc_content_bounds=tuple(args.primer_gc_content_bounds),
                 max_target_length=args.max_target_length,
                 cost_weights=args.cost_fn_weights,
                 guides_should_cover_over_all_seqs=args.gp_over_all_seqs)
@@ -731,6 +732,12 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('--max-primers-at-site', type=int,
         help=("Only use primer sites that contain at most this number "
               "of primers; if not set, there is no limit"))
+    parser_ct_args.add_argument('--primer-gc-content-bounds',
+            nargs=2, type=float,
+        help=("Only use primer sites where all primers are within the "
+              "given GC content bounds. This consists of two values L and H, "
+              "each fractions in [0,1], such that primer GC content must be "
+              "in [L, H]. If not set, there are no bounds."))
     parser_ct_args.add_argument('--max-target-length', type=int,
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))

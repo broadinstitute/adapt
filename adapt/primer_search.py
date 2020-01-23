@@ -6,6 +6,7 @@ This makes heavy use of the guide_search module.
 import logging
 
 from adapt import guide_search
+from adapt.utils import guide
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -122,12 +123,36 @@ class PrimerSearcher(guide_search.GuideSearcher):
         """
         return super()._seqs_bound_by_guides(primers)
 
-    def find_primers(self, max_at_site=None):
+    @staticmethod
+    def check_gc_content(primers, bounds):
+        """Determine whether all primers in primer set meet bounds on GC content.
+
+        Args:
+            primers: collection of str representing primer sequences
+            bounds: tuple (lo, hi) where lo is lower bound on GC content
+                fraction and hi is upper bound (inclusive)
+
+        Returns:
+            True/False indicating whether all primers meet the bounds on
+            GC content
+        """
+        lo, hi = bounds
+        assert lo <= hi
+        for primer_seq in primers:
+            gc_frac = guide.gc_frac(primer_seq)
+            if gc_frac < lo or gc_frac > hi:
+                return False
+        return True
+
+    def find_primers(self, max_at_site=None, gc_content_bounds=None):
         """Find primers across the alignment.
 
         Args:
             max_at_site: only yield sites that have <= MAX_AT_SITE
                 primers at a site; or None for no limit
+            gc_content_bounds: a tuple (lo, hi) such that this only yields
+                sites where all primers have a GC content fraction in
+                [lo, hi]; or None for no bounds
 
         Yields:
             tuple at each site in the alignment, consisting of the
@@ -144,7 +169,14 @@ class PrimerSearcher(guide_search.GuideSearcher):
         for cover in self._find_guides_that_cover_for_each_window(
                 window_size, hide_warnings=True):
             start, end, num_primers, score, frac_bound, primers_in_cover = cover
-            if max_at_site is None or num_primers <= max_at_site:
-                yield PrimerResult(
-                    start, num_primers, window_size,
-                    frac_bound, primers_in_cover)
+
+            # Check constraints
+            if max_at_site is not None and num_primers > max_at_site:
+                continue
+            if (gc_content_bounds is not None and
+                    self.check_gc_content(primers_in_cover, gc_content_bounds) is False):
+                continue
+
+            yield PrimerResult(
+                start, num_primers, window_size,
+                frac_bound, primers_in_cover)
