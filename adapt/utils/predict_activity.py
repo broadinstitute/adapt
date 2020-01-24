@@ -111,7 +111,7 @@ def construct_predictor(model_path, context_nt=10, activity_thres=None):
         params[k] = v
 
     # Load predictor module from separate directory
-    sys.path.append(os.path.join(os.path.expanduser("~"), "adapt-seq-design"))
+    sys.path.append(os.path.join("/ebs/dgd-analysis", "adapt-seq-design-prod"))
     import predictor
 
     predictor.set_seed(1)
