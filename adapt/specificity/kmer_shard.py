@@ -142,15 +142,19 @@ def _split_signature(kmer, half):
     The transformations are A->G and C->T.
 
     Args:
-        kmer: k-mer, where k is divisible by 2
+        kmer: k-mer
         half: 0 or 1, denoting the first or second half
 
     Returns:
         signature as a string
     """
     k = len(kmer)
-    assert k % 2 == 0
-    k_half = int(k / 2)
+    if k % 2 == 0:
+        # Make each half be exactly half
+        k_half = int(k / 2)
+    else:
+        # Make the first 'half' be 1 letter longer than the second
+        k_half = int(k / 2) + 1
     assert half in [0, 1]
     kmer_half = kmer[0:k_half] if half == 0 else kmer[k_half:k]
     return kmer_half.replace('A', 'G').replace('C', 'T')
@@ -322,20 +326,41 @@ class TrieSpaceOfKmersSplitSig(TrieSpaceOfKmers):
         # Query for tries maybe containing each half of the query
         for reverse, sigs, ts in [(False, sigs_0, self.ts_0), (True, sigs_1,
                 self.ts_1)]:
+            q_q = q_rev if reverse else q
+
+            # Only allow up to m_half mismatches for the first
+            # half of the search down the trie
+            if self.kmer_len % 2 == 0:
+                # The first half of the search down the trie contains
+                # levels 0 through k/2 - 1 (inclusive), where k is
+                # k-mer length
+                first_half_level = int(self.kmer_len/2 - 1)
+            else:
+                # Since the k-mer length is odd, the first 'half' of
+                # the k-mer is 1 letter longer than the second 'half'
+                # of the k-mer
+                if reverse:
+                    # The first half of the search is intended to
+                    # match the second 'half' of the k-mer; this
+                    # is levels 0 through floor(k/2) - 1 (inclusive)
+                    first_half_level = int(self.kmer_len/2) - 1
+                else:
+                    # The first half of the search is intended to
+                    # match the first 'half' of the k-mer; this is
+                    # levels 0 through floor(k/2) (inclusive)
+                    first_half_level = int(self.kmer_len/2)
+
+            # Lookup each signature, and query the resulting trie (if there
+            # is one) for each
             for sig in sigs:
                 t = ts.get(sig, make=False)
                 if t is None:
                     # No results
                     pass
                 else:
-                    q_q = q_rev if reverse else q
-                    # Only allow up to m_half mismatches for the first
-                    # half of the search (i.e., levels 0 through (k/2 - 1)
-                    # where k is k-mer length)
                     results = t.query(q_q,
                             mismatches=m, gu_pairing=gu_pairing,
-                            mismatches_to_level=(m_half,
-                                int(self.kmer_len/2 - 1)))
+                            mismatches_to_level=(m_half, first_half_level))
                     all_results.extend(results)
 
         leaf_union = kmer_leaf.KmerLeaf.union(all_results)

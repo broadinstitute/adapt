@@ -5,6 +5,7 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 import logging
 
+from adapt.specificity import kmer_shard
 from adapt.utils import guide
 from adapt.utils import lsh
 
@@ -237,6 +238,130 @@ class AlignmentQuerierWithLSHNearNeighbor(AlignmentQuerier):
         frac_of_aln_hit = []
         for i, aln in enumerate(self.alns):
             num_hit = len(seqs_hit_by_aln[i])
+            frac_hit = float(num_hit) / aln.num_sequences
+            frac_of_aln_hit += [frac_hit]
+        return frac_of_aln_hit
+
+
+class AlignmentQuerierWithKmerSharding(AlignmentQuerier):
+    """Supports queries for potential guide sequences across a set of
+    alignments using an approach that shards k-mers across many small tries.
+
+    The approach is described in detail in the header of the
+    kmer_shard module.
+
+    In contrast to AlignmentQuerierWithLSHNearNeighbor, this is *not*
+    probabilistic: it is fully sensitive to finding all hits. There
+    are no false positives or false negatives.
+    """
+
+    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs):
+        """
+        Args:
+            [See AlignmentQuerier.__init__()]
+        """
+        super().__init__(alns, guide_length, dist_thres, allow_gu_pairs)
+
+        # TrieSpaceOfKmersFullSig has smaller tries (owing to the longer
+        # signature), so each trie is faster to search. It does require more
+        # bit flips -- i.e., possible signatures up to dist_thres mismatches
+        # away -- again, owing to the longer signatures. So it will be faster
+        # as long as dist_thres is not too high. Once dist_thres is too high,
+        # that combinatorial space of mismatches (bit flips in the signatures)
+        # dominates, and it is faster to use split signatures -- e.g., with
+        # TrieSpaceOfKmersSplitSig. Empirically, TrieSpaceOfKmersFullSig
+        # appears faster up to dist_thres <= 4; at dist_thres > 4,
+        # TrieSpaceOfKmersSplitSig appears faster.
+        if dist_thres <= 4:
+            self.tsok = kmer_shard.TrieSpaceOfKmersFullSig()
+        else:
+            self.tsok = kmer_shard.TrieSpaceOfKmersSplitSig()
+
+    def setup(self):
+        """Build data structure for lookup of guide sequences.
+
+        In contrast to AlignmentQuerierWithLSHNearNeighbor, the
+        data structure here directly stores the particular
+        sequences of the alignment that contain the subsequences; they
+        do not have to be stored separately.
+
+        Note that we could call self.tsok.add() each time we see a k-mer with a
+        single sequence, but it is faster to add k-mers in batches where each
+        k-mer contains most or all of the sequences that contain it (leaf
+        information). This produces a batch for each alignment, and calls
+        add() once per alignment with all of the sequences containing
+        each k-mer in that alignment. Note that inserting into the tries
+        will support merging with existing information, so it is ok if
+        two alignments contain the same k-mer.
+        """
+        for aln_idx, aln in enumerate(self.alns):
+            logger.debug(("Indexing for queries: alignment %d of %d"),
+                aln_idx + 1, len(self.alns))
+
+            # Convert aln.seqs from column-major order to row-major order
+            # Also, remove all gaps from guide sequences because the
+            # true sequences are gapless, so queries for potential hits
+            # should be against gapless sequence
+            seqs = aln.make_list_of_seqs(remove_gaps=True)
+
+            # Find all sequences containing each k-mer
+            kmer_seqs = defaultdict(set)
+            for seq_idx, seq in enumerate(seqs):
+                for j in range(len(seq) - self.guide_length + 1):
+                    g = seq[j:(j + self.guide_length)]
+                    kmer_seqs[g].add(seq_idx)
+
+            # Produce an iterator over kmer_seqs that adds aln_idx, in
+            # the format needed by self.tsok.add(), and add them into
+            # the data structure
+            def kmers_iter():
+                for kmer, seq_idxs in kmer_seqs.items():
+                    yield (kmer, {(aln_idx, seq_idx) for seq_idx in seq_idxs})
+            self.tsok.add(kmers_iter())
+
+        self.is_setup = True
+
+    def mask_aln(self, aln_idx):
+        """Mask alignment from data structure.
+
+        Args:
+            aln_idx: index of alignment in self.alns to mask from lookups
+        """
+        logger.debug("Masking alignment with index %d from alignment queries",
+            aln_idx)
+
+        self.tsok.mask(aln_idx)
+
+    def unmask_all_aln(self):
+        """Unmask all alignments that may have been masked.
+        """
+        logger.debug("Unmasking all alignments from alignment queries")
+
+        self.tsok.unmask_all()
+
+    def frac_of_aln_hit_by_guide(self, guide):
+        """Calculate how many sequences in each alignment are hit by a query.
+
+        Args:
+            guide: guide sequence to query
+
+        Returns:
+            list of fractions f where f[i] gives the fraction of sequences
+            in the i'th alignment (self.alns[i]) that contain a subsequence
+            which is found to be a hit of guide
+        """
+        if not self.is_setup:
+            raise Exception(("AlignmentQuerier.setup() must be called before "
+                "querying for near neighbors"))
+
+        assert len(guide) == self.guide_length
+
+        seqs_hit_by_aln = self.tsok.query(guide, m=self.dist_thres,
+                gu_pairing=self.allow_gu_pairs)
+
+        frac_of_aln_hit = []
+        for i, aln in enumerate(self.alns):
+            num_hit = len(seqs_hit_by_aln[i]) if i in seqs_hit_by_aln else 0
             frac_hit = float(num_hit) / aln.num_sequences
             frac_of_aln_hit += [frac_hit]
         return frac_of_aln_hit

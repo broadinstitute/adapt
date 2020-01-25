@@ -10,9 +10,15 @@ from adapt.specificity import alignment_query
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-class TestAlignmentQuerierWithLSHNearNeighbor(unittest.TestCase):
-    """Tests the AlignmentQuerierWithLSHNearNeighbor class.
+class BaseAlignmentQuerierTests:
+    """Tests the AlignmentQuerier classes.
+
+    unittest won't run these tests directly because this does not inherit from
+    unittest.TestCase.
     """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def setUp(self):
         # Set a random seed so hash functions are always the same
@@ -34,8 +40,12 @@ class TestAlignmentQuerierWithLSHNearNeighbor(unittest.TestCase):
         aln_c = alignment.Alignment.from_list_of_seqs(aln_c_seqs)
 
         alns = [aln_a, aln_b, aln_c]
-        self.aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(
-                alns, 5, 1, False, k=3, reporting_prob=0.95)
+        if self.alignment_querier_subclass == alignment_query.AlignmentQuerierWithLSHNearNeighbor:
+            self.aq = self.alignment_querier_subclass(
+                    alns, 5, 1, False, k=3, reporting_prob=0.95)
+        else:
+            self.aq = self.alignment_querier_subclass(
+                    alns, 5, 1, False)
         self.aq.setup()
 
     def test_frac_of_aln_hit_by_guide(self):
@@ -74,8 +84,12 @@ class TestAlignmentQuerierWithLSHNearNeighbor(unittest.TestCase):
                           'ATCGA--TAATGG',
                           'ATGGA--TAATGG']
         gappy_aln = alignment.Alignment.from_list_of_seqs(gappy_aln_seqs)
-        gappy_aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(
-                [gappy_aln], 5, 1, False, k=3, reporting_prob=0.95)
+        if self.alignment_querier_subclass == alignment_query.AlignmentQuerierWithLSHNearNeighbor:
+            gappy_aq = self.alignment_querier_subclass(
+                    [gappy_aln], 5, 1, False, k=3, reporting_prob=0.95)
+        else:
+            gappy_aq = self.alignment_querier_subclass(
+                    [gappy_aln], 5, 1, False)
         gappy_aq.setup()
 
         # GGGGG should hit no sequences
@@ -96,3 +110,20 @@ class TestAlignmentQuerierWithLSHNearNeighbor(unittest.TestCase):
         # and third after their gaps are removed
         self.assertEqual(gappy_aq.frac_of_aln_hit_by_guide('CATAA'),
                          [1.0])
+
+
+class TestAlignmentQuerierWithLSHNearNeighbor(BaseAlignmentQuerierTests,
+        unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.alignment_querier_subclass = alignment_query.AlignmentQuerierWithLSHNearNeighbor
+
+
+class TestAlignmentQuerierWithKmerSharding(BaseAlignmentQuerierTests,
+        unittest.TestCase):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.alignment_querier_subclass = alignment_query.AlignmentQuerierWithKmerSharding
+
