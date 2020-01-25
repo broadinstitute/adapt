@@ -87,10 +87,10 @@ def _signatures_with_mismatches(sig, m):
         m: number of mismatches such that all signatures have 0,1,...,m
             mismatches relative to kmer
 
-    Returns:
-        list of signatures as strings
+    Iterates:
+        signatures as strings
     """
-    sigs_with_mismatches = [sig]
+    yield sig
     for mi in range(1, m+1):
         # Introduce mi mismatches to sig
         for pos in combinations(range(len(sig)), mi):
@@ -103,8 +103,8 @@ def _signatures_with_mismatches(sig, m):
                     sig_mi[j] = 'T'
                 else:
                     sig_mi[j] = 'G'
-            sigs_with_mismatches += [''.join(sig_mi)]
-    return sigs_with_mismatches
+            sig_mi_str = ''.join(sig_mi)
+            yield sig_mi_str
 
 
 def _full_signature(kmer):
