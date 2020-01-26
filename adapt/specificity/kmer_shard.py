@@ -201,18 +201,21 @@ class TrieSpaceOfKmersFullSig(TrieSpaceOfKmers):
     def __init__(self):
         self.ts = TrieSpace()
         self.kmer_len = None
+        self.contains_kmers = False
 
     def add(self, kmers):
         """Add to space of tries.
 
         Args:
-            kmers: iterator over (k-mer, {(taxonomy identifier, sequence id)})
+            kmers: iterator over (k-mer, {(taxonomy identifier, sequence id)});
+                each k-mer must not have ambiguity
         """
         for kmer, seqs_with_kmer in kmers:
             if self.kmer_len is None:
                 self.kmer_len = len(kmer)
             if len(kmer) != self.kmer_len:
                 raise ValueError("Length of k-mer is variable")
+            self.contains_kmers = True
 
             sig = _full_signature(kmer)
             leaf = kmer_leaf.KmerLeaf(seqs_with_kmer)
@@ -229,6 +232,10 @@ class TrieSpaceOfKmersFullSig(TrieSpaceOfKmers):
         Returns:
             dict {taxonomy identifier: {sequence identifiers}}
         """
+        if self.contains_kmers is False:
+            # Nothing was added; this prevents an error below when
+            # self.kmer_len is None if nothing is added
+            return {}
         if len(q) != self.kmer_len:
             raise ValueError("Query length must be %d" % self.kmer_len)
 
@@ -269,19 +276,22 @@ class TrieSpaceOfKmersSplitSig(TrieSpaceOfKmers):
         self.ts_1 = TrieSpace()
 
         self.kmer_len = None
+        self.contains_kmers = False
 
     def add(self, kmers):
         """Add to space of tries.
 
         Args:
             kmers: iterator over (k-mer, {(taxonomy identifier, sequence id)})
-                where the latter describes the sequences containing the k-mer
+                where the latter describes the sequences containing the k-mer;
+                each k-mer must not have ambiguity
         """
         for kmer, seqs_with_kmer in kmers:
             if self.kmer_len is None:
                 self.kmer_len = len(kmer)
             if len(kmer) != self.kmer_len:
                 raise ValueError("Length of k-mer is variable")
+            self.contains_kmers = True
 
             sig_0 = _split_signature(kmer, 0)
             sig_1 = _split_signature(kmer, 1)
@@ -303,6 +313,10 @@ class TrieSpaceOfKmersSplitSig(TrieSpaceOfKmers):
         Returns:
             dict {taxonomy identifier: {sequence identifiers}}
         """
+        if self.contains_kmers is False:
+            # Nothing was added; this prevents an error below when
+            # self.kmer_len is None if nothing is added
+            return {}
         if len(q) != self.kmer_len:
             raise ValueError("Query length must be %d" % self.kmer_len)
 

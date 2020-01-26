@@ -319,7 +319,20 @@ class AlignmentQuerierWithKmerSharding(AlignmentQuerier):
         each k-mer in that alignment. Note that inserting into the tries
         will support merging with existing information, so it is ok if
         two alignments contain the same k-mer.
+
+        This leaves out any k-mers with ambiguity because the data structure
+        cannot tolerate these. Another option might be to handle them and then
+        determine any sequence that *might* hit a k-mer in the data structure
+        (up to ambiguity) to be non-specific. However, this alternative option
+        does not make sense in the extreme case: for example, if a k-mer is all
+        Ns, then every sequence would be deemed non-specific. Nevertheless,
+        ignoring k-mers with amguity entirely might not be the best choice so
+        this should be revisited (TODO).
         """
+        unambig_chars = set(['a', 'c', 'g', 't'])
+        def is_unambig(kmer):
+            return set(kmer.lower()).issubset(unambig_chars)
+
         for aln_idx, aln in enumerate(self.alns):
             logger.debug(("Indexing for queries: alignment %d of %d"),
                 aln_idx + 1, len(self.alns))
@@ -342,6 +355,9 @@ class AlignmentQuerierWithKmerSharding(AlignmentQuerier):
             # the data structure
             def kmers_iter():
                 for kmer, seq_idxs in kmer_seqs.items():
+                    if not is_unambig(kmer):
+                        # Skip k-mers with ambiguity
+                        continue
                     yield (kmer, {(aln_idx, seq_idx) for seq_idx in seq_idxs})
             self.tsok.add(kmers_iter())
 
