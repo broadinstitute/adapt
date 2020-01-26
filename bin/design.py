@@ -368,7 +368,13 @@ def design_for_id(args):
         required_guides_for_aln = required_guides[i]
         blacklisted_ranges_for_aln = blacklisted_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
-        memoized_specificity_results = {}
+
+        if aq is not None:
+            guide_is_specific = aq.guide_is_specific_to_alns_fn(
+                    alns_in_same_taxon, args.diff_id_frac)
+        else:
+            # No specificity to check
+            guide_is_specific = lambda guide: True
 
         def guide_is_suitable(guide):
             # Return True iff the guide does not contain a blacklisted
@@ -381,16 +387,7 @@ def design_for_id(args):
 
             # Return True if guide does not hit too many sequences in
             # alignments other than aln
-            if aq is not None:
-                if guide in memoized_specificity_results:
-                    return memoized_specificity_results[guide]
-                else:
-                    is_spec = aq.guide_is_specific_to_alns(
-                        guide, alns_in_same_taxon, args.diff_id_frac)
-                    memoized_specificity_results[guide] = is_spec
-                    return is_spec
-            else:
-                return True
+            return guide_is_specific(guide)
 
         # Mask alignments from this taxon from being reported in queries
         # because we will likely get many guide sequences that hit its

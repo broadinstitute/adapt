@@ -83,6 +83,32 @@ class AlignmentQuerier(metaclass=ABCMeta):
                 return False
         return True
 
+    def guide_is_specific_to_alns_fn(self, aln_idxs, frac_hit_thres):
+        """Provide a function for determining the specificity of guides.
+
+        This creates and uses a new memoizer.
+
+        Args:
+            aln_idxs: check if guide is specific to all the alignments with
+                these indices (self.alns[aln_idxx[i]])
+            frac_hit_thres: say that a guide "hits" an alignment A if the
+                fraction of sequences in A that it hits is > this value
+
+        Returns:
+            a function with argument guide that returns the output of calling
+            self.guide_is_specific_to_alns(guide, ...)
+        """
+        memoized = {}
+        def gis(guide):
+            if guide in memoized:
+                return memoized[guide]
+            else:
+                is_spec = self.guide_is_specific_to_alns(
+                        guide, aln_idxs, frac_hit_thres)
+                memoized[guide] = is_spec
+                return is_spec
+        return gis
+
 
 class AlignmentQuerierWithLSHNearNeighbor(AlignmentQuerier):
     """Supports queries for potential guide sequences across a set of
