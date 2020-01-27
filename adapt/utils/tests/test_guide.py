@@ -182,3 +182,14 @@ class TestGuideBindsWithGUPairing(unittest.TestCase):
         self.assertFalse(guide.guide_binds('ATCG', 'GCTA', 1, True))
         self.assertFalse(guide.guide_binds('CTCG', 'GCTA', 2, True))
         self.assertFalse(guide.guide_binds('WTCG', 'CTCG', 0, True))
+
+
+class TestGCFrac(unittest.TestCase):
+    """Tests the gc_frac function.
+    """
+
+    def test_gc_frac(self):
+        self.assertEqual(guide.gc_frac('ATTA'), 0)
+        self.assertEqual(guide.gc_frac('GGCC'), 1)
+        self.assertEqual(guide.gc_frac('AGTC'), 0.5)
+

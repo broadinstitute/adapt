@@ -203,3 +203,17 @@ def guide_binds(guide_seq, target_seq, mismatches, allow_gu_pairs):
     # and compare against the given threshold
     m = mismatches_fn(guide_seq, target_seq)
     return m <= mismatches
+
+
+def gc_frac(guide_seq):
+    """Compute fraction of guide that is GC.
+
+    Args:
+        guide_seq: string of guide sequence; must be all uppercase
+
+    Returns:
+        fraction of guide sequence that is G or C
+    """
+    gc = guide_seq.count('G') + guide_seq.count('C')
+    return float(gc) / len(guide_seq)
+

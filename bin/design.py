@@ -132,14 +132,15 @@ def prepare_alignments(args):
         args: namespace of arguments provided to this executable
 
     Returns:
-        tuple (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs out_tsv) in
-        which in_fasta is a list of paths to fasta files each containing an
+        tuple (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for)
+        in which in_fasta is a list of paths to fasta files each containing an
         alignment, taxid_for_fasta[i] gives a taxon id for in_fasta[i],
         years_tsv gives a tempfile storing a tsv file containing a year for
         each sequence across all the fasta files (only if
         args.cover_by_year_decay is set), aln_tmp_dirs is a list of temp
-        directories that need to be cleaned up, and out_tsv[i] is a path to the
-        file at which to write the output for in_fasta[i]
+        directories that need to be cleaned up, out_tsv[i] is a path to the
+        file at which to write the output for in_fasta[i], and design_for[i]
+        indicates whether to actually design for in_fasta[i] (True/False)
     """
     logger.info(("Setting up to prepare alignments"))
 
@@ -181,12 +182,27 @@ def prepare_alignments(args):
     else:
         accessions_to_use = None
 
+    # Read specified sequences, if provided
+    if args.use_fasta:
+        sequences_to_use = seq_io.read_sequences_for_taxonomies(
+                args.use_fasta)
+    else:
+        sequences_to_use = None
+
+    # Only design for certain taxonomies, if provided
+    if args.only_design_for:
+        taxs_to_design_for = seq_io.read_taxonomies_to_design_for(
+                args.only_design_for)
+    else:
+        taxs_to_design_for = None
+
     # Construct alignments for each taxonomy
     in_fasta = []
     taxid_for_fasta = []
     years_tsv_per_aln = []
     aln_tmp_dirs = []
     out_tsv = []
+    design_for = []
     for label, tax_id, segment, ref_accs in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -204,13 +220,32 @@ def prepare_alignments(args):
         else:
             accessions_to_use_for_tax = None
 
+        if sequences_to_use is not None:
+            if (tax_id, segment) in sequences_to_use:
+                sequences_to_use_for_tax = sequences_to_use[(tax_id, segment)]
+            else:
+                sequences_to_use_for_tax = None
+        else:
+            sequences_to_use_for_tax = None
+
+        if (accessions_to_use_for_tax is not None and
+                sequences_to_use_for_tax is not None):
+            raise Exception(("Cannot use both --use-accessions and "
+                "--use-fasta for the same taxonomy"))
+
+        if taxs_to_design_for is None:
+            design_for += [True]
+        else:
+            design_for += [(tax_id, segment) in taxs_to_design_for]
+
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             sample_seqs=args.sample_seqs, prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name,
             cluster_threshold=args.cluster_threshold,
-            accessions_to_use=accessions_to_use_for_tax)
+            accessions_to_use=accessions_to_use_for_tax,
+            sequences_to_use=sequences_to_use_for_tax)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -274,7 +309,7 @@ def prepare_alignments(args):
     else:
         years_tsv = None
 
-    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv
+    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for
 
 
 def design_for_id(args):
@@ -352,6 +387,10 @@ def design_for_id(args):
         logger.info(("Finding guides for alignment %d (of %d), which is in "
             "taxon %d"), i + 1, num_aln_for_design, taxid)
 
+        if args.design_for[i] is False:
+            logger.info("Skipping design for this alignment")
+            continue
+
         aln = alns[i]
         seq_groups = seq_groups_per_input[i]
         guide_cover_frac = guide_cover_frac_per_input[i]
@@ -419,6 +458,7 @@ def design_for_id(args):
                                               seq_groups=seq_groups)
             ts = target_search.TargetSearcher(ps, gs,
                 max_primers_at_site=args.max_primers_at_site,
+                primer_gc_content_bounds=tuple(args.primer_gc_content_bounds),
                 max_target_length=args.max_target_length,
                 cost_weights=args.cost_fn_weights,
                 guides_should_cover_over_all_seqs=args.gp_over_all_seqs)
@@ -444,10 +484,11 @@ def main(args):
                     args.out_tsv_dir)
 
         # Prepare input alignments, stored in temp fasta files
-        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv = prepare_alignments(args)
+        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for = prepare_alignments(args)
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
         args.out_tsv = out_tsv
+        args.design_for = design_for
 
         if args.cover_by_year_decay:
             # args.cover_by_year_decay contains two parameters: the year
@@ -691,6 +732,12 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('--max-primers-at-site', type=int,
         help=("Only use primer sites that contain at most this number "
               "of primers; if not set, there is no limit"))
+    parser_ct_args.add_argument('--primer-gc-content-bounds',
+            nargs=2, type=float,
+        help=("Only use primer sites where all primers are within the "
+              "given GC content bounds. This consists of two values L and H, "
+              "each fractions in [0,1], such that primer GC content must be "
+              "in [L, H]. If not set, there are no bounds."))
     parser_ct_args.add_argument('--max-target-length', type=int,
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))
@@ -787,6 +834,15 @@ if __name__ == "__main__":
               "or 'None' if unsegmented; (3) accession. Each row specifies "
               "an accession to use in the input, and values for columns 1 "
               "and 2 can appear in multiple rows."))
+    input_auto_common_subparser.add_argument('--use-fasta',
+        help=("If set, use sequences in fasta instead of fetching neighbors "
+              "for the given taxonomic ID(s). This provides a path to a TSV "
+              "file with 3 columns: (1) a taxonomic ID; (2) segment label, "
+              "or 'None' if unsegmented; (3) path to FASTA."))
+    input_auto_common_subparser.add_argument('--only-design-for',
+        help=("If set, only design for given taxonomies. This provides a "
+              "path to a TSV file with 2 columns: (1) a taxonomid ID; (2) "
+              "segment label, if 'None' if unsegmented"))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)

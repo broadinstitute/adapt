@@ -96,6 +96,11 @@ class TestPrimerSearch(unittest.TestCase):
                     self._pr(2, 2, 1.0, set(['CGAA', 'CGAT']))]
         self.assertEqual(covers, expected)
 
+    def test_find_primers_with_gc_bounds(self):
+        covers = list(self.a.find_primers(gc_content_bounds=(0.4, 0.6)))
+        expected = [self._pr(2, 2, 1.0, set(['CGAA', 'CGAT']))]
+        self.assertEqual(covers, expected)
+
     def test_find_primers_with_grouped_cover_frac(self):
         cover_frac = {0: 1.0, 1: 0.01, 2: 1.0}
         seq_groups = {0: {0, 1}, 1: {2, 3}, 2: {4}}
@@ -111,6 +116,20 @@ class TestPrimerSearch(unittest.TestCase):
                      self._pr(1, 2, 5.0/5.0, set(['TCGA', 'GCGA'])),
                      self._pr(2, 2, 5.0/5.0, set(['CGAA', 'CGAT']))]
         self.assertIn(covers, [expected1, expected2])
+
+    def test_check_gc_content(self):
+        self.assertTrue(primer_search.PrimerSearcher.check_gc_content(
+            {'ATCG', 'GGTT'}, (0.4, 0.6)))
+        self.assertTrue(primer_search.PrimerSearcher.check_gc_content(
+            {'ATCG', 'AGCT'}, (0.4, 0.6)))
+        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
+            {'ATCA', 'AGCT'}, (0.4, 0.6)))
+        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
+            {'ATCG', 'AGAT'}, (0.4, 0.6)))
+        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
+            {'ATCA', 'AGAT'}, (0.4, 0.6)))
+        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
+            {'GGCA', 'AGCT'}, (0.4, 0.6)))
 
     def tearDown(self):
         # Re-enable logging

@@ -3,6 +3,7 @@
 
 from collections import defaultdict
 from collections import OrderedDict
+import gzip
 import logging
 import re
 import textwrap
@@ -37,8 +38,8 @@ def read_fasta(fn, replace_degenerate=False,
 
     degenerate_pattern = re.compile('[YRWSMKBDHV]')
 
-    m = OrderedDict()
-    with open(fn, 'r') as f:
+    def process(f):
+        m = OrderedDict()
         curr_seq_name = ""
         for line in f:
             line = line.rstrip()
@@ -61,6 +62,15 @@ def read_fasta(fn, replace_degenerate=False,
                 if skip_gaps:
                     line = line.replace('-', '')
                 m[curr_seq_name] += line
+        return m
+
+    if fn.endswith('.gz'):
+        with gzip.open(fn, 'rt') as f:
+            m = process(f)
+    else:
+        with open(fn, 'r') as f:
+            m = process(f)
+
     return m
 
 
@@ -288,4 +298,75 @@ def read_accessions_for_taxonomies(fn):
             accession = ls[2]
             accs[(tax_id, segment)].append(accession)
     return accs
+
+
+def read_sequences_for_taxonomies(fn):
+    """Read sequences for different taxonomies
+
+    The columns must be, in order:
+        1) a taxonomic (e.g., species) ID from NCBI
+        2) a segment label, or 'None' if unsegmented
+        3) a path to a FASTA file containing sequences
+
+    Args:
+        fn: path to TSV file, where each row corresponds to a taxonomy
+
+    Returns:
+        dict {(taxonomic-id, segment): dict of sequences}
+    """
+    seqs = defaultdict(list)
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 3:
+                raise Exception(("Input fasta TSV must have 3 columns"))
+
+            try:
+                tax_id = int(ls[0])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[0])
+
+            segment = ls[1]
+            if segment.lower() == 'none':
+                segment = None
+
+            fasta_path = ls[2]
+            seqs_for_tax = read_fasta(fasta_path)
+            seqs[(tax_id, segment)] = seqs_for_tax
+    return seqs
+
+
+def read_taxonomies_to_design_for(fn):
+    """Read different taxonomies to design for.
+
+    The columns must be, in order:
+        1) a taxonomic (e.g., species) ID from NCBI
+        2) a segment label, or 'None' if unsegmented
+
+    Args:
+        fn: path to TSV file, where each row corresponds to a taxonomy
+
+    Returns:
+        collection of (taxonomic-id, segment)
+    """
+    taxs = []
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 2:
+                raise Exception(("Input fasta TSV must have 2 columns"))
+
+            try:
+                tax_id = int(ls[0])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[0])
+
+            segment = ls[1]
+            if segment.lower() == 'none':
+                segment = None
+
+            taxs += [(tax_id, segment)]
+    return taxs
 
