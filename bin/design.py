@@ -347,8 +347,15 @@ def design_for_id(args):
     if num_taxa > 1:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
-        aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(alns,
-                args.guide_length, args.diff_id_mismatches, allow_gu_pairs)
+        if args.diff_id_method == "lshnn":
+            aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(alns,
+                    args.guide_length, args.diff_id_mismatches, allow_gu_pairs)
+        elif args.diff_id_method == "shard":
+            aq = alignment_query.AlignmentQuerierWithKmerSharding(alns,
+                    args.guide_length, args.diff_id_mismatches, allow_gu_pairs)
+        else:
+            raise Exception(("Unknown method for querying specificity: '%s'" %
+                args.diff_id_method))
         aq.setup()
     else:
         logger.info(("Only one taxon was provided, so not constructing "
@@ -574,6 +581,11 @@ if __name__ == "__main__":
         help=("Decide that a guide 'hits' a group/taxon if it 'hits' a "
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity."))
+    base_subparser.add_argument('--id-method', dest="diff_id_method",
+        choices=["lshnn", "shard"], default="shard",
+        help=("Choice of method to query for specificity. 'lshnn' for "
+              "LSH near-neighbor approach. 'shard' for approach that "
+              "shards k-mers across small tries."))
     base_subparser.add_argument('--specific-against', nargs='+',
         default=[],
         help=("Path to one or more FASTA files giving alignments, such that "
