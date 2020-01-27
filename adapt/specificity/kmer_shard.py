@@ -225,7 +225,7 @@ class TrieSpaceOfKmersFullSig(TrieSpaceOfKmers):
         """Query a k-mer.
 
         Args:
-            q: query string
+            q: query string; must not have ambiguity
             m: number of mismatches to tolerate
             gu_pairing: whether to tolerate G-U base pairing
 
@@ -306,7 +306,7 @@ class TrieSpaceOfKmersSplitSig(TrieSpaceOfKmers):
         """Query a k-mer.
 
         Args:
-            q: query string
+            q: query string; must not have ambiguity
             m: number of mismatches to tolerate
             gu_pairing: whether to tolerate G-U base pairing
 

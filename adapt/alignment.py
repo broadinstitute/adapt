@@ -390,14 +390,14 @@ class Alignment:
 
             gd = aln_for_guide.determine_consensus_sequence(
                 cluster_idxs)
-            if guide_is_suitable_fn is not None:
-                if guide_is_suitable_fn(gd) is False:
-                    # Skip this cluster
-                    continue
             if 'N' in gd:
                 # Skip this; all sequences at a position in this cluster
                 # are 'N'
                 continue
+            if guide_is_suitable_fn is not None:
+                if guide_is_suitable_fn(gd) is False:
+                    # Skip this cluster
+                    continue
             # Determine the sequences that are bound by this guide (and
             # where it is 'active', if predictor is set)
             binding_seqs, num_bound, num_passed_predict_active = \
@@ -432,7 +432,7 @@ class Alignment:
         # and active, and make this the guide
         if gd is None and not stopped_early:
             for i, (s, idx) in enumerate(seq_rows):
-                if sum(s.count(c) for c in ['A', 'T', 'C', 'G']) != len(s):
+                if not set(s).issubset(set(['A', 'C', 'G', 'T'])):
                     # s has ambiguity; skip it
                     continue
                 if (guide_is_suitable_fn is not None and
