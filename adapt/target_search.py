@@ -11,6 +11,7 @@ import heapq
 import itertools
 import logging
 import math
+import multiprocessing
 
 from adapt import guide_search
 from adapt import primer_search
@@ -102,12 +103,12 @@ class TargetSearcher:
         # when costs are equivalent (choosing the one pushed first, i.e.,
         # the lower push_id); otherwise, there will be an error on
         # ties if target is not comparable
-        target_heap = []
         push_id_counter = itertools.count()
 
         num_primer_pairs = 0
         num_suitable_primer_pairs = 0
         last_window_start = -1
+        suitable_primer_pairs = []
         for p1, p2 in self._find_primer_pairs():
             num_primer_pairs += 1
 
@@ -132,14 +133,48 @@ class TargetSearcher:
 
             # If here, the window passed basic checks
             num_suitable_primer_pairs += 1
+            suitable_primer_pairs.append((p1, p2))
 
+        # Create multiprocessing pool.
+        # Sometimes opening a pool (via multiprocessing.Pool) hangs indefinitely,
+        # particularly when many pools are opened/closed repeatedly by a master
+        # process; this likely stems from issues in multiprocessing.Pool. So set
+        # a timeout on opening the pool, and try again if it times out. It
+        # appears, from testing, that opening a pool may timeout a few times in
+        # a row, but eventually succeeds.
+        time_limit = 60
+        num_processes = multiprocessing.cpu_count()
+        while True:
+            try:
+                with timeout.time_limit(time_limit):
+                    _process_pool = multiprocessing.Pool(num_processes)
+                    break
+                except timeout.TimeoutException:
+                    # Try again
+                    logger.debug("Pool initialization timed out; trying again")
+                    time_limit *= 2
+                    continue
+
+        # Map the action of finding guides between primers to processes.
+        try:
+            # apply vs. map? depends on if we write to target_heap in
+            # get_guides_for_primers or let it return guides
+            target_heaps = _process_pool.map(get_guides_for_primers,
+                                             suitable_primer_pairs)
+
+        # Separate out loop body of finding guides between primers in function.
+        def get_guides_for_primers(p1, p2):
             # Since window_start increases monotonically, we no
             # longer need to memoize guide covers between the last
             # and current start
-            assert window_start >= last_window_start
-            for pos in range(last_window_start, window_start):
-                self.gs._cleanup_memoized_guides(pos)
-            last_window_start = window_start
+            # See if we can get away with this for now; also ask Hayden.
+            # Is gs a shared object? If so, would we want to avoid cleaning up
+            # between processes anyway?
+            # assert window_start >= last_window_start
+            # for pos in range(last_window_start, window_start):
+            #     self.gs._cleanup_memoized_guides(pos)
+            # last_window_start = window_start
+            target_heap = []
 
             # Calculate a cost of the primers
             p1_num = p1.num_primers
@@ -147,6 +182,9 @@ class TargetSearcher:
             cost_primers = self.cost_weight_primers * (p1_num + p2_num)
 
             # Calculate a cost of the window
+            window_start = p1.start + p1.primer_length
+            window_end = p2.start
+            window_length = window_end - window_start
             cost_window = self.cost_weight_window * math.log2(window_length)
 
             # Calculate a lower bound on the total cost of this target,
@@ -296,6 +334,11 @@ class TargetSearcher:
                     # Push the entry into target_heap, and pop out the
                     # one with the highest cost
                     heapq.heappushpop(target_heap, entry)
+
+            return target_heap
+
+        # Merge heaps from multiple processes.
+        target_heap = heapq.merge(*target_heaps)
 
         if len(target_heap) == 0:
             logger.warning(("Zero targets were found. The number of total "
