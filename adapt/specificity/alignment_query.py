@@ -39,6 +39,7 @@ class AlignmentQuerier(metaclass=ABCMeta):
         self.guide_length = guide_length
         self.dist_thres = dist_thres
         self.allow_gu_pairs = allow_gu_pairs
+        self.is_setup = False
 
     @abstractmethod
     def setup(self): raise NotImplementedError
@@ -174,8 +175,6 @@ class AlignmentQuerierWithLSHNearNeighbor(AlignmentQuerier):
             reporting_prob, hash_idx=0, join_concat_as_str=True)
 
         self.seqs_with_subseq = defaultdict(set)
-
-        self.is_setup = False
 
     def setup(self):
         """Build data structure for near neighbor lookup of guide sequences.
