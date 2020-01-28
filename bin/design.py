@@ -14,6 +14,7 @@ from adapt import guide_search
 from adapt.prepare import align
 from adapt.prepare import prepare_alignment
 from adapt import primer_search
+from adapt.specificity import alignment_query
 from adapt import target_search
 from adapt.utils import guide
 from adapt.utils import log
@@ -373,8 +374,15 @@ def design_for_id(args):
     if num_taxa > 1:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
-        aq = alignment.AlignmentQuerier(alns, args.guide_length,
-            args.diff_id_mismatches, allow_gu_pairs)
+        if args.diff_id_method == "lshnn":
+            aq = alignment_query.AlignmentQuerierWithLSHNearNeighbor(alns,
+                    args.guide_length, args.diff_id_mismatches, allow_gu_pairs)
+        elif args.diff_id_method == "shard":
+            aq = alignment_query.AlignmentQuerierWithKmerSharding(alns,
+                    args.guide_length, args.diff_id_mismatches, allow_gu_pairs)
+        else:
+            raise Exception(("Unknown method for querying specificity: '%s'" %
+                args.diff_id_method))
         aq.setup()
     else:
         logger.info(("Only one taxon was provided, so not constructing "
@@ -398,7 +406,13 @@ def design_for_id(args):
         required_guides_for_aln = required_guides[i]
         blacklisted_ranges_for_aln = blacklisted_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
-        memoized_specificity_results = {}
+
+        if aq is not None:
+            guide_is_specific = aq.guide_is_specific_to_alns_fn(
+                    alns_in_same_taxon, args.diff_id_frac)
+        else:
+            # No specificity to check
+            guide_is_specific = lambda guide: True
 
         def guide_is_suitable(guide):
             # Return True iff the guide does not contain a blacklisted
@@ -411,16 +425,7 @@ def design_for_id(args):
 
             # Return True if guide does not hit too many sequences in
             # alignments other than aln
-            if aq is not None:
-                if guide in memoized_specificity_results:
-                    return memoized_specificity_results[guide]
-                else:
-                    is_spec = aq.guide_is_specific_to_alns(
-                        guide, alns_in_same_taxon, args.diff_id_frac)
-                    memoized_specificity_results[guide] = is_spec
-                    return is_spec
-            else:
-                return True
+            return guide_is_specific(guide)
 
         # Mask alignments from this taxon from being reported in queries
         # because we will likely get many guide sequences that hit its
@@ -609,6 +614,11 @@ if __name__ == "__main__":
         help=("Decide that a guide 'hits' a group/taxon if it 'hits' a "
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity."))
+    base_subparser.add_argument('--id-method', dest="diff_id_method",
+        choices=["lshnn", "shard"], default="shard",
+        help=("Choice of method to query for specificity. 'lshnn' for "
+              "LSH near-neighbor approach. 'shard' for approach that "
+              "shards k-mers across small tries."))
     base_subparser.add_argument('--specific-against', nargs='+',
         default=[],
         help=("Path to one or more FASTA files giving alignments, such that "
