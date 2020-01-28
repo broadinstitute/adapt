@@ -43,10 +43,15 @@ class BaseAlignmentQuerierTests:
         if self.alignment_querier_subclass == alignment_query.AlignmentQuerierWithLSHNearNeighbor:
             self.aq = self.alignment_querier_subclass(
                     alns, 5, 1, False, k=3, reporting_prob=0.95)
+            self.aq_with_gu = self.alignment_querier_subclass(
+                    alns, 5, 1, True, k=3, reporting_prob=0.95)
         else:
             self.aq = self.alignment_querier_subclass(
                     alns, 5, 1, False)
+            self.aq_with_gu = self.alignment_querier_subclass(
+                    alns, 5, 1, True)
         self.aq.setup()
+        self.aq_with_gu.setup()
 
     def test_frac_of_aln_hit_by_guide(self):
         self.assertEqual(self.aq.frac_of_aln_hit_by_guide('ATCGA'),
@@ -60,6 +65,20 @@ class BaseAlignmentQuerierTests:
 
         self.assertEqual(self.aq.frac_of_aln_hit_by_guide('TTACA'),
                          [1.0/3, 2.0/3, 0.0])
+
+    def test_frac_of_aln_hit_by_guide_with_gu_pairs(self):
+        # In aln_a, this also hits the 3rd sequence at 'AATGG'
+        self.assertEqual(self.aq_with_gu.frac_of_aln_hit_by_guide('ATCGA'),
+                         [1.0, 0.0, 2.0/3])
+
+        self.assertEqual(self.aq_with_gu.frac_of_aln_hit_by_guide('GGGGG'),
+                         [0.0, 0.0, 0.0])
+
+        self.assertEqual(self.aq_with_gu.frac_of_aln_hit_by_guide('CCTTC'),
+                         [0.0, 1.0, 0.0])
+
+        self.assertEqual(self.aq_with_gu.frac_of_aln_hit_by_guide('TTACA'),
+                         [2.0/3, 2.0/3, 2.0/3])
 
     def test_guide_is_specific_to_aln(self):
         def assert_is_specific(guide, thres, specific_to):
