@@ -12,6 +12,7 @@ import tempfile
 from adapt import alignment
 from adapt import guide_search
 from adapt.prepare import align
+from adapt.prepare import ncbi_neighbors
 from adapt.prepare import prepare_alignment
 from adapt import primer_search
 from adapt.specificity import alignment_query
@@ -482,6 +483,10 @@ def main(args):
 
     logger.info("Running design.py with arguments: %s", args)
 
+    # Set NCBI API key
+    if args.ncbi_api_key:
+        ncbi_neighbors.ncbi_api_key = args.ncbi_api_key
+
     if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.input_type == 'auto-from-file':
             if not os.path.isdir(args.out_tsv_dir):
@@ -853,6 +858,10 @@ if __name__ == "__main__":
         help=("If set, only design for given taxonomies. This provides a "
               "path to a TSV file with 2 columns: (1) a taxonomid ID; (2) "
               "segment label, if 'None' if unsegmented"))
+    input_auto_common_subparser.add_argument('--ncbi-api-key',
+        help=("API key to use for NCBI e-utils. Using this increases the "
+              "limit on requests/second and may prevent an IP address "
+              "from being block due to too many requests"))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)

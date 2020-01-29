@@ -19,6 +19,10 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
+# Global variable for API key
+ncbi_api_key = None
+
+
 def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
         max_num_tries=10, read=False):
     """
@@ -90,8 +94,11 @@ def ncbi_neighbors_url(taxid):
     Returns:
         str representing download URL
     """
-    params = urllib.parse.urlencode({'taxid': taxid, 'cmd': 'download2'})
-    url = 'https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup.cgi?%s' % params
+    params = {'taxid': taxid, 'cmd': 'download2'}
+    if ncbi_api_key is not None:
+        params['api_key'] = ncbi_api_key
+    params_url = urllib.parse.urlencode(params)
+    url = 'https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup.cgi?%s' % params_url
     return url
 
 
@@ -199,10 +206,13 @@ def ncbi_fasta_download_url(accessions):
         str representing download URL
     """
     ids = ','.join(accessions)
+    params = {'id': ids, 'db': 'nuccore', 'rettype': 'fasta',
+                'retmode': 'text'}
+    if ncbi_api_key is not None:
+        params['api_key'] = ncbi_api_key
     # Use safe=',' to not encode ',' as '%2'
-    params = urllib.parse.urlencode({'id': ids, 'db': 'nuccore',
-        'rettype': 'fasta', 'retmode': 'text'}, safe=',')
-    url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params
+    params_url = urllib.parse.urlencode(params, safe=',')
+    url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params_url
     return url
 
 
@@ -252,10 +262,12 @@ def ncbi_xml_download_url(accessions):
         str representing download URL
     """
     ids = ','.join(accessions)
+    params = {'id': ids, 'db': 'nuccore', 'retmode': 'xml'}
+    if ncbi_api_key is not None:
+        params['api_key'] = ncbi_api_key
     # Use safe=',' to not encode ',' as '%2'
-    params = urllib.parse.urlencode({'id': ids, 'db': 'nuccore',
-        'retmode': 'xml'}, safe=',')
-    url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params
+    params_url = urllib.parse.urlencode(params, safe=',')
+    url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params_url
     return url
 
 
