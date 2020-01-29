@@ -234,6 +234,10 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
     """
     logger.debug(("Fetching fasta files for %d accessions") % len(accessions))
 
+    if ncbi_api_key is not None:
+        # Using an API keys allows more requests per second (up to 10)
+        reqs_per_sec = 7
+
     # Make temp file
     fp = tempfile.NamedTemporaryFile()
 
