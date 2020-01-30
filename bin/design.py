@@ -396,7 +396,7 @@ def design_for_id(args):
         logger.info(("Finding guides for alignment %d (of %d), which is in "
             "taxon %d"), i + 1, num_aln_for_design, taxid)
 
-        if args.design_for[i] is False:
+        if args.design_for is not None and args.design_for[i] is False:
             logger.info("Skipping design for this alignment")
             continue
 
@@ -457,6 +457,10 @@ def design_for_id(args):
         elif args.search_cmd == 'complete-targets':
             # Find optimal targets (primer and guide set combinations),
             # and write them to a file
+            if args.primer_gc_content_bounds is None:
+                primer_gc_content_bounds = None
+            else:
+                primer_gc_content_bounds = tuple(args.primer_gc_content_bounds)
             ps = primer_search.PrimerSearcher(aln, args.primer_length,
                                               args.primer_mismatches,
                                               primer_cover_frac,
@@ -464,7 +468,7 @@ def design_for_id(args):
                                               seq_groups=seq_groups)
             ts = target_search.TargetSearcher(ps, gs,
                 max_primers_at_site=args.max_primers_at_site,
-                primer_gc_content_bounds=tuple(args.primer_gc_content_bounds),
+                primer_gc_content_bounds=primer_gc_content_bounds,
                 max_target_length=args.max_target_length,
                 cost_weights=args.cost_fn_weights,
                 guides_should_cover_over_all_seqs=args.gp_over_all_seqs)
@@ -484,8 +488,9 @@ def main(args):
     logger.info("Running design.py with arguments: %s", args)
 
     # Set NCBI API key
-    if args.ncbi_api_key:
-        ncbi_neighbors.ncbi_api_key = args.ncbi_api_key
+    if args.input_type in ['auto_from_file', 'auto-from-args']:
+        if args.ncbi_api_key:
+            ncbi_neighbors.ncbi_api_key = args.ncbi_api_key
 
     if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.input_type == 'auto-from-file':
@@ -511,6 +516,7 @@ def main(args):
         if len(args.in_fasta) != len(args.out_tsv):
             raise Exception(("Number output TSVs must match number of input "
                 "FASTAs"))
+        args.design_for = None
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
     else:
         raise Exception("Unknown input type subcommand '%s'" % args.input_type)
