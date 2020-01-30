@@ -24,7 +24,6 @@ class TargetSearcher:
     """Methods to search for targets over a genome."""
 
     def __init__(self, ps, gs, max_primers_at_site=None,
-            primer_gc_content_bounds=None,
             max_target_length=None, cost_weights=None,
             guides_should_cover_over_all_seqs=False):
         """
@@ -34,9 +33,6 @@ class TargetSearcher:
             max_primers_at_site: only allow amplicons in which each
                 end has at most this number of primers; or None for
                 no limit
-            primer_gc_content_bounds: a tuple (lo, hi) such that this only
-                yields sites where all primers have a GC content fraction in
-                [lo, hi]; or None for no bounds
             max_target_length: only allow amplicons whose length is at
                 most this; or None for no limit
             cost_weights: a tuple giving weights in the cost function
@@ -49,7 +45,6 @@ class TargetSearcher:
         self.ps = ps
         self.gs = gs
         self.max_primers_at_site = max_primers_at_site
-        self.primer_gc_content_bounds = primer_gc_content_bounds
         self.max_target_length = max_target_length
 
         if cost_weights is None:
@@ -69,8 +64,7 @@ class TargetSearcher:
             The start position of p_j is > the start position of p_i.
         """
         primers = list(self.ps.find_primers(
-            max_at_site=self.max_primers_at_site,
-            gc_content_bounds=self.primer_gc_content_bounds))
+            max_at_site=self.max_primers_at_site))
         for i in range(len(primers) - 1):
             p1 = primers[i]
             for j in range(i + 1, len(primers)):

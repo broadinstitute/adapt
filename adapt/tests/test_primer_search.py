@@ -77,6 +77,8 @@ class TestPrimerSearch(unittest.TestCase):
                        'GGCGAA']
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
         self.a = primer_search.PrimerSearcher(self.a_aln, 4, 0, 1.0, (1, 1, 100))
+        self.a_gc_bounds = primer_search.PrimerSearcher(self.a_aln,
+                4, 0, 1.0, (1, 1, 100), primer_gc_content_bounds=(0.4, 0.6))
 
     def _pr(self, start, num_primers, frac_bound, primers_in_cover):
         # Construct a PrimerResult object
@@ -97,7 +99,7 @@ class TestPrimerSearch(unittest.TestCase):
         self.assertEqual(covers, expected)
 
     def test_find_primers_with_gc_bounds(self):
-        covers = list(self.a.find_primers(gc_content_bounds=(0.4, 0.6)))
+        covers = list(self.a_gc_bounds.find_primers())
         expected = [self._pr(2, 2, 1.0, set(['CGAA', 'CGAT']))]
         self.assertEqual(covers, expected)
 
@@ -118,18 +120,12 @@ class TestPrimerSearch(unittest.TestCase):
         self.assertIn(covers, [expected1, expected2])
 
     def test_check_gc_content(self):
-        self.assertTrue(primer_search.PrimerSearcher.check_gc_content(
-            {'ATCG', 'GGTT'}, (0.4, 0.6)))
-        self.assertTrue(primer_search.PrimerSearcher.check_gc_content(
-            {'ATCG', 'AGCT'}, (0.4, 0.6)))
-        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
-            {'ATCA', 'AGCT'}, (0.4, 0.6)))
-        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
-            {'ATCG', 'AGAT'}, (0.4, 0.6)))
-        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
-            {'ATCA', 'AGAT'}, (0.4, 0.6)))
-        self.assertFalse(primer_search.PrimerSearcher.check_gc_content(
-            {'GGCA', 'AGCT'}, (0.4, 0.6)))
+        self.assertTrue(self.a_gc_bounds.check_gc_content({'ATCG', 'GGTT'}))
+        self.assertTrue(self.a_gc_bounds.check_gc_content({'ATCG', 'AGCT'}))
+        self.assertFalse(self.a_gc_bounds.check_gc_content({'ATCA', 'AGCT'}))
+        self.assertFalse(self.a_gc_bounds.check_gc_content({'ATCG', 'AGAT'}))
+        self.assertFalse(self.a_gc_bounds.check_gc_content({'ATCA', 'AGAT'}))
+        self.assertFalse(self.a_gc_bounds.check_gc_content({'GGCA', 'AGCT'}))
 
     def tearDown(self):
         # Re-enable logging

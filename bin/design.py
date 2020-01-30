@@ -465,10 +465,10 @@ def design_for_id(args):
                                               args.primer_mismatches,
                                               primer_cover_frac,
                                               args.missing_thres,
-                                              seq_groups=seq_groups)
+                                              seq_groups=seq_groups,
+                                              primer_gc_content_bounds=primer_gc_content_bounds)
             ts = target_search.TargetSearcher(ps, gs,
                 max_primers_at_site=args.max_primers_at_site,
-                primer_gc_content_bounds=primer_gc_content_bounds,
                 max_target_length=args.max_target_length,
                 cost_weights=args.cost_fn_weights,
                 guides_should_cover_over_all_seqs=args.gp_over_all_seqs)
