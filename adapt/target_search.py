@@ -103,12 +103,17 @@ class TargetSearcher:
         # when costs are equivalent (choosing the one pushed first, i.e.,
         # the lower push_id); otherwise, there will be an error on
         # ties if target is not comparable
+
+        # First prune out unsuitable primer pairs, and then find the primer pair
+        # spanning the longest distance. This distance will the length of genome
+        # allocated to each process.
         push_id_counter = itertools.count()
 
         num_primer_pairs = 0
         num_suitable_primer_pairs = 0
         last_window_start = -1
         suitable_primer_pairs = []
+        max_primer_pair_span = 0
         for p1, p2 in self._find_primer_pairs():
             num_primer_pairs += 1
 
@@ -133,7 +138,26 @@ class TargetSearcher:
 
             # If here, the window passed basic checks
             num_suitable_primer_pairs += 1
+            max_primer_pair_span = max(max_primer_pair_span, target_length)
             suitable_primer_pairs.append((p1, p2))
+
+        # create GuideSearcher for each chunk and map primer pair to chunk
+        gs_list = []
+        for i in range(0, self.gs.aln.seq_length, max_primer_pair_span):
+            # Alternative approach was to extract sub-alignments from the main
+            # alignment and create GuideSearchers as copies of self.gs but this
+            # involved a lot of copying that seemed unwieldy
+            # aln = self.gs.aln.extract_range(i, i + max_primer_pair_span)
+            gs = copy.copy(self.gs) # or deepcopy?
+            gs.blacklisted_ranges = [(0, i), (i+2*max_primer_pair_span,
+                                              self.gs.aln.seq_length)]
+            # I multiply by 2 in case a primer pair starts near the end of one
+            # chunk and bleeds into another
+            gs_list.append(gs)
+        suitable_primer_pairs_by_gs = [[]] * len(gs_list)
+        for p1, p2 in suitable_primer_pairs:
+            i = p1.start / max_primer_pair_span # index of gs in gs_list to use
+            suitable_primer_pairs_by_gs[i].append((p1, p2))
 
         # Create multiprocessing pool.
         # Sometimes opening a pool (via multiprocessing.Pool) hangs indefinitely,
@@ -160,180 +184,179 @@ class TargetSearcher:
             # apply vs. map? depends on if we write to target_heap in
             # get_guides_for_primers or let it return guides
             target_heaps = _process_pool.map(get_guides_for_primers,
-                                             suitable_primer_pairs)
+                                             zip(gs_list,
+                                                 suitable_primer_pairs_by_gs))
 
         # Separate out loop body of finding guides between primers in function.
-        def get_guides_for_primers(p1, p2):
-            # Since window_start increases monotonically, we no
-            # longer need to memoize guide covers between the last
-            # and current start
-            # See if we can get away with this for now; also ask Hayden.
-            # Is gs a shared object? If so, would we want to avoid cleaning up
-            # between processes anyway?
-            # assert window_start >= last_window_start
-            # for pos in range(last_window_start, window_start):
-            #     self.gs._cleanup_memoized_guides(pos)
-            # last_window_start = window_start
-            target_heap = []
+        def get_guides_for_primers(gs, suitable_primer_pairs):
+            for p1, p2 in suitable_primer_pairs:
+                window_start = p1.start + p1.primer_length
+                window_end = p2.start
+                # Since window_start increases monotonically, we no
+                # longer need to memoize guide covers between the last
+                # and current start
+                assert window_start >= last_window_start
+                for pos in range(last_window_start, window_start):
+                    gs._cleanup_memoized_guides(pos)
+                last_window_start = window_start
+                target_heap = []
 
-            # Calculate a cost of the primers
-            p1_num = p1.num_primers
-            p2_num = p2.num_primers
-            cost_primers = self.cost_weight_primers * (p1_num + p2_num)
+                # Calculate a cost of the primers
+                p1_num = p1.num_primers
+                p2_num = p2.num_primers
+                cost_primers = self.cost_weight_primers * (p1_num + p2_num)
 
-            # Calculate a cost of the window
-            window_start = p1.start + p1.primer_length
-            window_end = p2.start
-            window_length = window_end - window_start
-            cost_window = self.cost_weight_window * math.log2(window_length)
+                # Calculate a cost of the window
+                window_length = window_end - window_start
+                cost_window = self.cost_weight_window * math.log2(window_length)
 
-            # Calculate a lower bound on the total cost of this target,
-            # which can be done assuming >= 1 guide will be found; this
-            # is useful for pruning the search
-            cost_total_lo = (cost_primers + cost_window +
-                self.cost_weight_guides * 1)
+                # Calculate a lower bound on the total cost of this target,
+                # which can be done assuming >= 1 guide will be found; this
+                # is useful for pruning the search
+                cost_total_lo = (cost_primers + cost_window +
+                    self.cost_weight_guides * 1)
 
-            # Check if we should bother trying to find guides in this window
-            if len(target_heap) >= best_n:
-                curr_highest_cost = -1 * target_heap[0][0]
-                if cost_total_lo >= curr_highest_cost:
-                    # The cost is already >= than all in the current best_n,
-                    # and will only stay the same or get bigger after adding
-                    # the term for guides, so there is no reason to continue
-                    # considering this window
-                    continue
+                # Check if we should bother trying to find guides in this window
+                if len(target_heap) >= best_n:
+                    curr_highest_cost = -1 * target_heap[0][0]
+                    if cost_total_lo >= curr_highest_cost:
+                        # The cost is already >= than all in the current best_n,
+                        # and will only stay the same or get bigger after adding
+                        # the term for guides, so there is no reason to continue
+                        # considering this window
+                        continue
 
-            # If targets should not overlap and this overlaps a target
-            # already in target_heap, check if we should bother trying to
-            # find guides in this window
-            overlapping_i = []
-            if no_overlap:
-                # Check if any targets already in target_heap have
-                # primer pairs overlapping with (p1, p2)
-                for i in range(len(target_heap)):
-                    _, _, target_i = target_heap[i]
-                    (p1_i, p2_i), _ = target_i
-                    if p1.overlaps(p1_i) and p2.overlaps(p2_i):
-                        # Replace target_i
-                        overlapping_i += [i]
-            if overlapping_i:
-                # target overlaps with one or more entries already in
-                # target_heap
-                cost_is_too_high = True
-                for i in overlapping_i:
-                    cost_i = -1 * target_heap[i][0]
-                    if cost_total_lo < cost_i:
-                        cost_is_too_high = False
-                        break
-                if cost_is_too_high:
-                    # We will try to replace an entry in overlapping_i (i) with
-                    # a new entry, but the cost is already >= than what it
-                    # is for i, and will only stay the same or get bigger
-                    # after adding the term for guides, so there is no reason
-                    # for considering this window (it will never replace i)
-                    continue
-
-            logger.info(("Found window [%d, %d) bound by primers that could "
-                "be in the best %d targets; looking for guides within this"),
-                window_start, window_end, best_n)
-
-            # Determine what set of sequences the guides should cover
-            if self.guides_should_cover_over_all_seqs:
-                # Design across the entire collection of sequences
-                # This may lead to more guides being designed than if only
-                # designing across primer_bound_seqs (below) because more
-                # sequences must be considered in the design
-                # But this can improve runtime because the seqs_to_consider
-                # used by self.gs in the design will be more constant
-                # across different windows, which will enable it to better
-                # take advantage of memoization (in self.gs._memoized_guides)
-                # during the design
-                guide_seqs_to_consider = None
-            else:
-                # Find the sequences that are bound by some primer in p1 AND
-                # some primer in p2
-                p1_bound_seqs = self.ps.seqs_bound_by_primers(p1.primers_in_cover)
-                p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
-                primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
-                guide_seqs_to_consider = primer_bound_seqs
-
-            # Find guides in the window, only searching across
-            # the sequences in guide_seqs_to_consider
-            try:
-                guides = self.gs._find_guides_that_cover_in_window(
-                    window_start, window_end,
-                    only_consider=guide_seqs_to_consider)
-            except guide_search.CannotAchieveDesiredCoverageError:
-                # No more suitable guides; skip this window
-                continue
-
-            if len(guides) == 0:
-                # This can happen, for example, if primer_bound_seqs is
-                # empty; then no guides are required
-                # Skip this window
-                continue
-
-            # Calculate fraction of sequences bound by the guides
-            guides_frac_bound = self.gs._total_frac_bound_by_guides(guides)
-
-            # Calculate a cost of the guides, and a total cost
-            cost_guides = self.cost_weight_guides * len(guides)
-            cost_total = cost_primers + cost_window + cost_guides
-
-            # Add target to the heap (but only keep it if there are not
-            # yet best_n targets or it has one of the best_n smallest
-            # costs)
-            target = ((p1, p2), (guides_frac_bound, guides))
-            entry = (-cost_total, next(push_id_counter), target)
-            if overlapping_i:
-                # target overlaps with an entry already in target_heap;
-                # consider replacing that entry with new entry
-                if len(overlapping_i) == 1:
-                    # Almost all cases will satisfy this: the new entry
-                    # overlaps just one existing entry; optimize for this case
-                    i = overlapping_i[0]
-                    cost_i = -1 * target_heap[i][0]
-                    if cost_total < cost_i:
-                        # Replace i with entry
-                        target_heap[i] = entry
-                        heapq.heapify(target_heap)
-                else:
-                    # For some edge cases, the new entry overlaps with
-                    # multiple existing entries
-                    # Check if the new entry has a sufficiently low cost
-                    # to justify removing any existing overlapping entries
-                    cost_is_sufficiently_low = False
+                # If targets should not overlap and this overlaps a target
+                # already in target_heap, check if we should bother trying to
+                # find guides in this window
+                overlapping_i = []
+                if no_overlap:
+                    # Check if any targets already in target_heap have
+                    # primer pairs overlapping with (p1, p2)
+                    for i in range(len(target_heap)):
+                        _, _, target_i = target_heap[i]
+                        (p1_i, p2_i), _ = target_i
+                        if p1.overlaps(p1_i) and p2.overlaps(p2_i):
+                            # Replace target_i
+                            overlapping_i += [i]
+                if overlapping_i:
+                    # target overlaps with one or more entries already in
+                    # target_heap
+                    cost_is_too_high = True
                     for i in overlapping_i:
                         cost_i = -1 * target_heap[i][0]
-                        if cost_total < cost_i:
-                            cost_is_sufficiently_low = True
+                        if cost_total_lo < cost_i:
+                            cost_is_too_high = False
                             break
-                    if cost_is_sufficiently_low:
-                        # Remove all entries that overlap the new entry,
-                        # then add the new entry
-                        for i in sorted(overlapping_i, reverse=True):
-                            del target_heap[i]
-                        target_heap.append(entry)
-                        heapq.heapify(target_heap)
-                        # Note that this can lead to cases in which the size
-                        # of the output (target_heap) is < best_n, or in which
-                        # there is an entry with very high cost, because
-                        # in certain edge cases we might finish the search
-                        # having removed >1 entry but only replacing it with
-                        # one, and if the search continues for a short time
-                        # after, len(target_heap) < best_n could result in
-                        # some high-cost entries being placed into the heap
-            elif len(target_heap) < best_n:
-                # target_heap is not yet full, so push entry to it
-                heapq.heappush(target_heap, entry)
-            else:
-                # target_heap is full; consider replacing the entry that has
-                # the highest cost with the new entry
-                curr_highest_cost = -1 * target_heap[0][0]
-                if cost_total < curr_highest_cost:
-                    # Push the entry into target_heap, and pop out the
-                    # one with the highest cost
-                    heapq.heappushpop(target_heap, entry)
+                    if cost_is_too_high:
+                        # We will try to replace an entry in overlapping_i (i) with
+                        # a new entry, but the cost is already >= than what it
+                        # is for i, and will only stay the same or get bigger
+                        # after adding the term for guides, so there is no reason
+                        # for considering this window (it will never replace i)
+                        continue
+
+                logger.info(("Found window [%d, %d) bound by primers that could "
+                    "be in the best %d targets; looking for guides within this"),
+                    window_start, window_end, best_n)
+
+                # Determine what set of sequences the guides should cover
+                if self.guides_should_cover_over_all_seqs:
+                    # Design across the entire collection of sequences
+                    # This may lead to more guides being designed than if only
+                    # designing across primer_bound_seqs (below) because more
+                    # sequences must be considered in the design
+                    # But this can improve runtime because the seqs_to_consider
+                    # used by gs in the design will be more constant
+                    # across different windows, which will enable it to better
+                    # take advantage of memoization (in gs._memoized_guides)
+                    # during the design
+                    guide_seqs_to_consider = None
+                else:
+                    # Find the sequences that are bound by some primer in p1 AND
+                    # some primer in p2
+                    p1_bound_seqs = self.ps.seqs_bound_by_primers(p1.primers_in_cover)
+                    p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
+                    primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
+                    guide_seqs_to_consider = primer_bound_seqs
+
+                # Find guides in the window, only searching across
+                # the sequences in guide_seqs_to_consider
+                try:
+                    guides = gs._find_guides_that_cover_in_window(
+                        window_start, window_end,
+                        only_consider=guide_seqs_to_consider)
+                except guide_search.CannotAchieveDesiredCoverageError:
+                    # No more suitable guides; skip this window
+                    continue
+
+                if len(guides) == 0:
+                    # This can happen, for example, if primer_bound_seqs is
+                    # empty; then no guides are required
+                    # Skip this window
+                    continue
+
+                # Calculate fraction of sequences bound by the guides
+                guides_frac_bound = gs._total_frac_bound_by_guides(guides)
+
+                # Calculate a cost of the guides, and a total cost
+                cost_guides = self.cost_weight_guides * len(guides)
+                cost_total = cost_primers + cost_window + cost_guides
+
+                # Add target to the heap (but only keep it if there are not
+                # yet best_n targets or it has one of the best_n smallest
+                # costs)
+                target = ((p1, p2), (guides_frac_bound, guides))
+                entry = (-cost_total, next(push_id_counter), target)
+                if overlapping_i:
+                    # target overlaps with an entry already in target_heap;
+                    # consider replacing that entry with new entry
+                    if len(overlapping_i) == 1:
+                        # Almost all cases will satisfy this: the new entry
+                        # overlaps just one existing entry; optimize for this case
+                        i = overlapping_i[0]
+                        cost_i = -1 * target_heap[i][0]
+                        if cost_total < cost_i:
+                            # Replace i with entry
+                            target_heap[i] = entry
+                            heapq.heapify(target_heap)
+                    else:
+                        # For some edge cases, the new entry overlaps with
+                        # multiple existing entries
+                        # Check if the new entry has a sufficiently low cost
+                        # to justify removing any existing overlapping entries
+                        cost_is_sufficiently_low = False
+                        for i in overlapping_i:
+                            cost_i = -1 * target_heap[i][0]
+                            if cost_total < cost_i:
+                                cost_is_sufficiently_low = True
+                                break
+                        if cost_is_sufficiently_low:
+                            # Remove all entries that overlap the new entry,
+                            # then add the new entry
+                            for i in sorted(overlapping_i, reverse=True):
+                                del target_heap[i]
+                            target_heap.append(entry)
+                            heapq.heapify(target_heap)
+                            # Note that this can lead to cases in which the size
+                            # of the output (target_heap) is < best_n, or in which
+                            # there is an entry with very high cost, because
+                            # in certain edge cases we might finish the search
+                            # having removed >1 entry but only replacing it with
+                            # one, and if the search continues for a short time
+                            # after, len(target_heap) < best_n could result in
+                            # some high-cost entries being placed into the heap
+                elif len(target_heap) < best_n:
+                    # target_heap is not yet full, so push entry to it
+                    heapq.heappush(target_heap, entry)
+                else:
+                    # target_heap is full; consider replacing the entry that has
+                    # the highest cost with the new entry
+                    curr_highest_cost = -1 * target_heap[0][0]
+                    if cost_total < curr_highest_cost:
+                        # Push the entry into target_heap, and pop out the
+                        # one with the highest cost
+                        heapq.heappushpop(target_heap, entry)
 
             return target_heap
 
