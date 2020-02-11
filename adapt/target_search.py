@@ -108,7 +108,7 @@ class TargetSearcher:
         # the lower push_id); otherwise, there will be an error on
         # ties if target is not comparable
         push_id_counter = itertools.count()
-        print('here')
+        print('starting _find_primer_pairs')
 
         # First prune out unsuitable primer pairs, and then find the primer pair
         # spanning the longest distance. This distance will the length of genome
@@ -319,7 +319,7 @@ class TargetSearcher:
             return target_heap
 
         p = dill.dumps(get_guides_for_primers)
-        print('pickled correctly')
+        print('correctly pickled get_guides_for_primers')
 
         # create GuideSearcher for each chunk and map primer pair to chunk
         gs_list = []
@@ -359,12 +359,12 @@ class TargetSearcher:
                 time_limit *= 2
                 continue
 
-        print('sending to map on %d...' % (num_processes, ))
+        print('mapping get_guides_for_primers on %d processes...' % (num_processes, ))
         # Map the action of finding guides between primers to processes.
         target_heaps = _process_pool.map(get_guides_for_primers,
                                          zip(gs_list,
                                              suitable_primer_pairs_by_gs))
-        print('hyah')
+        print('finished mapping get_guides_for_primers')
 
         # Merge heaps from multiple processes.
         target_heap = heapq.merge(*target_heaps)
@@ -390,7 +390,7 @@ class TargetSearcher:
             r_with_sort_tuple += [(sort_tuple, cost, target)]
         r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
         r = [(cost, target) for sort_tuple, cost, target in r_with_sort_tuple]
-        print('nope')
+        print('finished _find_primer_pairs')
 
         return r
 
