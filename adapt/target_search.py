@@ -7,14 +7,18 @@ term the combination of these a "target".
 These methods score possible targets and search for the top N of them.
 """
 
+import copy
 import heapq
 import itertools
 import logging
 import math
 import multiprocessing
+import pathos.multiprocessing
+import dill
 
 from adapt import guide_search
 from adapt import primer_search
+from adapt.utils import timeout
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -103,12 +107,12 @@ class TargetSearcher:
         # when costs are equivalent (choosing the one pushed first, i.e.,
         # the lower push_id); otherwise, there will be an error on
         # ties if target is not comparable
+        push_id_counter = itertools.count()
+        print('here')
 
         # First prune out unsuitable primer pairs, and then find the primer pair
         # spanning the longest distance. This distance will the length of genome
         # allocated to each process.
-        push_id_counter = itertools.count()
-
         num_primer_pairs = 0
         num_suitable_primer_pairs = 0
         last_window_start = -1
@@ -140,52 +144,6 @@ class TargetSearcher:
             num_suitable_primer_pairs += 1
             max_primer_pair_span = max(max_primer_pair_span, target_length)
             suitable_primer_pairs.append((p1, p2))
-
-        # create GuideSearcher for each chunk and map primer pair to chunk
-        gs_list = []
-        for i in range(0, self.gs.aln.seq_length, max_primer_pair_span):
-            # Alternative approach was to extract sub-alignments from the main
-            # alignment and create GuideSearchers as copies of self.gs but this
-            # involved a lot of copying that seemed unwieldy
-            # aln = self.gs.aln.extract_range(i, i + max_primer_pair_span)
-            gs = copy.copy(self.gs) # or deepcopy?
-            gs.blacklisted_ranges = [(0, i), (i+2*max_primer_pair_span,
-                                              self.gs.aln.seq_length)]
-            # I multiply by 2 in case a primer pair starts near the end of one
-            # chunk and bleeds into another
-            gs_list.append(gs)
-        suitable_primer_pairs_by_gs = [[]] * len(gs_list)
-        for p1, p2 in suitable_primer_pairs:
-            i = p1.start / max_primer_pair_span # index of gs in gs_list to use
-            suitable_primer_pairs_by_gs[i].append((p1, p2))
-
-        # Create multiprocessing pool.
-        # Sometimes opening a pool (via multiprocessing.Pool) hangs indefinitely,
-        # particularly when many pools are opened/closed repeatedly by a master
-        # process; this likely stems from issues in multiprocessing.Pool. So set
-        # a timeout on opening the pool, and try again if it times out. It
-        # appears, from testing, that opening a pool may timeout a few times in
-        # a row, but eventually succeeds.
-        time_limit = 60
-        num_processes = multiprocessing.cpu_count()
-        while True:
-            try:
-                with timeout.time_limit(time_limit):
-                    _process_pool = multiprocessing.Pool(num_processes)
-                    break
-                except timeout.TimeoutException:
-                    # Try again
-                    logger.debug("Pool initialization timed out; trying again")
-                    time_limit *= 2
-                    continue
-
-        # Map the action of finding guides between primers to processes.
-        try:
-            # apply vs. map? depends on if we write to target_heap in
-            # get_guides_for_primers or let it return guides
-            target_heaps = _process_pool.map(get_guides_for_primers,
-                                             zip(gs_list,
-                                                 suitable_primer_pairs_by_gs))
 
         # Separate out loop body of finding guides between primers in function.
         def get_guides_for_primers(gs, suitable_primer_pairs):
@@ -360,6 +318,54 @@ class TargetSearcher:
 
             return target_heap
 
+        p = dill.dumps(get_guides_for_primers)
+        print('pickled correctly')
+
+        # create GuideSearcher for each chunk and map primer pair to chunk
+        gs_list = []
+        for i in range(0, self.gs.aln.seq_length, max_primer_pair_span):
+            # Alternative approach was to extract sub-alignments from the main
+            # alignment and create GuideSearchers as copies of self.gs but this
+            # involved a lot of copying that seemed unwieldy
+            # aln = self.gs.aln.extract_range(i, i + max_primer_pair_span)
+            gs = copy.copy(self.gs) # or deepcopy?
+            gs.blacklisted_ranges = [(0, i), (i+2*max_primer_pair_span,
+                                              self.gs.aln.seq_length)]
+            # I multiply by 2 in case a primer pair starts near the end of one
+            # chunk and bleeds into another
+            gs_list.append(gs)
+        suitable_primer_pairs_by_gs = [[]] * len(gs_list)
+        for p1, p2 in suitable_primer_pairs:
+            i = math.floor(p1.start / max_primer_pair_span) # index of gs in gs_list to use
+            suitable_primer_pairs_by_gs[i].append((p1, p2))
+
+        # Create multiprocessing pool.
+        # Sometimes opening a pool (via multiprocessing.Pool) hangs indefinitely,
+        # particularly when many pools are opened/closed repeatedly by a master
+        # process; this likely stems from issues in multiprocessing.Pool. So set
+        # a timeout on opening the pool, and try again if it times out. It
+        # appears, from testing, that opening a pool may timeout a few times in
+        # a row, but eventually succeeds.
+        time_limit = 60
+        num_processes = multiprocessing.cpu_count()
+        while True:
+            try:
+                with timeout.time_limit(time_limit):
+                    _process_pool = pathos.multiprocessing.ProcessPool(num_processes)
+                break
+            except timeout.TimeoutException:
+                # Try again
+                logger.debug("Pool initialization timed out; trying again")
+                time_limit *= 2
+                continue
+
+        print('sending to map on %d...' % (num_processes, ))
+        # Map the action of finding guides between primers to processes.
+        target_heaps = _process_pool.map(get_guides_for_primers,
+                                         zip(gs_list,
+                                             suitable_primer_pairs_by_gs))
+        print('hyah')
+
         # Merge heaps from multiple processes.
         target_heap = heapq.merge(*target_heaps)
 
@@ -384,6 +390,7 @@ class TargetSearcher:
             r_with_sort_tuple += [(sort_tuple, cost, target)]
         r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
         r = [(cost, target) for sort_tuple, cost, target in r_with_sort_tuple]
+        print('nope')
 
         return r
 
