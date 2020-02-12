@@ -338,6 +338,10 @@ class TargetSearcher:
         for p1, p2 in suitable_primer_pairs:
             i = math.floor(p1.start / max_primer_pair_span) # index of gs in gs_list to use
             suitable_primer_pairs_by_gs[i].append((p1, p2))
+        print("""found %d suitable primer pairs for %d GuideSearchers each
+                 covering chunk of size %d on genome of length %d""" %
+                 (len(suitable_primer_pairs), len(gs_list),
+                  max_primer_pair_span, self.gs.aln.seq_length))
 
         # Create multiprocessing pool.
         # Sometimes opening a pool (via multiprocessing.Pool) hangs indefinitely,
