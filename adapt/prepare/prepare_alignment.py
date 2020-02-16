@@ -86,11 +86,6 @@ def prepare_for(taxid, segment, ref_accs, out,
     if sequences_to_use is not None:
         seqs_unaligned = sequences_to_use
         seqs_unaligned_curated = seqs_unaligned
-        added_ref_accs_to_fetch = []
-        for rf in ref_accs:
-            if rf not in seqs_unaligned:
-                raise Exception(("When specifying sequences to use, reference "
-                    "accessions must be present in fasta"))
     else:
         if accessions_to_use is not None:
             neighbors = [ncbi_neighbors.Neighbor(acc, None, None, None, None,
