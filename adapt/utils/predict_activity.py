@@ -16,7 +16,7 @@ class Predictor:
     """This calls the activity model and memoizes results.
     """
 
-    def __init__(self, model, pred_from_nt_fn, activity_thres=-1.0):
+    def __init__(self, model, pred_from_nt_fn, activity_thres=-0.85):
         """
         Args:
             model: model object with a call() function
