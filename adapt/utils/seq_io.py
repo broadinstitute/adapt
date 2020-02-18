@@ -370,3 +370,41 @@ def read_taxonomies_to_design_for(fn):
             taxs += [(tax_id, segment)]
     return taxs
 
+
+def read_taxonomy_specificity_ignore(fn):
+    """Read taxonomies to ignore when enforcing specificity.
+
+    The columns must be, in order:
+      1) a taxonomic ID for taxonomy A
+      2) a taxonomic ID such that this taxonomy should be ignored when
+         designing for A, in terms of specificity
+
+    Args:
+        fn: path to TSV file
+
+    Returns:
+        dict {A: {B}} where {B} consists of the taxonomies that should
+        be ignored for A
+    """
+    tax_ignore = defaultdict(set)
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+
+            if len(ls) != 2:
+                raise Exception(("Input TSV must have 2 columns"))
+
+            try:
+                tax_id_a = int(ls[0])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[0])
+            try:
+                tax_id_b = int(ls[1])
+            except ValueError:
+                raise Exception(("Taxonomy ID '%s' must be an integer") %
+                    ls[1])
+
+            tax_ignore[tax_id_a].add(tax_id_b)
+    return tax_ignore
+

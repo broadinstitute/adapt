@@ -370,6 +370,12 @@ def design_for_id(args):
     num_taxa = len(aln_with_taxid)
     logger.info(("Designing for %d taxa"), num_taxa)
 
+    # Read taxonomies to ignore for specificity, if specified
+    tax_ignore = {}
+    if args.taxa_to_ignore_for_specificity:
+        tax_ignore = seq_io.read_taxonomy_specificity_ignore(
+                args.taxa_to_ignore_for_specificity)
+
     # Construct the data structure for guide queries to perform
     # differential identification
     if num_taxa > 1:
@@ -434,6 +440,14 @@ def design_for_id(args):
         if aq is not None:
             for j in alns_in_same_taxon:
                 aq.mask_aln(j)
+            # Also mask taxonomies to ignore when determining specificity
+            # of taxid
+            if taxid in tax_ignore:
+                for ignore_taxid in tax_ignore[taxid]:
+                    for j in aln_with_taxid[ignore_taxid]:
+                        logger.info(("Masking alignment %d (from taxon %d) "
+                            "from specificity queries"), j, ignore_taxid)
+                        aq.mask_aln(j)
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
@@ -869,6 +883,15 @@ if __name__ == "__main__":
         help=("If set, only design for given taxonomies. This provides a "
               "path to a TSV file with 2 columns: (1) a taxonomid ID; (2) "
               "segment label, if 'None' if unsegmented"))
+    input_auto_common_subparser.add_argument('--taxa-to-ignore-for-specificity',
+        help=("If set, specificity which taxa should be ignored when "
+              "enforcing specificity while designing for other taxa. "
+              "This provides a path to a TSV file with 2 columns: "
+              "(1) a taxonomic ID A; (2) a taxonomic ID B such that "
+              "B should be ignored when determining specificity for A. "
+              "When designing for A, this masks taxonomy B from all "
+              "specificity queries. This is useul, e.g., if B is a "
+              "subset of A."))
     input_auto_common_subparser.add_argument('--ncbi-api-key',
         help=("API key to use for NCBI e-utils. Using this increases the "
               "limit on requests/second and may prevent an IP address "
