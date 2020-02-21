@@ -27,7 +27,8 @@ class GuideSearcher:
                  seq_groups=None, required_guides={}, blacklisted_ranges={},
                  allow_gu_pairs=False, required_flanking_seqs=(None, None),
                  do_not_memoize_guides=False,
-                 predict_activity_model_path=None):
+                 predict_activity_model_path=None,
+                 predict_activity_thres=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -75,6 +76,8 @@ class GuideSearcher:
                 model hyperparameters and trained weights to use for predicting
                 guide-target activity; only use guides where the activity
                 is sufficiently high. If None, do not predict activity.
+            predict_activity_thres: call predicted activity >= this threshold
+                to be positive; if None, use default
         """
         if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
@@ -167,8 +170,12 @@ class GuideSearcher:
         # Load a model to predict activity
         if predict_activity_model_path is not None:
             self.predictor = predict_activity.construct_predictor(
-                    predict_activity_model_path)
+                    predict_activity_model_path,
+                    activity_thres=predict_activity_thres)
         else:
+            if predict_activity_thres is not None:
+                raise ValueError(("Cannot set predict_activity_thres "
+                    "but not predict_activity_model_path"))
             self.predictor = None
 
     def _construct_guide_memoized(self, start, seqs_to_consider,

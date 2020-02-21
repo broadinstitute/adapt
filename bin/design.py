@@ -461,7 +461,8 @@ def design_for_id(args):
                                         blacklisted_ranges=blacklisted_ranges_for_aln,
                                         allow_gu_pairs=allow_gu_pairs,
                                         required_flanking_seqs=required_flanking_seqs,
-                                        predict_activity_model_path=args.predict_activity_model_path)
+                                        predict_activity_model_path=args.predict_activity_model_path,
+                                        predict_activity_thres=args.predict_activity_thres)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -715,6 +716,10 @@ if __name__ == "__main__":
               "trained weights to use to to predict guide-target activity; "
               "only consider guides to be active is the activity exceeds "
               "a threshold (specified in the 'predict_activity' module)"))
+    base_subparser.add_argument('--predict-activity-thres',
+        type=float,
+        help=("Call predicted activity >= PREDICT_ACTIVITY_THRES to be "
+              "positive. If not set, use a default threshold."))
 
     # Log levels
     base_subparser.add_argument("--debug",

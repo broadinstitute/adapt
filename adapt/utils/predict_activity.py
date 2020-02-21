@@ -12,21 +12,27 @@ import sys
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
+# Use the top ~25% of guide-target pairs as the default activity threshold
+DEFAULT_ACTIVITY_THRES = -0.85
+
+
 class Predictor:
     """This calls the activity model and memoizes results.
     """
 
-    def __init__(self, model, pred_from_nt_fn, activity_thres=-0.85):
+    def __init__(self, model, pred_from_nt_fn, activity_thres=None):
         """
         Args:
             model: model object with a call() function
             pred_from_nt_fn: function that accepts list of guide-target pairs
                 (in nucleotide space) and outputs predicted activities
             activity_thres: call predicted activity >= this threshold
-                to be positive
+                to be positive; if None, use default
         """
         self.model = model
         self.pred_from_nt_fn = pred_from_nt_fn
+        if activity_thres is None:
+            activity_thres = DEFAULT_ACTIVITY_THRES
         self.activity_thres = activity_thres
         self.context_nt = model.context_nt
 
@@ -83,12 +89,14 @@ class Predictor:
         return [pa >= self.activity_thres for pa in pred_activity]
 
 
-def construct_predictor(model_path, context_nt=10):
+def construct_predictor(model_path, context_nt=10, activity_thres=None):
     """Construct a Predictor object.
 
     Args:
         model_path: path to saved model parameters and weights
         context_nt: nt of context to use on each side of target
+        activity_thres: call predicted activity >= this threshold to be
+            positive; if None, use default
 
     Returns:
         Predictor object
@@ -118,6 +126,5 @@ def construct_predictor(model_path, context_nt=10):
     def pred_from_nt(pairs):
         return predictor.pred_from_nt(model, pairs)
 
-    return Predictor(model, pred_from_nt)
+    return Predictor(model, pred_from_nt, activity_thres=activity_thres)
     """
-
