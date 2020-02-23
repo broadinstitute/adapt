@@ -235,11 +235,6 @@ def prepare_alignments(args):
             raise Exception(("Cannot use both --use-accessions and "
                 "--use-fasta for the same taxonomy"))
 
-        if taxs_to_design_for is None:
-            design_for += [True]
-        else:
-            design_for += [(tax_id, segment) in taxs_to_design_for]
-
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
@@ -252,6 +247,10 @@ def prepare_alignments(args):
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
             taxid_for_fasta += [tax_id]
+            if taxs_to_design_for is None:
+                design_for += [True]
+            else:
+                design_for += [(tax_id, segment) in taxs_to_design_for]
         years_tsv_per_aln += [years_tsv_tmp]
         aln_tmp_dirs += [aln_file_dir]
 
