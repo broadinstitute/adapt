@@ -445,7 +445,7 @@ def design_for_id(args):
                 for ignore_taxid in tax_ignore[taxid]:
                     for j in aln_with_taxid[ignore_taxid]:
                         logger.info(("Masking alignment %d (from taxon %d) "
-                            "from specificity queries"), j, ignore_taxid)
+                            "from specificity queries"), j + 1, ignore_taxid)
                         aq.mask_aln(j)
 
         # Find an optimal set of guides for each window in the genome,
