@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None,
         sample_seqs=None, filter_warn=0.25, min_seq_len=200,
-        min_cluster_size=2, prep_influenza=False, years_tsv=None,
+        min_cluster_size=25, prep_influenza=False, years_tsv=None,
         cluster_threshold=0.1, accessions_to_use=None,
         sequences_to_use=None):
     """Prepare an alignment for a taxonomy.
