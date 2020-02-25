@@ -196,8 +196,9 @@ class TargetSearcher:
                     continue
 
             logger.info(("Found window [%d, %d) bound by primers that could "
-                "be in the best %d targets; looking for guides within this"),
-                window_start, window_end, best_n)
+                "be in the best %d targets; looking for guides within this; "
+                "heap has %d valid targets currently"),
+                window_start, window_end, best_n, len(target_heap))
 
             # Determine what set of sequences the guides should cover
             if self.guides_should_cover_over_all_seqs:
