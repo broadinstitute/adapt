@@ -25,7 +25,8 @@ class TargetSearcher:
 
     def __init__(self, ps, gs, max_primers_at_site=None,
             max_target_length=None, cost_weights=None,
-            guides_should_cover_over_all_seqs=False):
+            guides_should_cover_over_all_seqs=False,
+            halt_early=False):
         """
         Args:
             ps: PrimerSearcher object
@@ -41,6 +42,10 @@ class TargetSearcher:
                 the specified fraction (gs.cover_frac) of *all* sequences,
                 rather than gs.cover_frac of only sequences bound by the
                 primers
+            halt_early: if True, stop as soon as there are the desired number
+                of targets found, even if this does not complete the
+                search over the whole genome (i.e., the targets meet the
+                constraints but may not be optimal)
         """
         self.ps = ps
         self.gs = gs
@@ -54,6 +59,8 @@ class TargetSearcher:
         self.cost_weight_guides = cost_weights[2]
 
         self.guides_should_cover_over_all_seqs = guides_should_cover_over_all_seqs
+
+        self.halt_early = halt_early
 
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.ps.
@@ -109,6 +116,11 @@ class TargetSearcher:
         num_suitable_primer_pairs = 0
         last_window_start = -1
         for p1, p2 in self._find_primer_pairs():
+            if self.halt_early and len(target_heap) >= best_n:
+                # Enough targets were found
+                # Stop early without completing the search
+                break
+
             num_primer_pairs += 1
 
             target_length = p2.start + p2.primer_length - p1.start
