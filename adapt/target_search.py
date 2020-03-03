@@ -74,6 +74,11 @@ class TargetSearcher:
             p1 = primers[i]
             for j in range(i + 1, len(primers)):
                 p2 = primers[j]
+                target_length = p2.start + p2.primer_length - p1.start
+                if (self.max_target_length is not None and
+                        target_length > self.max_target_length):
+                    # This is longer than allowed, so skip it
+                    continue
                 yield (p1, p2)
 
     def find_targets(self, best_n=10, no_overlap=True):
