@@ -8,6 +8,7 @@ These methods score possible targets and search for the top N of them.
 """
 
 import copy
+import datetime
 import heapq
 import itertools
 import logging
@@ -103,16 +104,6 @@ class TargetSearcher:
             of the sequences covered) in the window bound by (p1, p2)
         """
 
-        # Store a heap containing the best_n primer/guide targets;
-        # store each as a tuple (-cost, push_id, target), where we store
-        # based on the negative cost because the heap is a min heap
-        # (so popped values will be the one with the greatest cost,
-        # and target_heap[0] refers to the target with the greatest cost).
-        # We also store push_id (a counter on the push) to break ties
-        # when costs are equivalent (choosing the one pushed first, i.e.,
-        # the lower push_id); otherwise, there will be an error on
-        # ties if target is not comparable
-        push_id_counter = itertools.count()
         print('starting _find_primer_pairs')
 
         # First prune out unsuitable primer pairs, and then find the primer pair
@@ -120,7 +111,6 @@ class TargetSearcher:
         # allocated to each process.
         num_primer_pairs = 0
         num_suitable_primer_pairs = 0
-        last_window_start = -1
         suitable_primer_pairs = []
         max_primer_pair_span = 0
         for p1, p2 in self._find_primer_pairs():
@@ -151,8 +141,28 @@ class TargetSearcher:
             suitable_primer_pairs.append((p1, p2))
 
         # Separate out loop body of finding guides between primers in function.
-        def get_guides_for_primers(gs, suitable_primer_pairs):
+        def get_guides_for_primers(gs_suitable_primer_pairs):
+            gs, suitable_primer_pairs, push_id_counter_start = gs_suitable_primer_pairs
+            print('entering get_guides_for_primers for %d suitable_primer_pairs at time %s' %
+                (len(suitable_primer_pairs), datetime.datetime.now().isoformat()))
+            last_window_start = -1
+            # idx_primer_pair = 0
+            # Store a heap containing the best_n primer/guide targets;
+            # store each as a tuple (-cost, push_id, target), where we store
+            # based on the negative cost because the heap is a min heap
+            # (so popped values will be the one with the greatest cost,
+            # and target_heap[0] refers to the target with the greatest cost).
+            # We also store push_id (a counter on the push) to break ties
+            # when costs are equivalent (choosing the one pushed first, i.e.,
+            # the lower push_id); otherwise, there will be an error on
+            # ties if target is not comparable
+            push_id_counter = itertools.count(start=push_id_counter_start)
+            target_heap = []
             for p1, p2 in suitable_primer_pairs:
+                # idx_primer_pair += 1
+                # if idx_primer_pair % 1000 == 0:
+                #     print('finished primer pairs up to idx %d at time %s' %
+                #         (idx_primer_pair, datetime.datetime.now().isoformat()))
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
                 # Since window_start increases monotonically, we no
@@ -162,7 +172,6 @@ class TargetSearcher:
                 for pos in range(last_window_start, window_start):
                     gs._cleanup_memoized_guides(pos)
                 last_window_start = window_start
-                target_heap = []
 
                 # Calculate a cost of the primers
                 p1_num = p1.num_primers
@@ -339,7 +348,7 @@ class TargetSearcher:
             # I multiply by 2 in case a primer pair starts near the end of one
             # chunk and bleeds into another
             gs_list.append(gs)
-        suitable_primer_pairs_by_gs = [[]] * len(gs_list)
+        suitable_primer_pairs_by_gs = [[] for i in range(len(gs_list))]
         for p1, p2 in suitable_primer_pairs:
             i = math.floor(p1.start / max_primer_pair_span) # index of gs in gs_list to use
             suitable_primer_pairs_by_gs[i].append((p1, p2))
@@ -347,6 +356,20 @@ class TargetSearcher:
                  covering chunk of size %d on genome of length %d""" %
                  (len(suitable_primer_pairs), len(gs_list),
                   max_primer_pair_span, self.gs.aln.seq_length))
+        # As noted in get_guides_for_primers, push_id is used to break ties,
+        # including in the ultimate merge of heaps from different processes.
+        # We need unique push_ids across processes; we therefore start each
+        # process's push_id_counter at different numbers to guarantee non-
+        # overlapping push_id ranges.
+        push_id_counter_starts = [None] * len(suitable_primer_pairs_by_gs)
+        for i in range(len(suitable_primer_pairs_by_gs)):
+            if i == 0:
+                push_id_counter_starts[i] = 0
+            else:
+                push_id_counter_starts[i] = (push_id_counter_starts[i-1] +
+                    len(suitable_primer_pairs_by_gs[i-1]))
+        print('push_id_counter_starts')
+        print(push_id_counter_starts)
 
         # Create multiprocessing pool.
         # Sometimes opening a pool (via multiprocessing.Pool) hangs indefinitely,
@@ -372,17 +395,13 @@ class TargetSearcher:
         # Map the action of finding guides between primers to processes.
         target_heaps = _process_pool.map(get_guides_for_primers,
                                          zip(gs_list,
-                                             suitable_primer_pairs_by_gs))
+                                             suitable_primer_pairs_by_gs,
+                                             push_id_counter_starts))
         print('finished mapping get_guides_for_primers')
+        _process_pool.close()
 
         # Merge heaps from multiple processes.
         target_heap = heapq.merge(*target_heaps)
-
-        if len(target_heap) == 0:
-            logger.warning(("Zero targets were found. The number of total "
-                "primer pairs found was %d and the number of them that "
-                "were suitable (passing basic criteria, e.g., on length) "
-                "was %d"), num_primer_pairs, num_suitable_primer_pairs)
 
         # Invert the costs (target_heap had been storing the negative
         # of each cost), toss push_id, and sort by cost
@@ -390,6 +409,11 @@ class TargetSearcher:
         # cost and then the target endpoints; it has the target endpoints
         # to break ties in cost
         r = [(-cost, target) for cost, push_id, target in target_heap]
+        if len(r) == 0:
+            logger.warning(("Zero targets were found. The number of total "
+                "primer pairs found was %d and the number of them that "
+                "were suitable (passing basic criteria, e.g., on length) "
+                "was %d"), num_primer_pairs, num_suitable_primer_pairs)
         r_with_sort_tuple = []
         for (cost, target) in r:
             ((p1, p2), (guides_frac_bound, guides)) = target
