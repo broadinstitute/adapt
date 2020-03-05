@@ -266,9 +266,9 @@ def ncbi_xml_download_url(accessions):
         str representing download URL
     """
     ids = ','.join(accessions)
-    params = {'id': ids, 'db': 'nuccore', 'retmode': 'xml'}
+    params = [('id', ids), ('db', 'nuccore'), ('retmode', 'xml')]
     if ncbi_api_key is not None:
-        params['api_key'] = ncbi_api_key
+        params += [('api_key', ncbi_api_key)]
     # Use safe=',' to not encode ',' as '%2'
     params_url = urllib.parse.urlencode(params, safe=',')
     url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params_url
