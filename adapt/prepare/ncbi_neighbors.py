@@ -94,9 +94,9 @@ def ncbi_neighbors_url(taxid):
     Returns:
         str representing download URL
     """
-    params = {'taxid': taxid, 'cmd': 'download2'}
+    params = [('taxid', taxid), ('cmd', 'download2')]
     if ncbi_api_key is not None:
-        params['api_key'] = ncbi_api_key
+        params += [('api_key', ncbi_api_key)]
     params_url = urllib.parse.urlencode(params)
     url = 'https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup.cgi?%s' % params_url
     return url
@@ -206,10 +206,10 @@ def ncbi_fasta_download_url(accessions):
         str representing download URL
     """
     ids = ','.join(accessions)
-    params = {'id': ids, 'db': 'nuccore', 'rettype': 'fasta',
-                'retmode': 'text'}
+    params = [('id', ids), ('db', 'nuccore'), ('rettype', 'fasta'),
+                ('retmode', 'text')]
     if ncbi_api_key is not None:
-        params['api_key'] = ncbi_api_key
+        params += [('api_key', ncbi_api_key)]
     # Use safe=',' to not encode ',' as '%2'
     params_url = urllib.parse.urlencode(params, safe=',')
     url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?%s' % params_url
