@@ -453,7 +453,9 @@ def design_for_id(args):
             # Find an optimal set of guides for each window in the genome,
             # and write them to a file
             gs.find_guides_that_cover(args.window_size,
-                args.out_tsv[i], sort=args.sort_out)
+                args.out_tsv[i],
+                window_step=args.window_step,
+                sort=args.sort_out)
         elif args.search_cmd == 'complete-targets':
             # Find optimal targets (primer and guide set combinations),
             # and write them to a file
@@ -727,6 +729,9 @@ if __name__ == "__main__":
     parser_sw_args.add_argument('-w', '--window-size', type=int, default=200,
         help=("Ensure that selected guides are all a "
               "window of this size"))
+    parser_sw_args.add_argument('--window-step', type=int, default=1,
+        help=("Amount by which to increase the window start position for "
+              "every iteration"))
     parser_sw_args.add_argument('--sort', dest='sort_out', action='store_true',
         help=("If set, sort output TSV by number of guides "
               "(ascending) then by score (descending); "

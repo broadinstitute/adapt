@@ -773,7 +773,7 @@ class GuideSearcher:
         return frac_bound
 
     def _find_guides_that_cover_for_each_window(self, window_size,
-            hide_warnings=False):
+            window_step=1, hide_warnings=False):
         """Find the smallest collection of guides that cover sequences
         in each window.
 
@@ -790,6 +790,8 @@ class GuideSearcher:
         Args:
             window_size: length of the window to use when sliding across
                 alignment
+            window_step: amount by which to increase the window start for
+                every search
             hide_warnings: when set, this does not provide log warnings
                 when no more suitable guides can be constructed
 
@@ -814,7 +816,8 @@ class GuideSearcher:
         if window_size < self.guide_length:
             raise ValueError("window size must be >= guide length") 
 
-        for start in range(0, self.aln.seq_length - window_size + 1):
+        for start in range(0, self.aln.seq_length - window_size + 1,
+                window_step):
             end = start + window_size
             logger.info("Searching for guides within window [%d, %d)" %
                         (start, end))
@@ -843,7 +846,7 @@ class GuideSearcher:
             self._cleanup_memoized_guides(start)
 
     def find_guides_that_cover(self, window_size, out_fn,
-                               sort=False, print_analysis=True):
+                               window_step=1, sort=False, print_analysis=True):
         """Find the smallest collection of guides that cover sequences, across
         all windows.
 
@@ -855,6 +858,8 @@ class GuideSearcher:
             window_size: length of the window to use when sliding across
                 alignment
             out_fn: output TSV file to write guide sequences by window
+            window_step: amount by which to increase the window start for
+                every search
             sort: if set, sort output TSV by number of guides (ascending)
                 then by score (descending); when not set, default is to
                 sort by window position
@@ -863,7 +868,7 @@ class GuideSearcher:
                 score
         """
         guide_collections = list(self._find_guides_that_cover_for_each_window(
-            window_size))
+            window_size, window_step=window_step))
 
         if sort:
             # Sort by number of guides ascending (x[1]), then by
