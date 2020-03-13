@@ -5,6 +5,7 @@ clustering that matrix.
 """
 
 from collections import defaultdict
+from collections import OrderedDict
 import logging
 import operator
 
@@ -97,7 +98,8 @@ def cluster_from_dist_matrix(dist_matrix, threshold):
     return elements_in_cluster_sorted
 
 
-def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1):
+def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
+        return_dist_matrix_and_indices=False):
     """Cluster sequences based on their MinHash signatures.
 
     Args:
@@ -111,11 +113,20 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1):
             average nucleotide dissimilarity (1-ANI, where ANI is
             average nucleotide identity); higher results in fewer
             clusters
+        return_dist_matrix_and_indices: if set, return the pairwise distance
+            matrix and sequences indices in each cluster; when used,
+            seqs should be an OrderedDict
 
     Returns:
-        list c such that c[i] gives a collection of sequence headers
-        in the same cluster, and the clusters in c are sorted
-        in descending order of size
+        if return_dist_matrix_and_indices:
+            tuple (dm, c) such that dm is the pairwise distance matrix and
+            c is a list such that c[i] gives a collection of sequence
+            indices (corresponding to indices in dm) in the same cluster
+            (note dm is a 1d condensed matrix in scipy's form)
+        else:
+            list c such that c[i] gives a collection of sequence headers
+            in the same cluster, and the clusters in c are sorted
+            in descending order of size
     """
     if len(seqs) == 1:
         # Simply return one cluster
@@ -155,7 +166,56 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1):
     clusters = cluster_from_dist_matrix(dist_matrix,
         jaccard_dist_threshold)
 
-    seqs_in_cluster = []
+    if return_dist_matrix_and_indices:
+        return dist_matrix, clusters
+    else:
+        seqs_in_cluster = []
+        for cluster_idxs in clusters:
+            seqs_in_cluster += [[seq_headers[i] for i in cluster_idxs]]
+        return seqs_in_cluster
+
+
+def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
+    """Find a set of representative sequences.
+
+    This clusters seqs, and then determines a medoid for each cluster.
+    It returns the medoids.
+
+    Args:
+        seqs, k, N, threshold: see cluster_with_minhash_signatures()
+
+    Returns:
+        set of sequence headers representing cluster medoids
+    """
+    seqs = OrderedDict(seqs)
+    dist_matrix, clusters = cluster_with_minhash_signatures(
+            seqs, k=k, N=N, threshold=threshold,
+            return_dist_matrix_and_indices=True)
+
+    n = len(seqs)
+    def idx(i, j):
+        # Compute index in 1d vector for pair (i, j)
+        if i > j:
+            i, j = j, i
+        return int((-1 * i*i)/2 + i*n - 3*i/2 + j - 1)
+
+    rep_seqs = []
     for cluster_idxs in clusters:
-        seqs_in_cluster += [[seq_headers[i] for i in cluster_idxs]]
-    return seqs_in_cluster
+        # Find the medoid of this cluster
+        # Simply look over all pairs in the cluster (there are faster
+        # algorithms, though not linear)
+        curr_medoid = None
+        curr_medoid_dist_total = None
+        for i in cluster_idxs:
+            dist_total = 0
+            for j in cluster_idxs:
+                if i == j:
+                    continue
+                dist_total += dist_matrix[idx(i,j)]
+            if curr_medoid is None or dist_total < curr_medoid_dist_total:
+                curr_medoid = i
+                curr_medoid_dist_total = dist_total
+        rep_seqs += [curr_medoid]
+
+    seqs_items = list(seqs.items())
+    return [seqs_items[i][0] for i in rep_seqs]

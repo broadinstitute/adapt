@@ -1,6 +1,7 @@
 """Tests for cluster module.
 """
 
+import random
 import unittest
 
 import numpy as np
@@ -88,3 +89,21 @@ class TestClusterWithMinHashSignatures(unittest.TestCase):
         self.assertEqual(sorted(clusters[0]), ['a', 'c', 'd'])
         self.assertEqual(sorted(clusters[1]), ['b', 'f'])
         self.assertEqual(sorted(clusters[2]), ['e'])
+
+class TestFindRepresentativeSequences(unittest.TestCase):
+    """Test find_representative_sequences() function."""
+
+    def test_simple(self):
+        random.seed(1)
+        np.random.seed(1)
+
+        seqs = {'a': 'ATCGAATTCGGATCG',
+                'b': 'CCCCCCCCCCCCCCC',
+                'c': 'ATCGTATTCGGATCG',
+                'd': 'ATCGTATTCGGTTCG'}
+        # The expected clusters should be [a, c, d], [b]
+        # The medoid of the [a,c,d] cluster should be c
+
+        rep_seqs = cluster.find_representative_sequences(
+                seqs, k=3, N=12, threshold=0.3)
+        self.assertCountEqual(rep_seqs, {'c', 'b'})
