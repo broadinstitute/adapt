@@ -39,10 +39,20 @@ def find_test_targets(design_target, aln, args):
     logger.info(("Finding test targets for design option with endpoints "
         "[%d, %d)"), design_target.target_start, design_target.target_end)
     
-    # TODO extract region around
+    # Expand the extracted range to the minimum
+    # Note that this extracts to get a target length of args.min_target_len
+    # *in the alignment*; if there are gaps in the alignment within the
+    # region, the actual length of the sequences could be shorter
+    target_len = design_target.target_end - design_target.target_start
+    nt_to_add = int(max(0, args.min_target_len - target_len) / 2)
+    target_start = max(0, design_target.target_start - nt_to_add)
+    target_end = min(aln.seq_length, design_target.target_end + nt_to_add)
+    if target_end - target_start == args.min_target_len - 1:
+        # Fix off-by-1 edge case
+        target_end = min(aln.seq_length, target_end + 1)
+
     # Extract the alignment where this design target (amplicon) is
-    aln_extract = aln.extract_range(design_target.target_start,
-            design_target.target_end)
+    aln_extract = aln.extract_range(target_start, target_end)
     # Pull out the sequences, without gaps
     aln_extract_seqs = aln_extract.make_list_of_seqs(remove_gaps=True)
 
@@ -127,6 +137,15 @@ if __name__ == "__main__":
     parser.add_argument('--do-not-allow-gu-pairing', action='store_true',
         help=("When determining whether a guide binds to a region of target "
               "sequence, do not count G-U (wobble) base pairs as matching."))
+
+    parser.add_argument('--min-target-len',
+        type=int, default=0,
+        help=("Minimum length of a target region; if the region "
+              "in a design bound by primers is less than this, sequence "
+              "will be added on both sides of the primer to reach this "
+              "length. Note that this is in the alignment; the actual "
+              "sequence could be shorter if there are gaps in the "
+              "alignment"))
 
     # Log levels
     parser.add_argument("--debug",
