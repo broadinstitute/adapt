@@ -181,6 +181,8 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
     This clusters seqs, and then determines a medoid for each cluster.
     It returns the medoids.
 
+    This will not return representative sequences with ambiguity or NNNs.
+
     Args:
         seqs, k, N, threshold: see cluster_with_minhash_signatures()
 
@@ -192,6 +194,7 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
             seqs, k=k, N=N, threshold=threshold,
             return_dist_matrix_and_indices=True)
 
+    seqs_items = list(seqs.items())
     n = len(seqs)
     def idx(i, j):
         # Compute index in 1d vector for pair (i, j)
@@ -207,6 +210,14 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
         curr_medoid = None
         curr_medoid_dist_total = None
         for i in cluster_idxs:
+            # Only allow i to be the medoid if it does not have ambiguity
+            seq = seqs_items[i][1]
+            if sum(seq.count(b) for b in ('A','C','G','T')) != len(seq):
+                # Has ambiguity or NNNs; skip
+                continue
+
+            # Compute the total distance to all other sequences in this
+            # cluster, and check if this is the medoid
             dist_total = 0
             for j in cluster_idxs:
                 if i == j:
@@ -215,7 +226,12 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
             if curr_medoid is None or dist_total < curr_medoid_dist_total:
                 curr_medoid = i
                 curr_medoid_dist_total = dist_total
-        rep_seqs += [curr_medoid]
+        if curr_medoid is not None:
+            rep_seqs += [curr_medoid]
+        else:
+            # All sequences have ambiguity or NNNs; raise a warning and
+            # skip this cluster
+            logger.warning(("Skipping cluster of size %d; all sequences "
+                "have ambiguity or NNNs"), len(cluster_idxs))
 
-    seqs_items = list(seqs.items())
     return [seqs_items[i][0] for i in rep_seqs]
