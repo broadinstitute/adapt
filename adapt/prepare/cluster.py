@@ -122,7 +122,8 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
             tuple (dm, c) such that dm is the pairwise distance matrix and
             c is a list such that c[i] gives a collection of sequence
             indices (corresponding to indices in dm) in the same cluster
-            (note dm is a 1d condensed matrix in scipy's form)
+            (note dm is a 1d condensed matrix in scipy's form); clusters in
+            c are sorted in descending order of size
         else:
             list c such that c[i] gives a collection of sequence headers
             in the same cluster, and the clusters in c are sorted
@@ -189,6 +190,9 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
     Returns:
         set of sequence headers representing cluster medoids
     """
+    # TODO iterate over clusters; stop when accounting for > some
+    # fraction of seqs (e.g., 95%)
+
     seqs = OrderedDict(seqs)
     dist_matrix, clusters = cluster_with_minhash_signatures(
             seqs, k=k, N=N, threshold=threshold,
@@ -231,7 +235,9 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
         else:
             # All sequences have ambiguity or NNNs; raise a warning and
             # skip this cluster
-            logger.warning(("Skipping cluster of size %d; all sequences "
-                "have ambiguity or NNNs"), len(cluster_idxs))
+            logger.warning(("Cannot find medoid for cluster of size %d "
+                "because all sequences have ambiguity or NNNs; skipping "
+                "this cluster"),
+                len(cluster_idxs))
 
     return [seqs_items[i][0] for i in rep_seqs]
