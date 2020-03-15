@@ -193,3 +193,30 @@ class TestGCFrac(unittest.TestCase):
         self.assertEqual(guide.gc_frac('GGCC'), 1)
         self.assertEqual(guide.gc_frac('AGTC'), 0.5)
 
+
+class TestGuideOverlapInSeq(unittest.TestCase):
+    """Tests the guide_overlap_in_seq() function.
+    """
+
+    def test_disjoint(self):
+        self.assertEqual(guide.guide_overlap_in_seq(
+            ['ATC'], 'AATTCCATCGG', 0, False),
+            {6,7,8})
+        self.assertEqual(guide.guide_overlap_in_seq(
+            ['ATC', 'ATT'], 'AATTCCATCGG', 0, False),
+            {1,2,3,6,7,8})
+
+    def test_overlapping(self):
+        self.assertEqual(guide.guide_overlap_in_seq(
+            ['ATT', 'TCC', 'TCG'], 'AATTCCATCGG', 0, False),
+            {1,2,3,4,5,7,8,9})
+
+    def test_at_ends(self):
+        self.assertEqual(guide.guide_overlap_in_seq(
+            ['AAT', 'CGG'], 'AATTCCATCGG', 0, False),
+            {0,1,2,8,9,10})
+
+    def test_with_mismatches(self):
+        self.assertEqual(guide.guide_overlap_in_seq(
+            ['ATA'], 'AATTCCATCGG', 1, False),
+            {1,2,3,6,7,8})
