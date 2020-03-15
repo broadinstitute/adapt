@@ -11,6 +11,7 @@ import heapq
 import itertools
 import logging
 import math
+import os
 
 from adapt import guide_search
 from adapt import primer_search
@@ -388,3 +389,76 @@ class TargetSearcher:
                     guides_positions_str]
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')
+
+
+class DesignTarget:
+    """Store information on a design of a single target.
+    """
+
+    def __init__(self, target_start, target_end, guide_seqs,
+            left_primer_seqs, right_primer_seqs, cost):
+        self.target_start = target_start
+        self.target_end = target_end
+        self.guide_seqs = tuple(sorted(guide_seqs))
+        self.left_primer_seqs = tuple(sorted(left_primer_seqs))
+        self.right_primer_seqs = tuple(sorted(right_primer_seqs))
+        self.cost = cost
+
+    @staticmethod
+    def read_design_targets(fn, num_targets=None):
+        """Read a collection of targets from a file.
+
+        Args:
+            fn: path to a TSV file giving targets
+            num_targets: only construct a Design from the top num_targets
+                targets, as ordered by cost (if None, use all)
+
+        Returns:
+            list of DesignTarget objects
+        """
+        if not os.path.isfile(fn):
+            return None
+
+        rows = []
+        with open(fn) as f:
+            col_names = {}
+            for i, line in enumerate(f):
+                line = line.rstrip()
+                ls = line.split('\t')
+                if i == 0:
+                    # Parse header
+                    for j in range(len(ls)):
+                        col_names[j] = ls[j]
+                else:
+                    # Read each column as a variable
+                    cols = {}
+                    for j in range(len(ls)):
+                        cols[col_names[j]] = ls[j]
+                    rows += [(cols['cost'], cols['target-start'],
+                             cols['target-end'], cols)]
+
+        # Sort rows by cost (first in the tuple); in case of ties, sort
+        # by target start and target end positions (second and third in
+        # the tuple)
+        # Pull out the best N targets
+        rows = sorted(rows)
+        if num_targets != None:
+            if len(rows) < num_targets:
+                raise Exception(("The number of rows in a design (%d) is fewer "
+                    "than the number of targets to read (%d)") %
+                    (len(rows), num_targets))
+            rows = rows[:num_targets]
+
+        targets = []
+        for row in rows:
+            _, _, _, cols = row
+            targets += [DesignTarget(
+                int(cols['target-start']),
+                int(cols['target-end']),
+                cols['guide-target-sequences'].split(' '),
+                cols['left-primer-target-sequences'].split(' '),
+                cols['right-primer-target-sequences'].split(' '),
+                float(cols['cost'])
+            )]
+
+        return targets

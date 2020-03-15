@@ -217,3 +217,40 @@ def gc_frac(guide_seq):
     gc = guide_seq.count('G') + guide_seq.count('C')
     return float(gc) / len(guide_seq)
 
+
+def guide_overlap_in_seq(guide_seqs, target_seq, mismatches, allow_gu_pairs):
+    """Use a simple sliding strategy to find where guides bind in a sequence.
+
+    This computes binding according to guide_binds().
+
+    This uses a naive sliding strategy over target_seq, computing binding at
+    every position. Since this is slow, this assumes target_seq is short (~100s
+    of nt). Similarly, this returns a set of indices -- rather than ranges --
+    which are easier to work with downstream even though they are less
+    efficient.
+
+    Args:
+        guide_seqs: list of str of guide sequences
+        target_seq: str of a target sequence, at least the length of guide_seq
+        mismatches: int giving threshold on number of mismatches for binding
+        allow_gu_pairs: if True, tolerate G-U base pairs when
+            counting mismatches between guide_seq and target_seq
+    
+    Returns:
+        set of indices in target_seq to which guide_seq binds
+    """
+    for guide_seq in guide_seqs:
+        assert len(target_seq) >= len(guide_seq)
+
+    indices_bound = set()
+
+    for i in range(0, len(target_seq) - len(guide_seq) + 1):
+        target_seq_at_i = target_seq[i:(i + len(guide_seq))]
+        for guide_seq in guide_seqs:
+            binds = guide_binds(guide_seq, target_seq_at_i, mismatches,
+                    allow_gu_pairs)
+            if binds:
+                for j in range(0, len(guide_seq)):
+                    indices_bound.add(i + j)
+
+    return indices_bound
