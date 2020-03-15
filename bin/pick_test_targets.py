@@ -105,7 +105,7 @@ def main(args):
         def write_row(row):
             line = '\t'.join(str(x) for x in row)
             f.write(line + '\n')
-        header = ['target-design-start', 'target-design-end',
+        header = ['design-target-start', 'design-target-end',
                 'test-target-seq', 'test-target-seq-tagged']
         write_row(header)
         for design_target in targets:
