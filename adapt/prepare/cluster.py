@@ -176,7 +176,8 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
         return seqs_in_cluster
 
 
-def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
+def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
+        frac_to_cover=1.0):
     """Find a set of representative sequences.
 
     This clusters seqs, and then determines a medoid for each cluster.
@@ -186,13 +187,14 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
 
     Args:
         seqs, k, N, threshold: see cluster_with_minhash_signatures()
+        frac_to_cover: return medoids from clusters that collectively
+            account for at least this fraction of all sequences; this
+            allows ignoring representative sequences for outlier
+            clusters
 
     Returns:
         set of sequence headers representing cluster medoids
     """
-    # TODO iterate over clusters; stop when accounting for > some
-    # fraction of seqs (e.g., 95%)
-
     seqs = OrderedDict(seqs)
     dist_matrix, clusters = cluster_with_minhash_signatures(
             seqs, k=k, N=N, threshold=threshold,
@@ -207,7 +209,16 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
         return int((-1 * i*i)/2 + i*n - 3*i/2 + j - 1)
 
     rep_seqs = []
+    num_seqs_accounted_for = 0
     for cluster_idxs in clusters:
+        # Stop if we have already accounted for frac_to_cover of the
+        # sequences
+        # Note that clusters should be sorted in descending order of
+        # size, so any clusters after this one will be the same size
+        # or smaller
+        if float(num_seqs_accounted_for) / len(seqs) >= frac_to_cover:
+            break
+
         # Find the medoid of this cluster
         # Simply look over all pairs in the cluster (there are faster
         # algorithms, though not linear)
@@ -232,6 +243,7 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1):
                 curr_medoid_dist_total = dist_total
         if curr_medoid is not None:
             rep_seqs += [curr_medoid]
+            num_seqs_accounted_for += len(cluster_idxs)
         else:
             # All sequences have ambiguity or NNNs; raise a warning and
             # skip this cluster

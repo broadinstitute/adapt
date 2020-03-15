@@ -67,7 +67,8 @@ def find_test_targets(design_target, aln, args):
 
     # Find representative sequences
     rep_seqs_idx = cluster.find_representative_sequences(aln_extract_seqs_dict,
-            k=minhash_k, N=minhash_N, threshold=0.1)
+            k=minhash_k, N=minhash_N, threshold=0.1,
+            frac_to_cover=args.min_frac_to_cover_with_rep_seqs)
     rep_seqs = [aln_extract_seqs[i] for i in rep_seqs_idx]
 
     # Find where primers and guides overlap each representative sequence
@@ -127,11 +128,11 @@ if __name__ == "__main__":
         help=("Path to output TSV with recommended targets for testing"))
 
     parser.add_argument('-pm',
-        type=int, default=0,
+        type=int, default=5,
         help=("Number of mismatches to tolerate when determining whether "
               "primer binds to a region of target sequence"))
     parser.add_argument('-gm',
-        type=int, default=0,
+        type=int, default=3,
         help=("Number of mismatches to tolerate when determining whether "
               "guide binds to a region of target sequence"))
     parser.add_argument('--do-not-allow-gu-pairing', action='store_true',
@@ -139,13 +140,19 @@ if __name__ == "__main__":
               "sequence, do not count G-U (wobble) base pairs as matching."))
 
     parser.add_argument('--min-target-len',
-        type=int, default=0,
+        type=int, default=500,
         help=("Minimum length of a target region; if the region "
               "in a design bound by primers is less than this, sequence "
               "will be added on both sides of the primer to reach this "
               "length. Note that this is in the alignment; the actual "
               "sequence could be shorter if there are gaps in the "
               "alignment"))
+    parser.add_argument('--min-frac-to-cover-with-rep-seqs',
+        type=float, default=0.95,
+        help=("For representative sequences, use medoids of clusters such "
+              "that the clusters account for at least this fraction of all "
+              "sequences. This allows ignoring outlier clusters (whose "
+              "sequence(s) may have not been covered by the design."))
 
     # Log levels
     parser.add_argument("--debug",
