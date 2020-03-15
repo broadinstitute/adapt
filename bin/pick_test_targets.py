@@ -56,6 +56,15 @@ def find_test_targets(design_target, aln, args):
     # Pull out the sequences, without gaps
     aln_extract_seqs = aln_extract.make_list_of_seqs(remove_gaps=True)
 
+    # Remove target sequences that are too short
+    # This can happen due to gaps in the alignment; a sequence can have
+    # length 0, for example, if is it all '-' in the amplicon (extracted
+    # range)
+    # If they are extremely short (shorter than minhash_k, below), then
+    # this will cause an error downstream
+    aln_extract_seqs = [s for s in aln_extract_seqs
+            if len(s) >= args.min_seq_len_to_consider]
+
     # Add indices for each sequence so it can be used as a dict
     aln_extract_seqs_dict = {i: s for i, s in enumerate(aln_extract_seqs)}
 
@@ -139,6 +148,12 @@ if __name__ == "__main__":
         help=("When determining whether a guide binds to a region of target "
               "sequence, do not count G-U (wobble) base pairs as matching."))
 
+    parser.add_argument('--min-seq-len-to-consider',
+        type=int, default=80,
+        help=("Do not consider, when identifying representative sequences, "
+              "target sequences that are shorter than this length. These "
+              "can occur due to gaps in the alignment (e.g., a target "
+              "sequence can have length 0 if it is all '-' in the amplicon."))
     parser.add_argument('--min-target-len',
         type=int, default=500,
         help=("Minimum length of a target region; if the region "
