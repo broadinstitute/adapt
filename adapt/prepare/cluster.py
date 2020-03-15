@@ -131,7 +131,7 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
     """
     if len(seqs) == 1:
         # Simply return one cluster
-        return [list(seqs.keys())[0]]
+        return [[list(seqs.keys())[0]]]
 
     family = lsh.MinHashFamily(k, N=N)
     signatures_map = make_signatures_with_minhash(family, seqs)
