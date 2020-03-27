@@ -371,7 +371,8 @@ def design_for_id(args):
 
     # Read taxonomies to ignore for specificity, if specified
     tax_ignore = {}
-    if args.taxa_to_ignore_for_specificity:
+    if (args.input_type in ['auto-from-file', 'auto-from-args'] and
+            args.taxa_to_ignore_for_specificity):
         tax_ignore = seq_io.read_taxonomy_specificity_ignore(
                 args.taxa_to_ignore_for_specificity)
 
@@ -541,7 +542,7 @@ def main(args):
     design_for_id(args)
 
     # Close temporary files storing alignments
-    if args.input_type in ['auto_from_file', 'auto-from-args']:
+    if args.input_type in ['auto-from-file', 'auto-from-args']:
         for td in aln_tmp_dirs:
             td.cleanup()
         if years_tsv is not None:
