@@ -103,6 +103,10 @@ class Predictor:
             classification_default_threshold_path = os.path.join(
                     classification_model_path,
                     'assets.extra/default_threshold.arg')
+            if not os.path.isfile(classification_default_threshold_path):
+                raise Exception(("Unknown default threshold for classification "
+                    "model; the model should have a "
+                    "assets.extra/default_threshold.arg file"))
             with open(classification_default_threshold_path) as f:
                 classification_threshold = float(f.readline().strip())
             assert 0 <= classification_threshold <= 1
@@ -116,6 +120,10 @@ class Predictor:
             regression_default_threshold_path = os.path.join(
                     regression_model_path,
                     'assets.extra/default_threshold.arg')
+            if not os.path.isfile(regression_default_threshold_path):
+                raise Exception(("Unknown default threshold for regression "
+                    "model; the model should have a "
+                    "assets.extra/default_threshold.arg file"))
             with open(regression_default_threshold_path) as f:
                 regression_threshold = float(f.readline().strip())
             # Add to the regression threshold the shift, as the default
