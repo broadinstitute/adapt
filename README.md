@@ -141,7 +141,7 @@ Example classification and regression models are in [`models/`](./models).
 * `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
 THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
 Higher values have higher precision and less recall.
-THRES_R is a decision threshold on the output of tHE REgression model (at least 0); predictions above this threshold are decided to be highly active.
+THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
 Higher values limit the number of pairs determined to be highly active.
 To count as detecting a target, a guide must be classified as active and determined to be highly active against the target.
 (Default: use the default thresholds included with the model.)
@@ -266,7 +266,7 @@ You must fill in `MAFFT_PATH` with an executable.
 
 This designs primers and a minimal collection of guides within the amplicons they bind, such that:
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
-* guides detect 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`) and only counting as detecting a target if predicted to be highly active against the target (`--predict-activity-model-path`)
+* guides detect 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`), and only counting as detecting a target if predicted to be highly active against the target (`--predict-activity-model-path`)
 
 It outputs a file, `guides.tsv.0`, that contains the best 10 design choices (`--best-n-targets 10`) as measured by a cost function.
 See [Output](#output) above for a description of this file.
