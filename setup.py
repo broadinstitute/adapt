@@ -14,7 +14,7 @@ setup(name='adapt',
       author='Hayden Metsky',
       author_email='hayden@mit.edu',
       packages=find_packages(),
-      install_requires=['numpy>=1.9.0', 'scipy>=1.0.0'],
+      install_requires=['numpy>=1.16.0', 'scipy>=1.4.0', 'tensorflow>=2.1.0'],
       scripts=[
         'bin/design.py',
         'bin/design_naively.py',

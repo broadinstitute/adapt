@@ -37,11 +37,12 @@ However, the problems share some similarity with the problems solved by CATCH, w
 ## Dependencies
 
 ADAPT requires:
-* [Python](https://www.python.org) &gt;= 3.5
-* [NumPy](http://www.numpy.org) &gt;= 1.9.0
-* [SciPy](https://www.scipy.org) &gt;= 1.0.0
+* [Python](https://www.python.org) &gt;= 3.7
+* [NumPy](http://www.numpy.org) &gt;= 1.16.0
+* [SciPy](https://www.scipy.org) &gt;= 1.4.0
+* [TensorFlow](https://www.tensorflow.org) &gt;= 2.1.0
 
-Installing ADAPT with `pip`, as described below, will install NumPy and SciPy if they are not already installed.
+Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed.
 
 If using alignment features in subcommands below, ADAPT also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
 
@@ -132,9 +133,18 @@ Below is a summary of some common arguments to [`design.py`](./bin/design.py):
 (Default: 0.)
 * `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
 (Default: 1.0.)
-* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
-See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
-Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
+* `--predict-activity-model-path MODEL_C MODEL_R`: Predict activity of guide-target pairs and only count guides as detecting a target if they are predicted to be highly active against it.
+MODEL_C is for a classification model that predicts whether a guide-target pair is active, and MODEL_R is for a regression model that predicts a measure of activity on active pairs.
+Each argument is a path to a serialized model in TensorFlow's SavedModel format.
+Example classification and regression models are in [`models/`](./models).
+(Default: not set, which does not use predicted activity as a constraint during design.)
+* `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
+THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
+Higher values have higher precision and less recall.
+THRES_R is a decision threshold on the output of tHE REgression model (at least 0); predictions above this threshold are decided to be highly active.
+Higher values limit the number of pairs determined to be highly active.
+To count as detecting a target, a guide must be classified as active and determined to be highly active against the target.
+(Default: use the default thresholds included with the model.)
 * `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
 Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
 ADAPT does not output guides that hit group/taxons other than the one for which they are being designed.
@@ -150,6 +160,9 @@ Note that this is the 5'/3' end in the target sequence (not the spacer sequence)
 See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GUIDES file format.
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
 * `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
+* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
+Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
 
 Below are some additional arguments when SEARCH-TYPE is `complete-targets`:
 
@@ -246,14 +259,14 @@ See [Output](#output) above for a description of this file.
 ADAPT can automatically download and curate sequences during design, and search efficiently over the space of genomic regions to find primers/amplicons as well as guides.
 For example:
 ```bash
-design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
+design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
 ```
 downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable.
 
 This designs primers and a minimal collection of guides within the amplicons they bind, such that:
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
-* guides capture 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`)
+* guides detect 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`) and only counting as detecting a target if predicted to be highly active against the target (`--predict-activity-model-path`)
 
 It outputs a file, `guides.tsv.0`, that contains the best 10 design choices (`--best-n-targets 10`) as measured by a cost function.
 See [Output](#output) above for a description of this file.
