@@ -19,6 +19,7 @@ from adapt.specificity import alignment_query
 from adapt import target_search
 from adapt.utils import guide
 from adapt.utils import log
+from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
 
@@ -371,7 +372,8 @@ def design_for_id(args):
 
     # Read taxonomies to ignore for specificity, if specified
     tax_ignore = {}
-    if args.taxa_to_ignore_for_specificity:
+    if (args.input_type in ['auto-from-file', 'auto-from-args'] and
+            args.taxa_to_ignore_for_specificity):
         tax_ignore = seq_io.read_taxonomy_specificity_ignore(
                 args.taxa_to_ignore_for_specificity)
 
@@ -448,6 +450,26 @@ def design_for_id(args):
                             "from specificity queries"), j + 1, ignore_taxid)
                         aq.mask_aln(j)
 
+        # Construct activity predictor
+        if args.predict_activity_model_path:
+            pass
+            cla_path, reg_path = args.predict_activity_model_path
+            if args.predict_activity_thres:
+                # Use specified thresholds on classification and regression
+                cla_thres, reg_thres = args.predict_activity_thres
+            else:
+                # Use default thresholds specified with the model
+                cla_thres, reg_thres = None, None
+            predictor = predict_activity.Predictor(cla_path, reg_path,
+                    classification_threshold=cla_thres,
+                    regression_threshold=reg_thres)
+        else:
+            if args.predict_activity_thres:
+                raise Exception(("Cannot set --predict-activity-thres without "
+                    "setting --predict-activity-model-path"))
+            # Do not predict activity
+            predictor = None
+
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
         # specific to this alignment
@@ -460,8 +482,7 @@ def design_for_id(args):
                                         blacklisted_ranges=blacklisted_ranges_for_aln,
                                         allow_gu_pairs=allow_gu_pairs,
                                         required_flanking_seqs=required_flanking_seqs,
-                                        predict_activity_model_path=args.predict_activity_model_path,
-                                        predict_activity_thres=args.predict_activity_thres)
+                                        predictor=predictor)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -541,7 +562,7 @@ def main(args):
     design_for_id(args)
 
     # Close temporary files storing alignments
-    if args.input_type in ['auto_from_file', 'auto-from-args']:
+    if args.input_type in ['auto-from-file', 'auto-from-args']:
         for td in aln_tmp_dirs:
             td.cleanup()
         if years_tsv is not None:
@@ -712,14 +733,27 @@ if __name__ == "__main__":
 
     # Use a model to predict activity
     base_subparser.add_argument('--predict-activity-model-path',
-        help=("Path to directory containing model hyperparameters and "
-              "trained weights to use to to predict guide-target activity; "
-              "only consider guides to be active is the activity exceeds "
-              "a threshold (specified in the 'predict_activity' module)"))
+        nargs=2,
+        help=("Paths to directories containing serialized models in "
+              "TensorFlow's SavedModel format for predicting guide-target "
+              "activity. There are two arguments: (1) classification "
+              "model to determine which guides are active; (2) regression "
+              "model, which is used to determine which guides (among "
+              "active ones) are highly active. The models/ directory "
+              "contains example models. If not set, ADAPT does not predict "
+              "activities to use during design."))
     base_subparser.add_argument('--predict-activity-thres',
         type=float,
-        help=("Call predicted activity >= PREDICT_ACTIVITY_THRES to be "
-              "positive. If not set, use a default threshold."))
+        nargs=2,
+        help=("Thresholds to use for decisions on output of predictive "
+            "models. There are two arguments: (1) classification threshold "
+            "for deciding which guide-target pairs are active (in [0,1], "
+            "where higher values have higher precision but less recall); "
+            "(2) regression threshold for deciding which guide-target pairs "
+            "are highly active (>= 0, where higher values limit the number "
+            "determined to be highly active). If not set but --predict-"
+            "activity-model-path is set, then ADAPT uses default thresholds "
+            "stored with the models."))
 
     # Log levels
     base_subparser.add_argument("--debug",
