@@ -37,11 +37,12 @@ However, the problems share some similarity with the problems solved by CATCH, w
 ## Dependencies
 
 ADAPT requires:
-* [Python](https://www.python.org) &gt;= 3.5
-* [NumPy](http://www.numpy.org) &gt;= 1.9.0
-* [SciPy](https://www.scipy.org) &gt;= 1.0.0
+* [Python](https://www.python.org) &gt;= 3.7
+* [NumPy](http://www.numpy.org) &gt;= 1.16.0
+* [SciPy](https://www.scipy.org) &gt;= 1.4.0
+* [TensorFlow](https://www.tensorflow.org) &gt;= 2.1.0
 
-Installing ADAPT with `pip`, as described below, will install NumPy and SciPy if they are not already installed.
+Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed.
 
 If using alignment features in subcommands below, ADAPT also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
 
