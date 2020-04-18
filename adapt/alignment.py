@@ -13,7 +13,54 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
-class Alignment:
+class SequenceList:
+    """Immutable collection of sequences.
+    """
+
+    def __init__(self):
+        """
+        Args:
+            seqs: list of str, where seqs[i] is the i'th sequence
+        """
+        self.seqs = seqs
+        self.num_sequences = len(seqs)
+
+    def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False,
+                          remove_gaps=False):
+        """Construct list of sequences.
+
+        Args:
+            seqs_to_consider: collection of indices of sequences to use (if None,
+                use all)
+            include_idx: instead of a list of str giving the sequences in
+                the alignment, return a list of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is the index in the
+                list
+            remove_gaps: if True, remove gaps ('-') from the returned
+                sequences; note that there should not be gaps because,
+                in general, this should represent unaligned sequences
+
+        Returns:
+            list of str giving the sequences (or, list of
+            tuples if include_idx is True)
+        """
+        if seqs_to_consider is None:
+            seqs_to_consider = range(self.num_sequences)
+
+        def seq_str(i):
+            # Get the str of the sequence with index i
+            s = self.seqs[i]
+            if remove_gaps:
+                s = s.replace('-', '')
+            return s
+
+        if include_idx:
+            return [(seq_str(i), i) for i in seqs_to_consider]
+        else:
+            return [seq_str(i) for i in seqs_to_consider]
+
+
+class Alignment(SequenceList):
     """Immutable collection of sequences that have been aligned.
 
     This stores sequences in column-major order, which should make it more
