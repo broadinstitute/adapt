@@ -347,13 +347,29 @@ def design_for_id(args):
         guide_cover_frac_per_input += [guide_cover_frac]
         primer_cover_frac_per_input += [primer_cover_frac]
 
-    # Also add the specific_against alignments into alns, but keep
-    # track of how many use for design (the first N of them)
+    # Also add the specific_against_fastas sequences into alns, but keep
+    # track of how many items in alns to use for design (the first N of them)
+    # Note that although these are being place in alns, they may not
+    # be actual alignments (they can be unaligned sequences)
     num_aln_for_design = len(args.in_fasta)
-    for specific_against_fasta in args.specific_against:
+    for specific_against_fasta in args.specific_against_fastas:
         seqs = seq_io.read_fasta(specific_against_fasta)
-        aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
-        alns += [aln]
+        seqs_list = alignment.SequenceList(list(seqs.values()))
+        alns += [seqs_list]
+    # Similarly, add specific_against_taxa sequences into alns after
+    # downloading them
+    if args.specific_against_taxa:
+        taxs_to_be_specific_against = seq_io.read_taxonomies_to_design_for(
+                args.specific_against_taxa)
+        for taxid, segment in taxs_to_be_specific_against:
+            logger.info(("Fetching sequences to be specific against tax "
+                "%d (segment: %s)"), taxid, segment)
+            seqs = prepare_alignment.fetch_sequences_for_taxonomy(
+                    taxid, segment)
+            seqs_list = alignment.SequenceList(list(seqs.values()))
+            alns += [seqs_list]
+    specific_against_exists = (len(args.specific_against_fastas) > 0 or
+            args.specific_against_taxa is not None)
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
@@ -362,7 +378,7 @@ def design_for_id(args):
     # Allow G-U base pairing, unless it is explicitly disallowed
     allow_gu_pairs = not args.do_not_allow_gu_pairing
 
-    # Assign an id in [0, 1, 2, ...] for each taxid
+    # Assign an id in [0, 1, 2, ...] for each taxid to design for
     # Find all alignments with each taxid
     aln_with_taxid = defaultdict(set)
     for i, taxid in enumerate(args.taxid_for_fasta):
@@ -376,10 +392,13 @@ def design_for_id(args):
             args.taxa_to_ignore_for_specificity):
         tax_ignore = seq_io.read_taxonomy_specificity_ignore(
                 args.taxa_to_ignore_for_specificity)
+        if args.specific_against_fastas or args.specific_against_taxs:
+            logger.warning(("Taxa to ignore for specificity cannot from "
+                "--specific-against-*"))
 
     # Construct the data structure for guide queries to perform
     # differential identification
-    if num_taxa > 1:
+    if num_taxa > 1 or specific_against_exists:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
         if args.diff_id_method == "lshnn":
@@ -668,14 +687,20 @@ if __name__ == "__main__":
         help=("Choice of method to query for specificity. 'lshnn' for "
               "LSH near-neighbor approach. 'shard' for approach that "
               "shards k-mers across small tries."))
-    base_subparser.add_argument('--specific-against', nargs='+',
+    base_subparser.add_argument('--specific-against-fastas', nargs='+',
         default=[],
-        help=("Path to one or more FASTA files giving alignments, such that "
+        help=("Path to one or more FASTA files giving sequences, such that "
               "guides are designed to be specific against (i.e., not hit) "
-              "these alignments, according to --id-m and --id-frac. This "
+              "these sequences, according to --id-m and --id-frac. This "
               "is equivalent to specifying the FASTAs in the main input "
               "(as positional inputs), except that, when provided here, "
-              "guides are not designed for these alignments."))
+              "guides are not designed for them and they do not "
+              "need to be aligned."))
+    base_subparser.add_argument('--specific-against-taxa',
+        help=("Path to TSV file giving giving taxonomies from which to "
+              "download all genomes and ensure guides are specific against "
+              "(i.e., not hit) these. The TSV file has 2 columns: (1) a "
+              "taxonomic ID; (2) segment label, or 'None' if unsegmented"))
 
     # G-U pairing options
     base_subparser.add_argument('--do-not-allow-gu-pairing', action='store_true',
@@ -927,7 +952,7 @@ if __name__ == "__main__":
     input_auto_common_subparser.add_argument('--only-design-for',
         help=("If set, only design for given taxonomies. This provides a "
               "path to a TSV file with 2 columns: (1) a taxonomid ID; (2) "
-              "segment label, if 'None' if unsegmented"))
+              "segment label, or 'None' if unsegmented"))
     input_auto_common_subparser.add_argument('--taxa-to-ignore-for-specificity',
         help=("If set, specificity which taxa should be ignored when "
               "enforcing specificity while designing for other taxa. "

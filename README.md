@@ -150,8 +150,11 @@ Allow for up to ID_M mismatches when determining whether a guide hits a sequence
 ADAPT does not output guides that hit group/taxons other than the one for which they are being designed.
 Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
 (Default: 2 for ID_M, 0.05 for ID_FRAC.)
-* `--specific-against [alignment] [alignment ...]`: Design guides to be specific against the provided alignments (in FASTA format).
+* `--specific-against-fastas [fasta] [fasta ...]`: Design guides to be specific against the provided sequences (in FASTA format; do not need to be aligned).
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
+* `--specific-against-taxa SPECIFIC_TSV`: Design guides to be specific against the provided taxa.
+SPECIFIC_TSV is a path to a TSV file where each row specifies a taxonomy with two columns: (1) NCBI taxonomic ID; (2) segment label, or 'None' if unsegmented.
+That is, the guides should not hit sequences in these taxonomies, as measured by ID_M and ID_FRAC.
 * `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs between guide and target sequence as matching.
 * `--require-flanking5 REQUIRE_FLANKING5` / `--require-flanking3 REQUIRE_FLANKING3`: Require the given sequence on the 5' (REQUIRE_FLANKING5) and/or 3' (REQUIRE_FLANKING3) protospacer flanking site (PFS) for each designed guide.
 This tolerates ambiguity in the sequence (e.g., 'H' requires 'A', 'C', or 'T').
@@ -274,7 +277,7 @@ See [Output](#output) above for a description of this file.
 This randomly selects 100 sequences (`--sample-seqs 100`) prior to design to speed the process for this example; the command should take about 10 minutes to run in full.
 You can set `--verbose` to obtain more detailed output.
 
-Note that this example does not account for taxon-specificity or predicted activity of designs.
+Note that this example does not account for taxon-specificity.
 
 # Contributing
 
