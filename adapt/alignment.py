@@ -17,7 +17,7 @@ class SequenceList:
     """Immutable collection of sequences.
     """
 
-    def __init__(self):
+    def __init__(self, seqs):
         """
         Args:
             seqs: list of str, where seqs[i] is the i'th sequence
