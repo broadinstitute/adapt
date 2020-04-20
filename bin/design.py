@@ -596,13 +596,26 @@ if __name__ == "__main__":
     ###########################################################################
     base_subparser = argparse.ArgumentParser(add_help=False)
 
-    # Parameters on guide length and mismatches
+    # Guide length
     base_subparser.add_argument('-gl', '--guide-length', type=int, default=28,
         help="Length of guide to construct")
+
+    # Objective function
+    base_subparser.add_argument('--obj',
+        choices=['maximize-activity', 'minimize-guides'],
+        default='minimize-guides',
+        help=(("Objective function to solve. 'maximize-activity' maximizes "
+               "the expected activity of the guide set of the target genomes "
+               "subject to soft and hard constraints on the size of the guide "
+               "set. 'minimize-guides' minimizes the number of guides in the "
+               "guide set subject to coverage constraints across the target "
+               "genomes.")))
+
+    # Parameters for minimization objective
+    # Number of guide mismatches
     base_subparser.add_argument('-gm', '--guide-mismatches', type=int, default=0,
         help=("Allow for this number of mismatches when "
               "determining whether a guide covers a sequence"))
-
     # Desired coverage of target sequences
     def check_cover_frac(val):
         fval = float(val)
@@ -619,7 +632,6 @@ if __name__ == "__main__":
               "primers* that must be covered (so, in total, >= "
               "(GUIDE_COVER_FRAC * (2 * PRIMER_COVER_FRAC - 1)) sequences will "
               "be covered)."))
-
     # Automatically setting desired coverage of target sequences based
     # on their year
     class ParseCoverDecayWithYearsFile(argparse.Action):
@@ -845,6 +857,7 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('--max-target-length', type=int,
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))
+    # TODO: only use 2 weights (primers and amplicon length)
     parser_ct_args.add_argument('--cost-fn-weights', type=float, nargs=3,
         help=("Specify custom weights in the cost function; given as "
               "3 weights (A B C), where the cost funct_argsion is "
@@ -859,6 +872,8 @@ if __name__ == "__main__":
               'have been identified. The targets will meet the given '
               'constraints but may not be optimal over the whole genome. '
               'They will likely be from the beginning of the genome.'))
+    # TODO: generalize this to 'account for all seqs' and make the default
+    # be true
     parser_ct_args.add_argument('--gp-over-all-seqs',
         action='store_true',
         help=("If set, design the guides so as to cover GUIDE_COVER_FRAC "
