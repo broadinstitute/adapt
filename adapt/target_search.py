@@ -24,14 +24,18 @@ logger = logging.getLogger(__name__)
 class TargetSearcher:
     """Methods to search for targets over a genome."""
 
-    def __init__(self, ps, gs, max_primers_at_site=None,
+    def __init__(self, ps, gs, obj_type='min',
+            max_primers_at_site=None,
             max_target_length=None, cost_weights=None,
-            guides_should_cover_over_all_seqs=False,
+            guides_should_consider_all_seqs=False,
             halt_early=False):
         """
         Args:
             ps: PrimerSearcher object
             gs: GuideSearcher object
+            obj_type: 'min' or 'max' indicating whether the objective
+                should be considered to be a minimization or maximization
+                problem
             max_primers_at_site: only allow amplicons in which each
                 end has at most this number of primers; or None for
                 no limit
@@ -39,10 +43,10 @@ class TargetSearcher:
                 most this; or None for no limit
             cost_weights: a tuple giving weights in the cost function
                 in the order (primers, window, guides)
-            guides_should_cover_over_all_seqs: design guides so as to cover
-                the specified fraction (gs.cover_frac) of *all* sequences,
-                rather than gs.cover_frac of only sequences bound by the
-                primers
+            guides_should_consider_all_seqs: design guides so as to account for
+                *all* sequences (e.g., when obj_type is 'min', cover
+                gs.cover_frac of all sequences, rather than only sequences
+                bound by the primers)
             halt_early: if True, stop as soon as there are the desired number
                 of targets found, even if this does not complete the
                 search over the whole genome (i.e., the targets meet the
@@ -50,6 +54,7 @@ class TargetSearcher:
         """
         self.ps = ps
         self.gs = gs
+        self.obj_type = obj_type
         self.max_primers_at_site = max_primers_at_site
         self.max_target_length = max_target_length
 
@@ -59,7 +64,7 @@ class TargetSearcher:
         self.cost_weight_window = cost_weights[1]
         self.cost_weight_guides = cost_weights[2]
 
-        self.guides_should_cover_over_all_seqs = guides_should_cover_over_all_seqs
+        self.guides_should_consider_all_seqs = guides_should_consider_all_seqs
 
         self.halt_early = halt_early
 
@@ -83,35 +88,67 @@ class TargetSearcher:
         """Find targets across an alignment.
 
         Args:
-            best_n: only store and output the best_n targets with the
-                lowest cost
+            best_n: only store and output the best_n targets according
+                to the objective
             no_overlap: if True, do not allow targets in the output
                 whose primers overlap on both ends. When True, if a
                 target overlaps with a target already in the output,
                 this *replaces* the overlapping one with the new one
-                if the new one has a smaller cost (if it has a greater
-                cost, it ignores the new one). When False,
+                if the new one has a better objective value. When False,
                 many targets in the best_n may be very similar
 
         Returns:
-            list of tuples (cost, target) where target is a tuple
-            ((p1, p2), (guides_frac_bound, guides)); (p1, p2) is a pair
+            list of tuples (obj_value, target) where target is a tuple
+            ((p1, p2), (guides_stats, guides)); (p1, p2) is a pair
             of PrimerResult objects, and guides is a list of guides that
-            achieve the desired coverage (with guides_frac_bound fraction
-            of the sequences covered) in the window bound by (p1, p2)
+            meet the constraints within the window bound by (p1, p2)
         """
 
         # Store a heap containing the best_n primer/guide targets;
-        # store each as a tuple (-cost, push_id, target), where we store
-        # based on the negative cost because the heap is a min heap
-        # (so popped values will be the one with the greatest cost,
-        # and target_heap[0] refers to the target with the greatest cost).
+        # store each as a tuple ((+/-)obj_value, push_id, target)
+        # The heap is a min heap, so popped values are the ones with
+        # the smallest value in the first element
+        #   - When self.obj_type is 'min' we store -obj_value in the
+        #     first element so that the one with the highest objective
+        #     value (worst) is popped.
+        #   - When self.obj_type is 'max' we store +obj_value in
+        #     the first element so that the one with the smallest
+        #     objective value (worst) is popped
+        # In both cases, target_heap[0] refers to the target with the
+        # worst objective value
         # We also store push_id (a counter on the push) to break ties
         # when costs are equivalent (choosing the one pushed first, i.e.,
         # the lower push_id); otherwise, there will be an error on
         # ties if target is not comparable
         target_heap = []
         push_id_counter = itertools.count()
+
+        assert self.obj_type in ['min', 'max']
+        def obj_value(i):
+            # Return objective value of the i'th element
+            if self.obj_type == 'min':
+                return -1 * target_heap[i][0]
+            elif self.obj_type == 'max':
+                return target_heap[i][0]
+
+        def obj_value_is_better(new, old):
+            # Compare new objective value to old, and return True iff
+            # new is better
+            if self.obj_type == 'min':
+                if new < old:
+                    return True
+            elif self.obj_type == 'max':
+                if new > old:
+                    return True
+            return False
+
+        # Determine a best-case objective value from the guide search
+        # This is useful for pruning the search
+        # TODO implement best_obj_value in GuideSearcher. For minimization
+        # this can be 1 (i.e., 1 guide). For maximization, this should be
+        # the maximal activity minus the term of the soft constraint for
+        # 1 guide
+        best_guide_obj_value = self.gs.best_obj_value()
 
         num_primer_pairs = 0
         num_suitable_primer_pairs = 0
@@ -162,26 +199,41 @@ class TargetSearcher:
             # Calculate a cost of the window
             cost_window = self.cost_weight_window * math.log2(window_length)
 
-            # Calculate a lower bound on the total cost of this target,
-            # which can be done assuming >= 1 guide will be found; this
-            # is useful for pruning the search
-            cost_total_lo = (cost_primers + cost_window +
-                self.cost_weight_guides * 1)
+            # Calculate a best-case objective value for this target,
+            # which can be done assuming a best-case for the guide search
+            # This is useful for pruning the search
+            if self.obj_type == 'min':
+                best_possible_obj_value = (self.cost_weight_guides *
+                        best_guide_obj_value + cost_primers + cost_window)
+            elif self.obj_type == 'max':
+                best_possible_obj_value = (self.cost_weight_guides *
+                        best_guide_obj_value - cost_primers - cost_window)
 
             # Check if we should bother trying to find guides in this window
             if len(target_heap) >= best_n:
-                curr_highest_cost = -1 * target_heap[0][0]
-                if cost_total_lo >= curr_highest_cost:
-                    # The cost is already >= than all in the current best_n,
-                    # and will only stay the same or get bigger after adding
-                    # the term for guides, so there is no reason to continue
-                    # considering this window
-                    continue
+                curr_worst_obj_value = obj_value(0)
+                if self.obj_type == 'min':
+                    if best_possible_obj_value >= curr_worst_obj_value:
+                        # The objective value is already >= than all in the
+                        # current best_n, and will only stay the same or get
+                        # bigger after adding the term for guides, so there is
+                        # no reason to continue considering this window
+                        continue
+                elif self.obj_type == 'max':
+                    if best_possible_obj_value <= curr_worst_obj_value:
+                        # The objective value is <= all in the current best_n
+                        # even in the best-case outcome for the guide search,
+                        # and it will only stay the same or be smaller after
+                        # adding the term for guides, so there is no reason to
+                        # continue considering this window
+                        continue
 
             # If targets should not overlap and this overlaps a target
             # already in target_heap, check if we should bother trying to
             # find guides in this window
             overlapping_i = []
+            # TODO: be more strict and assume overlap means overlap of
+            # anywhere in the region (not just primers)
             if no_overlap:
                 # Check if any targets already in target_heap have
                 # primer pairs overlapping with (p1, p2)
@@ -194,18 +246,18 @@ class TargetSearcher:
             if overlapping_i:
                 # target overlaps with one or more entries already in
                 # target_heap
-                cost_is_too_high = True
+                could_replace = False
                 for i in overlapping_i:
-                    cost_i = -1 * target_heap[i][0]
-                    if cost_total_lo < cost_i:
-                        cost_is_too_high = False
+                    if obj_value_is_better(best_possible_obj_value,
+                            obj_value(i)):
+                        could_replace = True
                         break
-                if cost_is_too_high:
+                if could_replace is False:
                     # We will try to replace an entry in overlapping_i (i) with
-                    # a new entry, but the cost is already >= than what it
-                    # is for i, and will only stay the same or get bigger
-                    # after adding the term for guides, so there is no reason
-                    # for considering this window (it will never replace i)
+                    # a new entry, but the objective value is such that, even
+                    # in the best-case, it will not replace i. So there is
+                    # no reason for considering this window (it will never
+                    # replace i)
                     continue
 
             logger.info(("Found window [%d, %d) bound by primers that could "
@@ -213,8 +265,8 @@ class TargetSearcher:
                 "heap has %d valid targets currently"),
                 window_start, window_end, best_n, len(target_heap))
 
-            # Determine what set of sequences the guides should cover
-            if self.guides_should_cover_over_all_seqs:
+            # Determine what set of sequences the guides should account for
+            if self.guides_should_consider_all_seqs:
                 # Design across the entire collection of sequences
                 # This may lead to more guides being designed than if only
                 # designing across primer_bound_seqs (below) because more
@@ -252,15 +304,32 @@ class TargetSearcher:
             # Calculate fraction of sequences bound by the guides
             guides_frac_bound = self.gs._total_frac_bound_by_guides(guides)
 
-            # Calculate a cost of the guides, and a total cost
-            cost_guides = self.cost_weight_guides * len(guides)
-            cost_total = cost_primers + cost_window + cost_guides
+            # Calculate median activity and 5'th percentile of activity
+            # of the guides
+            # TODO implement below functions
+            guides_activity_median = self.gs._activity_percentile(guides, 0.5)
+            guides_acitivty_5thpctile = self.gs._activity_percentile(guides,
+                    0.05)
+            guides_stats = (guides_frac_bound, guides_activity_median,
+                    guides_activity_5thpctile)
+
+            # Calculate a total objective value
+            # TODO implement GuideSearch.obj_value(guides). For minimization
+            # this can just be len(guides)
+            if self.obj_type == 'min':
+                obj_value_total = (self.cost_weight_guides *
+                        self.gs.obj_value(guides) + cost_primers + cost_window)
+                obj_value_to_add = -1 * obj_value_total
+            elif self.obj_type == 'max':
+                obj_value_total = (self.cost_weight_guides *
+                        self.gs.obj_value(guides) - cost_primers - cost_window)
+                obj_value_to_add = obj_value_total
 
             # Add target to the heap (but only keep it if there are not
-            # yet best_n targets or it has one of the best_n smallest
-            # costs)
-            target = ((p1, p2), (guides_frac_bound, guides))
-            entry = (-cost_total, next(push_id_counter), target)
+            # yet best_n targets or it has one of the best_n best objective
+            # values)
+            target = ((p1, p2), (guides_stats, guides))
+            entry = (obj_value_to_add, next(push_id_counter), target)
             if overlapping_i:
                 # target overlaps with an entry already in target_heap;
                 # consider replacing that entry with new entry
@@ -268,8 +337,7 @@ class TargetSearcher:
                     # Almost all cases will satisfy this: the new entry
                     # overlaps just one existing entry; optimize for this case
                     i = overlapping_i[0]
-                    cost_i = -1 * target_heap[i][0]
-                    if cost_total < cost_i:
+                    if obj_value_is_better(obj_value_total, obj_value(i)):
                         # Replace i with entry
                         target_heap[i] = entry
                         heapq.heapify(target_heap)
@@ -278,13 +346,12 @@ class TargetSearcher:
                     # multiple existing entries
                     # Check if the new entry has a sufficiently low cost
                     # to justify removing any existing overlapping entries
-                    cost_is_sufficiently_low = False
+                    obj_value_is_sufficiently_good = False
                     for i in overlapping_i:
-                        cost_i = -1 * target_heap[i][0]
-                        if cost_total < cost_i:
-                            cost_is_sufficiently_low = True
+                        if obj_value_is_better(obj_value_total, obj_value(i)):
+                            obj_value_is_sufficiently_good = True
                             break
-                    if cost_is_sufficiently_low:
+                    if obj_value_is_sufficiently_good:
                         # Remove all entries that overlap the new entry,
                         # then add the new entry
                         for i in sorted(overlapping_i, reverse=True):
@@ -293,22 +360,22 @@ class TargetSearcher:
                         heapq.heapify(target_heap)
                         # Note that this can lead to cases in which the size
                         # of the output (target_heap) is < best_n, or in which
-                        # there is an entry with very high cost, because
+                        # there is an entry with poor objective value, because
                         # in certain edge cases we might finish the search
                         # having removed >1 entry but only replacing it with
                         # one, and if the search continues for a short time
                         # after, len(target_heap) < best_n could result in
-                        # some high-cost entries being placed into the heap
+                        # some poor entries being placed into the heap
             elif len(target_heap) < best_n:
                 # target_heap is not yet full, so push entry to it
                 heapq.heappush(target_heap, entry)
             else:
-                # target_heap is full; consider replacing the entry that has
-                # the highest cost with the new entry
-                curr_highest_cost = -1 * target_heap[0][0]
-                if cost_total < curr_highest_cost:
+                # target_heap is full; consider replacing the worst entry
+                # with the new entry
+                curr_worst_obj_value = obj_value(0)
+                if obj_value_is_better(obj_value_total, curr_worst_obj_value):
                     # Push the entry into target_heap, and pop out the
-                    # one with the highest cost
+                    # worst one
                     heapq.heappushpop(target_heap, entry)
 
         if len(target_heap) == 0:
@@ -317,21 +384,34 @@ class TargetSearcher:
                 "were suitable (passing basic criteria, e.g., on length) "
                 "was %d"), num_primer_pairs, num_suitable_primer_pairs)
 
-        # Invert the costs (target_heap had been storing the negative
-        # of each cost), toss push_id, and sort by cost
+        # Invert the objective values if they were inverted (target_heap had
+        # been storing the negative of each objective value for minimization),
+        # toss push_id, and sort by objective value
         # In particular, sort by a 'sort_tuple' whose first element is
-        # cost and then the target endpoints; it has the target endpoints
-        # to break ties in cost
-        r = [(-cost, target) for cost, push_id, target in target_heap]
-        r_with_sort_tuple = []
-        for (cost, target) in r:
-            ((p1, p2), (guides_frac_bound, guides)) = target
-            target_start = p1.start
-            target_end = p2.start + p2.primer_length
-            sort_tuple = (cost, target_start, target_end)
-            r_with_sort_tuple += [(sort_tuple, cost, target)]
-        r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
-        r = [(cost, target) for sort_tuple, cost, target in r_with_sort_tuple]
+        # objective_value and then the target endpoints; it has the target
+        # endpoints to break ties in objective value
+        if self.obj_type == 'min':
+            r = [(-obj_value, target) for obj_value, push_id, target in target_heap]
+            r_with_sort_tuple = []
+            for (obj_value, target) in r:
+                ((p1, p2), (guides_stats, guides)) = target
+                target_start = p1.start
+                # Sort all fields of sort_tuple in ascending order
+                sort_tuple = (obj_value, target_start)
+                r_with_sort_tuple += [(sort_tuple, obj_value, target)]
+            r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
+        elif self.obj_type == 'max':
+            r = [(obj_value, target) for obj_value, push_id, target in target_heap]
+            r_with_sort_tuple = []
+            for (obj_value, target) in r:
+                ((p1, p2), (guides_stats, guides)) = target
+                target_start = p1.start
+                # Sort obj_value in descending order, and target_start in
+                # ascending order
+                sort_tuple = (-1 * obj_value, target_start)
+                r_with_sort_tuple += [(sort_tuple, obj_value, target)]
+            r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
+        r = [(obj_value, target) for sort_tuple, obj_value, target in r_with_sort_tuple]
 
         return r
 
@@ -344,25 +424,29 @@ class TargetSearcher:
 
         Args:
             out_fn: output TSV file to write targets
-            best_n: only store and output the best_n targets with the
-                lowest cost
+            best_n: only store and output the best_n targets according to
+                objective value
         """
         targets = self.find_targets(best_n=best_n)
 
         with open(out_fn, 'w') as outf:
             # Write a header
-            outf.write('\t'.join(['cost', 'target-start', 'target-end',
+            outf.write('\t'.join(['objective-value', 'target-start', 'target-end',
                 'target-length',
                 'left-primer-start', 'left-primer-num-primers',
                 'left-primer-frac-bound', 'left-primer-target-sequences',
                 'right-primer-start', 'right-primer-num-primers',
                 'right-primer-frac-bound', 'right-primer-target-sequences',
                 'num-guides', 'total-frac-bound-by-guides',
+                'guides-median-activity', 'guides-5th-pctile-activity',
                 'guide-target-sequences', 'guide-target-sequence-positions']) +
                 '\n')
 
-            for (cost, target) in targets:
-                ((p1, p2), (guides_frac_bound, guides)) = target
+            for (obj_value, target) in targets:
+                ((p1, p2), (guides_stats, guides)) = target
+
+                # Break out guides_stats
+                guides_frac_bound, guides_activity_median, guide_activity_5thpctile = guides_stats
 
                 # Determine the target endpoints
                 target_start = p1.start
@@ -385,7 +469,8 @@ class TargetSearcher:
                 line = [cost, target_start, target_end, target_length,
                     p1.start, p1.num_primers, p1.frac_bound, p1_seqs_str,
                     p2.start, p2.num_primers, p2.frac_bound, p2_seqs_str,
-                    len(guides), guides_frac_bound, guides_seqs_str,
+                    len(guides), guides_frac_bound, guides_activity_median,
+                    guides_activity_5thpctile, guides_seqs_str,
                     guides_positions_str]
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')
@@ -396,13 +481,13 @@ class DesignTarget:
     """
 
     def __init__(self, target_start, target_end, guide_seqs,
-            left_primer_seqs, right_primer_seqs, cost):
+            left_primer_seqs, right_primer_seqs, obj_value):
         self.target_start = target_start
         self.target_end = target_end
         self.guide_seqs = tuple(sorted(guide_seqs))
         self.left_primer_seqs = tuple(sorted(left_primer_seqs))
         self.right_primer_seqs = tuple(sorted(right_primer_seqs))
-        self.cost = cost
+        self.obj_value = obj_value
 
     @staticmethod
     def read_design_targets(fn, num_targets=None):
@@ -434,14 +519,11 @@ class DesignTarget:
                     cols = {}
                     for j in range(len(ls)):
                         cols[col_names[j]] = ls[j]
-                    rows += [(cols['cost'], cols['target-start'],
+                    rows += [(cols['objective-value'], cols['target-start'],
                              cols['target-end'], cols)]
 
-        # Sort rows by cost (first in the tuple); in case of ties, sort
-        # by target start and target end positions (second and third in
-        # the tuple)
-        # Pull out the best N targets
-        rows = sorted(rows)
+        # Pull out the best N targets, assuming rows are already sorted
+        # as desired
         if num_targets != None:
             if len(rows) < num_targets:
                 raise Exception(("The number of rows in a design (%d) is fewer "
@@ -458,7 +540,7 @@ class DesignTarget:
                 cols['guide-target-sequences'].split(' '),
                 cols['left-primer-target-sequences'].split(' '),
                 cols['right-primer-target-sequences'].split(' '),
-                float(cols['cost'])
+                float(cols['objective-value'])
             )]
 
         return targets

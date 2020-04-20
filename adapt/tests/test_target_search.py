@@ -33,13 +33,13 @@ class TestTargetSearch(unittest.TestCase):
             self.a_aln, 4, 0, 1.0, (1, 1, 100))
         a_gs = guide_search.GuideSearcher(
             self.a_aln, 6, 0, 1.0, (1, 1, 100))
-        self.a = target_search.TargetSearcher(a_ps, a_gs,
+        self.a_min = target_search.TargetSearcher(a_ps, a_gs, obj_type='min',
             max_primers_at_site=2)
 
-    def test_find_primer_pairs_simple(self):
+    def test_find_primer_pairs_simple_min(self):
         suitable_primer_sites = [3, 4, 5, 6, 7, 8, 9, 10, 11, 19, 20, 21, 22,
                                  23, 24, 25, 26, 27, 28, 35, 36, 37]
-        for p1, p2 in self.a._find_primer_pairs():
+        for p1, p2 in self.a_min._find_primer_pairs():
             # Primers should be a suitable sites, and p2 must come
             # after p1
             self.assertIn(p1.start, suitable_primer_sites)
@@ -65,9 +65,9 @@ class TestTargetSearch(unittest.TestCase):
                             break
                     self.assertTrue(in_aln)
 
-    def test_find_targets_allowing_overlap(self):
+    def test_find_targets_allowing_overlap_min(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = self.a.find_targets(best_n=best_n, no_overlap=False)
+            targets = self.a_min.find_targets(best_n=best_n, no_overlap=False)
             self.assertEqual(len(targets), best_n)
 
             for cost, target in targets:
@@ -88,9 +88,9 @@ class TestTargetSearch(unittest.TestCase):
                 # The guides should cover all sequences
                 self.assertEqual(guides_frac_bound, 1.0)
 
-    def test_find_targets_without_overlap(self):
+    def test_find_targets_without_overlap_min(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = self.a.find_targets(best_n=best_n, no_overlap=True)
+            targets = self.a_min.find_targets(best_n=best_n, no_overlap=True)
             self.assertEqual(len(targets), best_n)
 
             for cost, target in targets:
@@ -113,7 +113,7 @@ class TestTargetSearch(unittest.TestCase):
                 # The guides should cover all sequences
                 self.assertEqual(guides_frac_bound, 1.0)
 
-    def test_find_targets_with_cover_frac(self):
+    def test_find_targets_with_cover_frac_min(self):
         b_seqs = ['ATCGAATGTACGGTCAACATTCTCACCTATGGATGCAGTGA',
                   'ATCGAATGTACGGTCAACATTCTCACCTATGGATGCAGTGA',
                   'GGGGAATGTACGGTCGGGGTTCTCACCTATGGCCCCAGTGA',
@@ -127,7 +127,7 @@ class TestTargetSearch(unittest.TestCase):
             b_aln, 4, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
         b_gs = guide_search.GuideSearcher(
             b_aln, 6, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
-        b = target_search.TargetSearcher(b_ps, b_gs,
+        b = target_search.TargetSearcher(b_ps, b_gs, obj_type='min',
             max_primers_at_site=2)
 
         for best_n in [1, 2, 3, 4, 5, 6]:
