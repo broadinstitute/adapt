@@ -72,11 +72,11 @@ class PrimerResult:
                 self.primers_in_cover == other.primers_in_cover)
 
 
-class PrimerSearcher(guide_search.GuideSearcher):
+class PrimerSearcher(guide_search.GuideSearcherMinimizeGuides):
     """Methods to search for primers over a genome.
 
-    This is a special case of guide_search.GuideSearcher; thus, it
-    is a subclass of guide_search.GuideSearcher. This effectively
+    This is a special case of guide_search.GuideSearcherMinimizeGuides; thus, it
+    is a subclass of guide_search.GuideSearcherMinimizeGuides. This effectively
     looks for guides (here, primers) within each window of size w
     where w is the length of a primer.
 
@@ -165,9 +165,11 @@ class PrimerSearcher(guide_search.GuideSearcher):
             alignment
         """
         window_size = self.guide_length # primer length
-        for cover in self._find_guides_that_cover_for_each_window(
+        for cover in self._find_guides_for_each_window(
                 window_size, hide_warnings=True):
-            start, end, num_primers, score, frac_bound, primers_in_cover = cover
+            start, end, primers_in_cover = cover
+            num_primers = len(primers_in_cover)
+            frac_bound = self._total_frac_bound_by_guides(primers_in_cover)
 
             # Check constraints
             if max_at_site is not None and num_primers > max_at_site:

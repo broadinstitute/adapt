@@ -31,12 +31,12 @@ class TestTargetSearch(unittest.TestCase):
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
         a_ps = primer_search.PrimerSearcher(
             self.a_aln, 4, 0, 1.0, (1, 1, 100))
-        a_gs = guide_search.GuideSearcher(
+        a_gs = guide_search.GuideSearcherMinimizeGuides(
             self.a_aln, 6, 0, 1.0, (1, 1, 100))
         self.a_min = target_search.TargetSearcher(a_ps, a_gs, obj_type='min',
             max_primers_at_site=2)
 
-    def test_find_primer_pairs_simple_min(self):
+    def test_find_primer_pairs_simple_minimize(self):
         suitable_primer_sites = [3, 4, 5, 6, 7, 8, 9, 10, 11, 19, 20, 21, 22,
                                  23, 24, 25, 26, 27, 28, 35, 36, 37]
         for p1, p2 in self.a_min._find_primer_pairs():
@@ -65,7 +65,7 @@ class TestTargetSearch(unittest.TestCase):
                             break
                     self.assertTrue(in_aln)
 
-    def test_find_targets_allowing_overlap_min(self):
+    def test_find_targets_allowing_overlap_minmize(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
             targets = self.a_min.find_targets(best_n=best_n, no_overlap=False)
             self.assertEqual(len(targets), best_n)
@@ -88,7 +88,7 @@ class TestTargetSearch(unittest.TestCase):
                 # The guides should cover all sequences
                 self.assertEqual(guides_frac_bound, 1.0)
 
-    def test_find_targets_without_overlap_min(self):
+    def test_find_targets_without_overlap_minimize(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
             targets = self.a_min.find_targets(best_n=best_n, no_overlap=True)
             self.assertEqual(len(targets), best_n)
@@ -113,7 +113,7 @@ class TestTargetSearch(unittest.TestCase):
                 # The guides should cover all sequences
                 self.assertEqual(guides_frac_bound, 1.0)
 
-    def test_find_targets_with_cover_frac_min(self):
+    def test_find_targets_with_cover_frac_minmize(self):
         b_seqs = ['ATCGAATGTACGGTCAACATTCTCACCTATGGATGCAGTGA',
                   'ATCGAATGTACGGTCAACATTCTCACCTATGGATGCAGTGA',
                   'GGGGAATGTACGGTCGGGGTTCTCACCTATGGCCCCAGTGA',
@@ -125,7 +125,7 @@ class TestTargetSearch(unittest.TestCase):
         seq_groups = {0: {0}, 1: {1, 2, 3, 4}}
         b_ps = primer_search.PrimerSearcher(
             b_aln, 4, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
-        b_gs = guide_search.GuideSearcher(
+        b_gs = guide_search.GuideSearcherMinimizeGuides(
             b_aln, 6, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
         b = target_search.TargetSearcher(b_ps, b_gs, obj_type='min',
             max_primers_at_site=2)
@@ -151,6 +151,9 @@ class TestTargetSearch(unittest.TestCase):
                 # The guides should not cover the last sequence in b_seqs,
                 # so the frac_bound should be <1.0
                 self.assertLess(guides_frac_bound, 1.0)
+
+    # TODO test with maximization; add mock activity model to GuideSearcher
+    # that returns 1 iff guide-target match
 
     def tearDown(self):
         # Re-enable logging

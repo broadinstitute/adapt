@@ -13,8 +13,8 @@ from adapt.utils import index_compress
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-class TestGuideSearch(unittest.TestCase):
-    """Tests methods in the GuideSearch class.
+class TestGuideSearcherMinimizeGuides(unittest.TestCase):
+    """Tests methods in the GuideSearcherMinimizeGuides class.
     """
 
     def setUp(self):
@@ -27,12 +27,12 @@ class TestGuideSearch(unittest.TestCase):
         self.a_seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
         self.a_window_size = 5
-        self.a = guide_search.GuideSearcher(self.a_aln, 4, 0, 1.0, (1, 1, 100))
+        self.a = guide_search.GuideSearcherMinimizeGuides(self.a_aln, 4, 0, 1.0, (1, 1, 100))
 
         self.b_seqs = ['ATCGAA', 'ATC-AA']
         self.b_aln = alignment.Alignment.from_list_of_seqs(self.b_seqs)
         self.b_window_size = 5
-        self.b = guide_search.GuideSearcher(self.b_aln, 4, 0, 1.0, (1, 1, 100))
+        self.b = guide_search.GuideSearcherMinimizeGuides(self.b_aln, 4, 0, 1.0, (1, 1, 100))
 
         self.c_seqs = ['GTATCATCGGCCATGNAC',
                        'GTNNCATCGG-CATGNAC',
@@ -42,8 +42,8 @@ class TestGuideSearch(unittest.TestCase):
                        'GTATCAGCGGCCATGNAC']
         self.c_aln = alignment.Alignment.from_list_of_seqs(self.c_seqs)
         self.c_window_size = 14
-        self.c = guide_search.GuideSearcher(self.c_aln, 5, 1, 1.0, (1, 1, 100))
-        self.c_partial = guide_search.GuideSearcher(self.c_aln, 5, 1, 0.6,
+        self.c = guide_search.GuideSearcherMinimizeGuides(self.c_aln, 5, 1, 1.0, (1, 1, 100))
+        self.c_partial = guide_search.GuideSearcherMinimizeGuides(self.c_aln, 5, 1, 0.6,
             (1, 1, 100))
 
         self.d_seqs = ['GTATACGG',
@@ -51,21 +51,21 @@ class TestGuideSearch(unittest.TestCase):
                        'TACTACGG']
         self.d_aln = alignment.Alignment.from_list_of_seqs(self.d_seqs)
         self.d_window_size = 8
-        self.d = guide_search.GuideSearcher(self.d_aln, 5, 0, 1.0, (1, 1, 100))
+        self.d = guide_search.GuideSearcherMinimizeGuides(self.d_aln, 5, 0, 1.0, (1, 1, 100))
 
         self.e_seqs = ['GTAGACGG',
                        'ACGTACGG',
                        'TACTTCGG']
         self.e_aln = alignment.Alignment.from_list_of_seqs(self.e_seqs)
         self.e_window_size = 8
-        self.e = guide_search.GuideSearcher(self.e_aln, 5, 1, 1.0, (1, 1, 100))
+        self.e = guide_search.GuideSearcherMinimizeGuides(self.e_aln, 5, 1, 1.0, (1, 1, 100))
 
         self.f_seqs = ['GTNNACGN',
                        'ANNTACGN',
                        'TANTTNNN']
         self.f_aln = alignment.Alignment.from_list_of_seqs(self.f_seqs)
         self.f_window_size = 8
-        self.f = guide_search.GuideSearcher(self.f_aln, 5, 1, 1.0, (1, 1, 100))
+        self.f = guide_search.GuideSearcherMinimizeGuides(self.f_aln, 5, 1, 1.0, (1, 1, 100))
 
         self.g_seqs = ['GTATCATCGGCCATCNAC',
                        'CTATCACCTGCTACGNAC',
@@ -73,8 +73,8 @@ class TestGuideSearch(unittest.TestCase):
                        'TTAGGACCGACCATGNAC']
         self.g_aln = alignment.Alignment.from_list_of_seqs(self.g_seqs)
         self.g_window_size = 18
-        self.g = guide_search.GuideSearcher(self.g_aln, 5, 0, 1.0, (1, 1, 100))
-        self.g_partial = guide_search.GuideSearcher(self.g_aln, 5, 0, 0.5,
+        self.g = guide_search.GuideSearcherMinimizeGuides(self.g_aln, 5, 0, 1.0, (1, 1, 100))
+        self.g_partial = guide_search.GuideSearcherMinimizeGuides(self.g_aln, 5, 0, 0.5,
             (1, 1, 100))
 
         self.h_seqs = ['GTATCAGCGGCCATCNACAA',
@@ -83,7 +83,7 @@ class TestGuideSearch(unittest.TestCase):
                        'GTATCATCCACNATGNACGG']
         self.h_aln = alignment.Alignment.from_list_of_seqs(self.h_seqs)
         self.h_window_size = 18
-        self.h = guide_search.GuideSearcher(self.h_aln, 5, 1, 1.0, (0.5, 0, 1))
+        self.h = guide_search.GuideSearcherMinimizeGuides(self.h_aln, 5, 1, 1.0, (0.5, 0, 1))
 
         self.i_seqs = ['GTATCAGCGGCCATCAACAA',
                        'GT-TCACCTGCTACGAACTT',
@@ -91,7 +91,7 @@ class TestGuideSearch(unittest.TestCase):
                        'GTATCATCCACCATGAACGG']
         self.i_aln = alignment.Alignment.from_list_of_seqs(self.i_seqs)
         self.i_window_size = 5
-        self.i = guide_search.GuideSearcher(self.i_aln, 5, 1, 1.0, (0.5, 0, 1))
+        self.i = guide_search.GuideSearcherMinimizeGuides(self.i_aln, 5, 1, 1.0, (0.5, 0, 1))
 
         # Skip guide clustering, which may not work well when the guides
         # are so short in these tests
@@ -291,7 +291,7 @@ class TestGuideSearch(unittest.TestCase):
                 'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
                 'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100))
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # The best guide is 'AAAAA'
         self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
@@ -303,7 +303,7 @@ class TestGuideSearch(unittest.TestCase):
                 return False
             else:
                 return True
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             guide_is_suitable_fn=f)
         self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
                          set(['CCCCC', 'GGGGG']))
@@ -316,7 +316,7 @@ class TestGuideSearch(unittest.TestCase):
                 'TAGATCTAATCCCAGTATGGTACTTATC',
                 'TAGAACTAATGGCAGTTTGGTCCTTGTC']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100))
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # 4 guides are needed (3 for the first 4 sequences, 1 for the last
         # 2 sequences)
@@ -327,7 +327,7 @@ class TestGuideSearch(unittest.TestCase):
         # 2 guides are needed
         seq_groups = {2010: {0, 1, 2, 3}, 2018: {4, 5}}
         cover_frac = {2010: 0.1, 2018: 1.0}
-        gs = guide_search.GuideSearcher(aln, 5, 0, cover_frac, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, cover_frac, (1, 1, 100),
             seq_groups=seq_groups)
         self.assertEqual(len(gs._find_guides_that_cover_in_window(0, 28)), 2)
 
@@ -340,7 +340,7 @@ class TestGuideSearch(unittest.TestCase):
                 'TAGAACTAATGGCAGTTTGGTACTTGTC']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
 
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100))
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # The function _score_collection_of_guides() will need to know
         # positions of guides (in _selected_guide_positions), so insert
@@ -363,7 +363,7 @@ class TestGuideSearch(unittest.TestCase):
 
         seq_groups = {2010: {0, 1, 2, 3}, 2018: {4, 5}}
         cover_frac = {2010: 0.1, 2018: 1.0}
-        gs = guide_search.GuideSearcher(aln, 5, 0, cover_frac, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, cover_frac, (1, 1, 100),
             seq_groups=seq_groups)
 
         # The function _score_collection_of_guides() will need to know
@@ -388,12 +388,12 @@ class TestGuideSearch(unittest.TestCase):
         aln = alignment.Alignment.from_list_of_seqs(seqs)
 
         # Two guides are needed for coverage
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             allow_gu_pairs=False)
         self.assertEqual(len(gs._find_guides_that_cover_in_window(0, 28)), 2)
 
         # Only one guide is needed for coverage: 'AACAC'
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             allow_gu_pairs=True)
         self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
                          set(['AACAC']))
@@ -415,7 +415,7 @@ class TestGuideSearch(unittest.TestCase):
 
         # Search with 0 mismatches and 100% coverage
         window_size = 11
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             required_guides=required_guides)
 
         # Search in window starting at position 3
@@ -451,7 +451,7 @@ class TestGuideSearch(unittest.TestCase):
 
         # Search with 1 mismatch and 50% coverage
         window_size = 11
-        gs = guide_search.GuideSearcher(aln, 5, 1, 0.5, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 1, 0.5, (1, 1, 100),
             required_guides=required_guides)
 
         # Search in window starting at position 3
@@ -469,7 +469,7 @@ class TestGuideSearch(unittest.TestCase):
 
         blacklisted_ranges = {(3, 8), (14, 18)}
 
-        gs = guide_search.GuideSearcher(aln, 3, 0, 1.0, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 3, 0, 1.0, (1, 1, 100),
             blacklisted_ranges=blacklisted_ranges)
 
         # For each position i, encode 1 if the guide (of length 3)
@@ -487,14 +487,14 @@ class TestGuideSearch(unittest.TestCase):
                 'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
                 'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100))
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # The best guide is 'AAAAA'
         self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
                          set(['AAAAA']))
 
         # Do not allow guides overlapping (5, 9)
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100),
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             blacklisted_ranges={(5, 9)})
         self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
                          set(['CCCCC', 'GGGGG']))
@@ -505,7 +505,7 @@ class TestGuideSearch(unittest.TestCase):
                 'ATCGGAAAAAAACGTCCTCCCCCTGTAC',
                 'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
-        gs = guide_search.GuideSearcher(aln, 5, 0, 1.0, (1, 1, 100))
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # The best guides in [1, 8) are 'CCAAA' and 'GGAAA'
         self.assertEqual(gs._find_guides_that_cover_in_window(1, 8),
