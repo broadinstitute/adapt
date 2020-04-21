@@ -196,25 +196,25 @@ class TestAlignment(unittest.TestCase):
 
     def test_construct_guide_a(self):
         self.assertEqual(self.a.construct_guide(0, 4, {0: {0,1,2,3,4}}, 0, False, self.gc),
-                         ('ATCG', [0,1,2,3]))
+                         ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a.construct_guide(0, 4, {0: {0,1,2,3,4}}, 1, False, self.gc),
-                         ('ATCG', [0,1,2,3,4]))
+                         ('ATCG', {0,1,2,3,4}))
         self.assertEqual(self.a.construct_guide(0, 4, {0: {4}}, 1, False, self.gc),
-                         ('AGCG', [4]))
+                         ('AGCG', {4}))
         self.assertIn(self.a.construct_guide(0, 4, {0: {2,3}}, 0, False, self.gc),
-                      [('ATCG', [2,3]), ('ACCG', [2,3])])
+                      [('ATCG', {2,3}), ('ACCG', {2,3})])
         self.assertEqual(self.a.construct_guide(1, 4, {0: {0,1,2,3,4}}, 0, False, self.gc),
-                         ('TCGA', [0,1,2,3]))
+                         ('TCGA', {0,1,2,3}))
         self.assertEqual(self.a.construct_guide(2, 4, {0: {0,1,2,3,4}}, 0, False, self.gc),
-                         ('CGAA', [0,2,4]))
+                         ('CGAA', {0,2,4}))
         self.assertEqual(self.a.construct_guide(2, 4, {0: {0,1,2,3,4}}, 1, False, self.gc),
-                         ('CGAA', [0,1,2,3,4]))
+                         ('CGAA', {0,1,2,3,4}))
         self.assertEqual(self.a.construct_guide(2, 4, {0: {0,1,2,3,4}}, 2, False, self.gc),
-                         ('CGAA', [0,1,2,3,4]))
+                         ('CGAA', {0,1,2,3,4}))
         self.assertIn(self.a.construct_guide(2, 4, {0: {0,1,2,3}}, 0, False, self.gc),
-                      [('CGAA', [0,2]), ('CGAT', [1,3])])
+                      [('CGAA', {0,2}), ('CGAT', {1,3})])
         self.assertIn(self.a.construct_guide(2, 4, {0: {0,1,2,3}}, 1, False, self.gc),
-                      [('CGAA', [0,1,2,3]), ('CGAT', [0,1,2,3])])
+                      [('CGAA', {0,1,2,3}), ('CGAT', {0,1,2,3})])
 
     def test_construct_guide_b(self):
         # self.b has many Ns, which makes it difficult to write test cases
@@ -222,23 +222,23 @@ class TestAlignment(unittest.TestCase):
         # which a position only has N); so pass None to guide_clusterer in
         # construct_guide() to skip clustering
         self.assertEqual(self.b.construct_guide(0, 4, {0: {0,1,2,3,4}}, 0, False, None),
-                         ('ATCG', [0,2]))
+                         ('ATCG', {0,2}))
         self.assertEqual(self.b.construct_guide(0, 4, {0: {0,1,2,3,4}}, 1, False, None),
-                         ('ATCG', [0,2]))
+                         ('ATCG', {0,2}))
         self.assertEqual(self.b.construct_guide(0, 4, {0: {0,1,2,3,4}}, 2, False, None),
-                         ('ATCG', [0,1,2,3,4]))
+                         ('ATCG', {0,1,2,3,4}))
         self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 0, False, None),
-                         ('CGAA', [0]))
+                         ('CGAA', {0}))
         self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 1, False, None),
-                         ('CGAT', [0]))
+                         ('CGAT', {0}))
         self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 2, False, None),
-                         ('CGAT', [0,1,2,3]))
+                         ('CGAT', {0,1,2,3}))
         self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 3, False, None),
-                         ('CGAT', [0,1,2,3,4]))
+                         ('CGAT', {0,1,2,3,4}))
         self.assertEqual(self.b.construct_guide(2, 4, {0: {2,4}}, 2, False, None),
-                         ('CGAC', [2,4]))
+                         ('CGAC', {2,4}))
         self.assertIn(self.b.construct_guide(2, 4, {0: {2,3,4}}, 2, False, None),
-                      [('CGAC', [2,4]), ('CGAT', [2,3])])
+                      [('CGAC', {2,4}), ('CGAT', {2,3})])
         with self.assertRaises(alignment.CannotConstructGuideError):
             # Should fail when 'N' is all that exists at a position
             self.b.construct_guide(0, 4, {0: {1,3,4}}, 0, False, None)
@@ -268,7 +268,7 @@ class TestAlignment(unittest.TestCase):
         # needing more from the group consisting of these sequences
         self.assertEqual(seqs_aln.construct_guide(0, 4, seqs_to_consider, 0,
                             False, self.gc, num_needed=num_needed),
-                         ('ATCG', [0, 1, 3, 4, 5]))
+                         ('ATCG', {0, 1, 3, 4, 5}))
 
     def test_construct_guide_with_small_group_needed(self):
         seqs = ['ATCGAA',
@@ -286,7 +286,7 @@ class TestAlignment(unittest.TestCase):
         # needing more from a group consisting of the 'GGGCCC' sequences
         self.assertEqual(seqs_aln.construct_guide(0, 4, seqs_to_consider, 0,
                             False, self.gc, num_needed=num_needed),
-                         ('GGGC', [2, 6]))
+                         ('GGGC', {2, 6}))
 
     def test_construct_guide_with_suitable_fn(self):
         seqs = ['GTATCAAAT',
@@ -304,7 +304,7 @@ class TestAlignment(unittest.TestCase):
         p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer)
         gd, covered_seqs = p
         self.assertEqual(gd, 'GTATCA')
-        self.assertEqual(covered_seqs, [0, 2, 3])
+        self.assertEqual(covered_seqs, {0, 2, 3})
 
         # Do not allow guides with 'TAT' in them
         def f(guide):
@@ -317,7 +317,7 @@ class TestAlignment(unittest.TestCase):
             guide_is_suitable_fn=f)
         gd, covered_seqs = p
         self.assertEqual(gd, 'CTACCA')
-        self.assertEqual(covered_seqs, [1])
+        self.assertEqual(covered_seqs, {1})
 
         # Do not allow guides with 'A' in them
         def f(guide):
@@ -346,7 +346,7 @@ class TestAlignment(unittest.TestCase):
         p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer)
         gd, covered_seqs = p
         self.assertEqual(gd, 'GTATCA')
-        self.assertEqual(covered_seqs, [0, 2, 3])
+        self.assertEqual(covered_seqs, {0, 2, 3})
 
         # Only predict guides starting with 'A' to be active
         class PredictorTest:
@@ -363,7 +363,7 @@ class TestAlignment(unittest.TestCase):
             predictor=predictor, stop_early=False)
         gd, covered_seqs = p
         self.assertEqual(gd, 'ATACCA')
-        self.assertEqual(covered_seqs, [1])
+        self.assertEqual(covered_seqs, {1})
 
         # Only predict guides starting with 'A' to be active, and impose an
         # early stopping criterion
@@ -421,7 +421,7 @@ class TestAlignment(unittest.TestCase):
             guide_clusterer, required_flanking_seqs=('C', None))
         gd, covered_seqs = p
         self.assertEqual(gd, 'AA')
-        self.assertEqual(set(covered_seqs), {0,1,9,10})
+        self.assertEqual(covered_seqs, {0,1,9,10})
 
         # The best guide at start=2 is 'TT', but if we require
         # 'C' to flank on the 5' end, the best is 'AA'
@@ -430,7 +430,7 @@ class TestAlignment(unittest.TestCase):
             guide_clusterer, required_flanking_seqs=('M', None))
         gd, covered_seqs = p
         self.assertEqual(gd, 'TT')
-        self.assertEqual(set(covered_seqs), {2,3,4,5,6,7,8})
+        self.assertEqual(covered_seqs, {2,3,4,5,6,7,8})
 
     def test_sequences_bound_by_guide(self):
         seqs = ['TCAAAT',

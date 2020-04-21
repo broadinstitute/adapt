@@ -256,7 +256,7 @@ class Alignment(SequenceList):
         Returns:
             tuple (x, y) where:
                 x is the sequence of the constructed guide
-                y is a list of indices of sequences (a subset of
+                y is a set of indices of sequences (a subset of
                     values in seqs_to_consider) to which the guide x will
                     hybridize
             (Note that it is possible that x binds to no sequences and that
@@ -342,7 +342,7 @@ class Alignment(SequenceList):
             # Memoize activity evaluations
             pair_eval = {}
         def determine_binding_and_active_seqs(gd_sequence):
-            binding_seqs = []
+            binding_seqs = set()
             num_bound = 0
             if predictor is not None:
                 num_passed_predict_active = 0
@@ -368,14 +368,14 @@ class Alignment(SequenceList):
                         pair = (seq_with_context, gd_sequence)
                         if pair_eval[pair]:
                             num_passed_predict_active += 1
-                            binding_seqs += [seq_idx]
+                            binding_seqs.add(seq_idx)
             else:
                 num_passed_predict_active = None
                 for i, (seq, seq_idx) in enumerate(seq_rows):
                     if guide.guide_binds(gd_sequence, seq, mismatches,
                             allow_gu_pairs):
                         num_bound += 1
-                        binding_seqs += [seq_idx]
+                        binding_seqs.add(seq_idx)
             return binding_seqs, num_bound, num_passed_predict_active
 
         # Define a score function (higher is better) for a collection of
