@@ -247,9 +247,7 @@ class Alignment(SequenceList):
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
             predictor: if set, a adapt.utils.predict_activity.Predictor
-                object, with evaluate() function to predict activity and
-                determine whether a guide has sufficiently high activity
-                for a target. If None, do not predict activity.
+                object. If None, do not predict activity.
             stop_early: if True, impose early stopping criteria while iterating
                 over clusters to improve runtime
 
@@ -346,7 +344,8 @@ class Alignment(SequenceList):
             num_bound = 0
             if predictor is not None:
                 num_passed_predict_active = 0
-                # Determine what calls to make to predictor.evaluate(); it
+                # Determine what calls to make to
+                # predictor.determine_highly_active(); it
                 # is best to batch these
                 pairs_to_eval = []
                 for i, (seq, seq_idx) in enumerate(seq_rows):
@@ -356,7 +355,7 @@ class Alignment(SequenceList):
                         pair = (seq_with_context, gd_sequence)
                         pairs_to_eval += [pair]
                 # Evaluate activity
-                evals = predictor.evaluate(start, pairs_to_eval)
+                evals = predictor.determine_highly_active(start, pairs_to_eval)
                 for pair, y in zip(pairs_to_eval, evals):
                     pair_eval[pair] = y
                 # Fill in binding_seqs
@@ -488,7 +487,7 @@ class Alignment(SequenceList):
                     continue
                 if predictor is not None:
                     s_with_context, _ = seq_rows_with_context[i]
-                    if not predictor.evaluate(start, [(s_with_context, s)])[0]:
+                    if not predictor.determine_highly_active(start, [(s_with_context, s)])[0]:
                         # s is not active against itself; skip it
                         continue
                 # s has no ambiguity and is a suitable guide; use it

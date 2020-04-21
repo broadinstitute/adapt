@@ -66,11 +66,8 @@ class GuideSearcher:
                 aln.construct_guide() and always compute the guide (this can
                 be useful if we know the memoized result will never be used
                 and memoizing it may be slow)
-            predictor: adapt.utils.predict_activity.Predictor object, with
-                an evaluate() function to determine whether a guide has a
-                sufficiently high activity in detecting a target. If None,
-                do not predict activities or use them to constrain the
-                design
+            predictor: adapt.utils.predict_activity.Predictor object. If
+                None, do not predict activities.
         """
         self.aln = aln
         self.guide_length = guide_length
@@ -986,6 +983,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 pad_spaces = max_stat_name_len - len(name)
                 name_padded = " "*pad_spaces + name + ":"
                 print(name_padded, str(val))
+
 
 class CannotAchieveDesiredCoverageError(Exception):
     def __init__(self, value):
