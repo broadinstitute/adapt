@@ -432,6 +432,32 @@ class TestAlignment(unittest.TestCase):
         self.assertEqual(gd, 'TT')
         self.assertEqual(covered_seqs, {2,3,4,5,6,7,8})
 
+    def test_determine_representative_guides(self):
+        seqs = ['TCAAAT',
+                'CCAAAA',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'GGGGGG',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'TCAAAT',
+                'TCAAAT',
+                'TCAAAA',
+                'T-GGAA']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        guide_length = 6
+        guide_clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length),
+            k=3)
+        seqs_to_consider = {0: set(range(len(seqs)))}
+
+        representatives = aln.determine_representative_guides(0,
+                guide_length, seqs_to_consider, guide_clusterer)
+        self.assertSetEqual(representatives,
+                {'TCAAAT', 'CCAAAA', 'GGGGGG', 'CATTTT'})
+
     def test_sequences_bound_by_guide(self):
         seqs = ['TCAAAT',
                 'CCAAAA',
