@@ -63,7 +63,7 @@ class GuideSearcher:
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
             do_not_memoize_guides: if True, never memoize the results of
-                aln.construct_guide() and always compute the guide (this can
+                compute guides at a site and always compute the guide (this can
                 be useful if we know the memoized result will never be used
                 and memoizing it may be slow)
             predictor: adapt.utils.predict_activity.Predictor object. If
@@ -72,8 +72,8 @@ class GuideSearcher:
         self.aln = aln
         self.guide_length = guide_length
 
-        # Because calls to alignment.Alignment.construct_guide() are expensive
-        # and are repeated very often, memoize the output
+        # Because calls to compute guides at a site are expensive and are
+        # repeated very often, memoize the output
         self._memoized_guides = defaultdict(dict)
         self._memoized_guides_last_inner_dict = None
         self._memoized_guides_last_inner_dict_key = None
@@ -127,28 +127,26 @@ class GuideSearcher:
 
         self.predictor = predictor
 
-    def _construct_guide_memoized(self, start, call_fn, key_fn,
+    def _compute_guide_memoized(self, start, call_fn, key_fn,
             use_last=False):
-        """Make a memoized call to alignment.Alignment.construct_guide().
+        """Make a memoized call to compute a guide.
+
+        The actual computation is defined in a subclass and passed as
+        a function (call_fn) here -- it can be to construct a guide or
+        to compute information (e.g., expected activity) about different
+        guides in a ground set.
 
         Args:
             start: start position in alignment at which to target
-            call_fn: function to call for constructing guide(s)
-            key_fn: function call to construct a key from call_state
+            call_fn: function to call for compute guide(s)
+            key_fn: function call to construct a key from current state
             use_last: if set, check for a memoized result by using the last
-                key constructed (it is assumed that seqs_to_consider and
-                num_needed are identical to the last provided values)
+                key constructed (it is assumed that key is identical to
+                the last provided values)
 
         Returns:
             result of call_fn()
         """
-        def construct_p():
-            try:
-                p = call_fn()
-            except alignment.CannotConstructGuideError:
-                p = None
-            return p
-
         if use_last:
             # key (defined below) can be large and slow to hash; therefore,
             # assume that the last computed key is identical to the one that
@@ -175,17 +173,17 @@ class GuideSearcher:
             if p_memoized is None:
                 p = None
             else:
-                p = self._decompress_construct_guide_result(p_memoized)
+                p = self._decompress_compute_guide_result(p_memoized)
         else:
             # The result is not memoized; compute it and memoize it
 
-            p = construct_p()
+            p = call_fn()
 
             if p is None:
                 p_to_memoize = None
             else:
                 # Compress p before memoizing it
-                p_to_memoize = self._compress_construct_guide_result(p)
+                p_to_memoize = self._compress_compute_guide_result(p)
 
             inner_dict[start] = p_to_memoize
 
@@ -397,7 +395,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
 
         self.mismatches = mismatches
 
-    def _compress_construct_guide_result(self, p):
+    def _compress_compute_guide_result(self, p):
         """Compress the result of alignment.Alignment.construct_guide().
 
         Args:
@@ -413,7 +411,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
 
         return (gd, covered_seqs_compressed)
 
-    def _decompress_construct_guide_result(self, p_compressed):
+    def _decompress_compute_guide_result(self, p_compressed):
         """Decompress the compressed version of an output of construct_guide().
 
         Args:
@@ -499,7 +497,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             key = (seqs_to_consider_frozen, num_needed_frozen)
             return key
         
-        p = super()._construct_guide_memoized(start, construct_p, make_key,
+        p = super()._compute_guide_memoized(start, construct_p, make_key,
                 use_last=use_last)
         return p
 
