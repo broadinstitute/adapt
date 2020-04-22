@@ -5,6 +5,8 @@ from collections import defaultdict
 import logging
 import statistics
 
+import numpy as np
+
 from adapt.utils import guide
 from adapt.utils import lsh
 
@@ -727,6 +729,66 @@ class Alignment(SequenceList):
                     continue
             representatives.add(gd)
         return representatives
+
+    def compute_activity(self, start, gd_sequence, predictor):
+        """Compute activity between a guide sequence and every target sequence
+        in the alignment.
+
+        This only considers the region of the alignment within the range
+        [start, start + len(gd_sequence)), along with sequence context.
+
+        Args:
+            start: start position in alignment at which to target
+            gd_sequence: str representing guide sequence
+            predictor: a adapt.utils.predict_activity.Predictor object
+
+        Returns:
+            numpy array x where x[i] gives the predicted activity between
+            gd_sequence and the sequence in the alignment at index i
+        """
+        guide_length = len(gd_sequence)
+        assert start + guide_length <= self.seq_length
+
+        # Extract the target sequences, including context to use with
+        # prediction
+        if (start - predictor.context_nt < 0 or
+                start + guide_length + predictor.context_nt > self.seq_length):
+            raise CannotConstructGuideError(("The context needed for "
+                "the target to predict activity falls outside the "
+                "range of the alignment at this position"))
+        aln_for_guide_with_context = self.extract_range(
+                start - predictor.context_nt,
+                start + guide_length + predictor.context_nt)
+
+        # Ignore any sequences in the alignment that have a gap in
+        # this region
+        all_seqs_to_consider = set(range(self.num_sequences))
+        seqs_with_gap = set(aln_for_guide_with_context.seqs_with_gap(all_seqs_to_consider))
+        seqs_to_consider = all_seqs_to_consider.difference(seqs_with_gap)
+
+        seq_rows_with_context = aln_for_guide_with_context.make_list_of_seqs(
+                seqs_to_consider, include_idx=True)
+
+        # Start array of predicted activities; make this all 0s so that
+        # sequences for which activities are not computed (e.g., gap)
+        # have activity=0
+        activities = np.zeros(self.num_sequences)
+
+        # Determine what calls to make to predictor.compute_activity(); it
+        # is best to batch these
+        pairs_to_eval = []
+        pairs_to_eval_seq_idx = []
+        for seq_with_context, seq_idx in seq_rows_with_context:
+            pair = (seq_with_context, gd_sequence)
+            pairs_to_eval += [pair]
+            pairs_to_eval_seq_idx += [seq_idx]
+        # Evaluate activity
+        evals = predictor.compute_activity(start, pairs_to_eval)
+        for activity, seq_idx in zip(evals, pairs_to_eval_seq_idx):
+            # Fill in the activity for seq_idx
+            activities[seq_idx] = activity
+
+        return activities
 
     def sequences_bound_by_guide(self, gd_seq, gd_start, mismatches,
             allow_gu_pairs, required_flanking_seqs=(None, None)):

@@ -458,6 +458,49 @@ class TestAlignment(unittest.TestCase):
         self.assertSetEqual(representatives,
                 {'TCAAAT', 'CCAAAA', 'GGGGGG', 'CATTTT'})
 
+    def test_compute_activity(self):
+        # Predict guides matching target to have activity 1, and
+        # starting with 'A' to have activity 2 (otherwise, 0)
+        class PredictorTest:
+            def __init__(self):
+                self.context_nt = 1
+            def compute_activity(self, start_pos, pairs):
+                y = []
+                for target, guide in pairs:
+                    target_without_context = target[self.context_nt:len(target)-self.context_nt]
+                    if guide == target_without_context:
+                        if guide[0] == 'A':
+                            y += [2]
+                        else:
+                            y += [1]
+                    else:
+                        y += [0]
+                return y
+        predictor = PredictorTest()
+
+        seqs = ['TCAAAT',
+                'CCAAAA',
+                'CATTTT',
+                'CATTTT',
+                'CATTTT',
+                'GGGGGG',
+                'CATTTT',
+                'CATTTT',
+                'CAT-TT',
+                'TCAAAT',
+                'TCA-AT',
+                'TCAAAA',
+                'TCGGAA']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        activities_AAA = aln.compute_activity(2, 'AAA', predictor)
+        self.assertListEqual(list(activities_AAA),
+                [2, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 2, 0])
+
+        activities_TTT = aln.compute_activity(2, 'TTT', predictor)
+        self.assertListEqual(list(activities_TTT),
+                [0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0])
+
     def test_sequences_bound_by_guide(self):
         seqs = ['TCAAAT',
                 'CCAAAA',
