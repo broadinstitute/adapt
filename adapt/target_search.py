@@ -288,7 +288,7 @@ class TargetSearcher:
             # Find guides in the window, only searching across
             # the sequences in guide_seqs_to_consider
             try:
-                guides = self.gs._find_guides_that_cover_in_window(
+                guides = self.gs._find_guides_in_window(
                     window_start, window_end,
                     only_consider=guide_seqs_to_consider)
             except guide_search.CannotAchieveDesiredCoverageError:
@@ -307,9 +307,8 @@ class TargetSearcher:
             # Calculate median activity and 5'th percentile of activity
             # of the guides
             # TODO implement below functions
-            guides_activity_median = self.gs._activity_percentile(guides, 0.5)
-            guides_acitivty_5thpctile = self.gs._activity_percentile(guides,
-                    0.05)
+            guides_activity_median, guides_activity_5thpctile = \
+                    self.gs.activity_percentile(guides, [0.5, 0.05])
             guides_stats = (guides_frac_bound, guides_activity_median,
                     guides_activity_5thpctile)
 

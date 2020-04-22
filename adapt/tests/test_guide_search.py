@@ -253,18 +253,18 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # should only be 1
         self.assertEqual(gd_score, 1)
 
-    def test_find_guides_that_cover_in_window(self):
-        self.assertEqual(self.c._find_guides_that_cover_in_window(
+    def test_find_guides_in_window(self):
+        self.assertEqual(self.c._find_guides_in_window(
                             1, 1 + self.c_window_size),
                          set(['ATCGG', 'AAAAA']))
-        self.assertIn(self.c_partial._find_guides_that_cover_in_window(
+        self.assertIn(self.c_partial._find_guides_in_window(
                         1, 1 + self.c_window_size),
                       {frozenset(['ATCGG']), frozenset(['TCATC'])})
 
-        self.assertIn(self.g._find_guides_that_cover_in_window(
+        self.assertIn(self.g._find_guides_in_window(
                         0, 0 + self.g_window_size),
                       [set(['TATCA', 'CCATG']), set(['CGGCC', 'TTAGG', 'CTATC'])])
-        self.assertIn(self.g_partial._find_guides_that_cover_in_window(
+        self.assertIn(self.g_partial._find_guides_in_window(
                         0, 0 + self.g_window_size),
                       [set(['TATCA']), set(['CCATG']), set(['CGGCC'])])
 
@@ -272,7 +272,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # The best guides are in regions with missing data, but the
         # alignment and thresholds on missing data are setup to avoid
         # guides in these regions
-        self.assertEqual(self.h._find_guides_that_cover_in_window(
+        self.assertEqual(self.h._find_guides_in_window(
                             0, 0 + self.h_window_size),
                          set(['CAACG', 'CACCC']))
 
@@ -280,10 +280,10 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # It should not be able to find a guide in a window where the only
         # possible guides overlap sequences with a gap
         with self.assertRaises(guide_search.CannotAchieveDesiredCoverageError):
-            self.i._find_guides_that_cover_in_window(1, 1 + self.i_window_size)
+            self.i._find_guides_in_window(1, 1 + self.i_window_size)
 
         # It should be able to find a guide in a window without a gap
-        self.i._find_guides_that_cover_in_window(10, 10 + self.i_window_size)
+        self.i._find_guides_in_window(10, 10 + self.i_window_size)
 
     def test_guide_is_suitable_fn(self):
         seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
@@ -294,7 +294,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # The best guide is 'AAAAA'
-        self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
+        self.assertEqual(gs._find_guides_in_window(0, 28),
                          set(['AAAAA']))
 
         # Do not allow guides with 'AAA' in them
@@ -305,7 +305,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
                 return True
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             guide_is_suitable_fn=f)
-        self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
+        self.assertEqual(gs._find_guides_in_window(0, 28),
                          set(['CCCCC', 'GGGGG']))
 
     def test_with_groups(self):
@@ -320,7 +320,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
 
         # 4 guides are needed (3 for the first 4 sequences, 1 for the last
         # 2 sequences)
-        self.assertEqual(len(gs._find_guides_that_cover_in_window(0, 28)), 4)
+        self.assertEqual(len(gs._find_guides_in_window(0, 28)), 4)
 
         # Divide into groups, wanting to cover more of group 2018; now
         # we only need 1 guide from group 2010 and 1 from group 2018, so just
@@ -329,7 +329,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         cover_frac = {2010: 0.1, 2018: 1.0}
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, cover_frac, (1, 1, 100),
             seq_groups=seq_groups)
-        self.assertEqual(len(gs._find_guides_that_cover_in_window(0, 28)), 2)
+        self.assertEqual(len(gs._find_guides_in_window(0, 28)), 2)
 
     def test_score_collection_of_guides_without_groups(self):
         seqs = ['ATCAAATCGATGCCCTAGTCAGTCAACT',
@@ -390,12 +390,12 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # Two guides are needed for coverage
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             allow_gu_pairs=False)
-        self.assertEqual(len(gs._find_guides_that_cover_in_window(0, 28)), 2)
+        self.assertEqual(len(gs._find_guides_in_window(0, 28)), 2)
 
         # Only one guide is needed for coverage: 'AACAC'
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             allow_gu_pairs=True)
-        self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
+        self.assertEqual(gs._find_guides_in_window(0, 28),
                          set(['AACAC']))
 
     def test_with_required_guides_full_coverage(self):
@@ -419,7 +419,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
             required_guides=required_guides)
 
         # Search in window starting at position 3
-        guides_in_cover = gs._find_guides_that_cover_in_window(
+        guides_in_cover = gs._find_guides_in_window(
             3, 3 + window_size)
         # required_guides account for all sequences except the 3rd and 4th,
         # which can be both covered by 'AATCG'; the position of 'TTGTC' is
@@ -429,7 +429,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
 
         # Search in window starting at position 4; results should be the
         # same as above, but now use memoized values
-        guides_in_cover = gs._find_guides_that_cover_in_window(
+        guides_in_cover = gs._find_guides_in_window(
             4, 4 + window_size)
         self.assertEqual(guides_in_cover,
                          {'ATGCC', 'ATGCT', 'TCGAA', 'ATCGT', 'AAAAA', 'AATCG'})
@@ -455,7 +455,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
             required_guides=required_guides)
 
         # Search in window starting at position 3
-        guides_in_cover = gs._find_guides_that_cover_in_window(
+        guides_in_cover = gs._find_guides_in_window(
             3, 3 + window_size)
         # required_guides can account for 3 of the 6 sequences
         # the position of 'TTGTC' is outside the window, so it should not be
@@ -490,13 +490,13 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # The best guide is 'AAAAA'
-        self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
+        self.assertEqual(gs._find_guides_in_window(0, 28),
                          set(['AAAAA']))
 
         # Do not allow guides overlapping (5, 9)
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
             blacklisted_ranges={(5, 9)})
-        self.assertEqual(gs._find_guides_that_cover_in_window(0, 28),
+        self.assertEqual(gs._find_guides_in_window(0, 28),
                          set(['CCCCC', 'GGGGG']))
 
     def test_with_windows_of_varying_size(self):
@@ -508,11 +508,11 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
 
         # The best guides in [1, 8) are 'CCAAA' and 'GGAAA'
-        self.assertEqual(gs._find_guides_that_cover_in_window(1, 8),
+        self.assertEqual(gs._find_guides_in_window(1, 8),
                          set(['CCAAA', 'GGAAA']))
 
         # The best guide in [1, 15) is 'AAAAA'
-        self.assertEqual(gs._find_guides_that_cover_in_window(1, 15),
+        self.assertEqual(gs._find_guides_in_window(1, 15),
                          set(['AAAAA']))
 
     def tearDown(self):

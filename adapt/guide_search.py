@@ -275,16 +275,15 @@ class GuideSearcher:
 
     def _find_guides_for_each_window(self, window_size,
             window_step=1, hide_warnings=False):
-        """Find the smallest collection of guides that account for sequences
-        in each window.
+        """Find a collection of guides in each window.
 
         This runs a sliding window across the aligned sequences and, in each
         window, computes a guide set by calling self._find_guides_in_window().
 
         This returns guides for each window.
 
-        This does not return guides for windows where it cannot achieve
-        the desired coverage in the window (e.g., due to indels or ambiguity).
+        This does not return guides for windows where it cannot design
+        guides in the window (e.g., due to indels or ambiguity).
 
         Args:
             window_size: length of the window to use when sliding across
@@ -314,8 +313,7 @@ class GuideSearcher:
                         (start, end))
 
             try:
-                guides_in_cover = self._find_guides_that_cover_in_window(
-                    start, end)
+                guides = self._find_guides_in_window(start, end)
             except CannotAchieveDesiredCoverageError:
                 # Cannot achieve the desired coverage in this window; log and
                 # skip it
@@ -325,9 +323,15 @@ class GuideSearcher:
                         "achieve the desired coverage") % (start, end))
                 self._cleanup_memoized_guides(start)
                 continue
+            except CannotFindAnyGuidesError:
+                # Cannot find any guides in this window; log and skip it
+                if not hide_warnings:
+                    logger.warning(("No suitable guides could be constructed "
+                        "in the window [%d, %d)") % (start, end))
+                self._cleanup_memoized_guides(start)
+                continue
 
-            cover = (start, end, guides_in_cover)
-            yield cover
+            yield (start, end, guides)
 
             # We no longer need to memoize results for guides that start at
             # this position
@@ -587,7 +591,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                         max_guide_cover = (gd, covered_seqs, pos, score)
         return max_guide_cover
 
-    def _find_guides_that_cover_in_window(self, start, end,
+    def _find_guides_in_window(self, start, end,
             only_consider=None):
         """Find a collection of guides that cover sequences in a given window.
 
@@ -918,7 +922,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 the one(s) with the smallest number of guides and highest
                 score
         """
-        guide_collections = list(self._find_guides_that_cover_for_each_window(
+        guide_collections = list(self._find_guides_for_each_window(
             window_size, window_step=window_step))
 
         if sort:
