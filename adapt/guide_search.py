@@ -4,6 +4,7 @@
 from collections import defaultdict
 import logging
 import math
+import random
 
 from adapt import alignment
 from adapt.utils import index_compress
@@ -450,8 +451,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 alignment) exceeds this threshold
 
         Returns:
-            result of alignment.Alignment.construct_guide() (except the
-            covered_seqs returned here is a set, rather than a list)
+            result of alignment.Alignment.construct_guide()
         """
         def construct_p():
             try:
@@ -926,9 +926,10 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             window_size, window_step=window_step))
 
         if sort:
-            # Sort by number of guides ascending (x[1]), then by
-            # score of guides descending (-x[2])
-            guide_collections.sort(key=lambda x: (x[1], -len(x[2])))
+            # Sort by number of guides ascending (len(x[2])), then by
+            # score of guides descending
+            guide_collections.sort(key=lambda x: (len(x[2]),
+                -self._score_collection_of_guides(x[2])))
 
         with open(out_fn, 'w') as outf:
             # Write a header
@@ -987,7 +988,644 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 print(name_padded, str(val))
 
 
+class GuideSearcherMaximizeActivity(GuideSearcher):
+    """Methods to maximize expected activity of the guide set.
+    """
+
+    def __init__(self, aln, guide_length, soft_guide_constraint,
+            hard_guide_constraint, penalty_strength,
+            missing_data_params, algorithm='random-greedy', **kwargs):
+        """
+        Args:
+            aln: alignment.Alignment representing an alignment of sequences
+            guide_length: length of the guide to construct
+            soft_guide_constraint: number of guides for the soft constraint
+            hard_guide_constraint: number of guides for the hard constraint
+            penalty_strength: coefficient in front of the soft penalty term
+                (i.e., its importance relative to expected activity)
+            missing_data_params: tuple (a, b, c) specifying to not attempt to
+                design guides overlapping sites where the fraction of
+                sequences with missing data is > min(a, max(b, c*m), where m is
+                the median fraction of sequences with missing data over the
+                alignment
+            algorithm: 'greedy' or 'random-greedy'; 'greedy' is the
+                canonical greedy algorithm (Nemhauser 1978) for constrained
+                monotone submodular maximization, which may perform
+                well in practice but has poor theoretical guarantees here
+                (the function is not monotone); 'random-greedy' is the
+                randomized greedy algorithm (Buchbinder 2014) for
+                constrained non-monotone submodular maximization that has
+                good worst-case theoretical guarantees
+            kwargs: see GuideSearcher.__init__()
+        """
+        super().__init__(aln, guide_length, missing_data_params, **kwargs)
+
+        if (soft_guide_constriant < 1 or
+                hard_guide_constraint < soft_guide_constraint):
+            raise ValueError(("soft_guide_constraint must be >=1 and "
+                "hard_guide_constraint must be >= soft_guide_constraint"))
+
+        if penalty_strength < 0:
+            raise ValueError("penalty_strength must be >= 0")
+
+        if 'predictor' not in kwargs:
+            raise Exception(("predictor must be specified to __init__()"))
+
+        if algorihtm not in ['greedy', 'random-greedy']:
+            raise ValueError(("algorithm must be 'greedy' or "
+                "'random-greedy'"))
+
+        self.soft_guide_constraint = soft_guide_constraint
+        self.hard_guide_constraint = hard_guide_constraint
+        self.penalty_strength = penalty_strength
+        self.algorithm = algorithm
+
+        # In addition to memoizing guide computations at each site,
+        # memoize the ground set of guides at each site
+        self._memoized_ground_sets = {}
+
+    def _obj_value_from_params(self, expected_activity, num_guides):
+        """Compute value of objective function from parameter values.
+
+        Args:
+            expected_activity: expected activity of a guide set
+            num_guides: number of guides in the guide set
+
+        Returns:
+            value of objective function
+        """
+        if num_guides > self.hard_guide_constraint:
+            raise Exception(("Objective being computed when hard constraint "
+                "is not met"))
+        return expected_activity + self.penalty_strength * max(0, num_guides -
+                self.soft_guide_constraint)
+
+    def _ground_set_with_activities_memoized(self, start):
+        """Make a memoized call to determine a ground set of guides at a site.
+
+        This also computes the activity of each guide in the ground set
+        against all sequences in the alignment at its site.
+
+        The 'random-greedy' algorithm has theoretical guarantees on the
+        worst-case output, assuming the objective function is non-negative. To
+        keep those guarantees and meet the assumption, we only allow guides in
+        the ground set that ensure the objective is non-negative. The objective
+        is Ftilde(G) = F(G) - L*max(0, |G| - h) subject to |G| <= H, where F(G)
+        is the expected activity of guide set G, L is self.penalty_strength, h
+        is self.soft_guide_constraint, and H is self.hard_guide_constraint. Let
+        G only contain guides g such that F({g}) >= L*(H - h). F(G) is
+        monotonically increasing, so then F(G) >= L*(H - h). Thus:
+          Ftilde(G) =  F(G) - L*max(0, |G| - h)
+                    >= L*(H - h) - L*max(0, |G| - h)
+        If |G| <= h, then:
+          Ftilde(G) >= L*(H - h) - 0
+                    >= 0    (since H >= h)
+        If |G| > h, then:
+          Ftilde(G) >= L*(H - h) - L*(|G| - h)
+                    =  L*(H - h - |G| + h)
+                    =  L*(H - |G|)
+                    >= 0    (since H >= |G|)
+        Therefore, Ftilde(G), our objective function, is >= 0 always. So, to
+        enforce, non-negativity, we can restrict our ground set to only contain
+        guides g whose expected activity is >= L*(H - h). In other words, every
+        guide has to be sufficiently good.
+
+        Ftilde(G) = F(G) - \lambda*max(0, |G| - m_g) subject to |G| <=
+        \overline{m_g}. We could restrict our domain for G to only contain
+        guides {g} such that F({g}) >= \lambda*(\overline{m_g} - m_g). (Put
+        another way, any guide has to be sufficiently good.) Then Ftilde(G) =
+        F(G) - \lambda*max(0, |G| - m_g) >= \lambda*(\overline{m_g} - m_g) -
+        \lambda*max(0, |G| - m_g) >= \lambda*(\overline{m_g} - m_g - (|G| -
+        m_g)) = \lambda*(\overline{m_g} - m_g) >= 0. So Ftilde(G) is
+        non-negative.
+
+        Args:
+            start: start position in alignment at which to make ground set
+
+        Returns:
+            dict {g: a} where g is a guide sequence str and a
+            is a numpy array giving activities against each sequence
+            in the alignment
+        """
+        if start in self._memoized_ground_sets:
+            # Ground set with activities is already memoized
+            return self._memoized_ground_sets[start]
+
+        # Determine a threshold for each guide in the ground set that
+        # enforces non-negativity of the objective
+        nonnegativity_threshold = (self.penalty_strength *
+            (self.hard_guide_constraint - self.soft_guide_constraint))
+
+        # Compute ground set; do so considering all sequences
+        ground_set = self.aln.determine_representative_guides(
+                start, self.guide_length, None, self.guide_clusterer,
+                missing_threshold=self.missing_threshold,
+                guide_is_suitable_fn=self.guide_is_suitable_fn,
+                required_flanking_seqs=self.required_flanking_seqs)
+
+        # Predict activity against all target sequences for each guide
+        # in ground set
+        ground_set_with_activities = {}
+        for gd_seq in ground_set:
+            activities = self.aln.compute_activity(start, gd_seq,
+                    self.predictor)
+            if self.algorithm == 'random-greedy':
+                # Restrict the ground set to only contain guides that
+                # are sufficiently good, as described above
+                # That is, their expected activity has to exceed the
+                # threshold described above
+                # This ensures that the objective is non-negative
+                expected_activity = np.mean(activities)
+                if expected_activity < nonnegativity_threshold:
+                    # Guide does not exceed threshold; ignore it
+                    continue
+
+            ground_set_with_activities[gd_seq] = activities
+
+        # Memoize it
+        self._memoized_ground_sets[start] = ground_set_with_activities
+
+        return ground_set_with_activities
+
+    def _cleanup_memoized_ground_sets(self, pos):
+        """Remove a position that is stored in self._memoized_ground_sets.
+
+        This should be called when the position is no longer needed.
+
+        Args:
+            pos: start position that no longer needs to be memoized
+        """
+        if pos in self._memoized_ground_sets:
+            del self._memoized_ground_sets[pos]
+
+    def _activities_after_adding_guide(self, curr_activities,
+            new_guide_activities):
+        """Compute activities after adding a guide to a guide set.
+
+        Let S be the set of target sequences (not just in the piece
+        at start, but through an entire window). Let G be the
+        current guide set, where the predicted activity of G against
+        sequences s_i \in S is curr_activities[i]. That is,
+        curr_activities[i] = max_{g \in G} d(g, s_i)
+        where d(g, s_i) is the predicted activity of g detecting s_i.
+        Now we add a guide x, from the ground set at the position
+        start, into G. Consider sequence s_i. The activity in detecting
+        s_i is:
+             max_{g \in (G U {x})} d(g, s_i)
+           = max[max_{g \in G} d(g, s_i), d(x, s_i)]
+           = max[curr_activities[i], d(x, s_i)]
+        We can easily calculate this for all sequences s_i by taking
+        an element-wise maximum between curr_activities and an array
+        giving the activity between x and each target sequence s_i.
+
+        Args:
+            curr_activities: list of activities across the target
+                sequences yielded by the current guide set
+            new_guide_activities: list of activities across the target
+                sequences for a single new guide
+
+        Returns:
+            list of activities across the target sequences yielded by
+            the new guide added to the current guide set
+        """
+        assert len(new_guide_activities) == len(curr_activities)
+        curr_activities_with_new = np.maximum(curr_activities,
+                new_guide_activities)
+        return curr_activities_with_new
+
+    def _analyze_guides(self, start, curr_activities):
+        """Compute activities after adding in each ground set guide to the
+        guide set.
+
+        Args:
+            start: start position in alignment at which to target
+            curr_activities: list of activities across the target
+                sequences yielded by the current guide set
+
+        Returns:
+            dict {g: a} where g is a guide in the ground set at start
+            and a is the expected activity, taken across the target
+            sequences, of (current ground set U {g})
+        """
+        expected_activities = {}
+        ground_set_with_activities = self._ground_set_with_activities_memoized(
+                start)
+        for x, activities_for_x in ground_set_with_activities.items():
+            curr_activities_with_x = self._activities_after_adding_guide(
+                    curr_activities, new_guide_activities)
+            expected_activities[x] = np.mean(curr_activities_with_x)
+        return expected_activities
+
+    def _analyze_guides_memoized(self, start, curr_activities,
+            use_last=False):
+        """Make a memoized call to self._analyze_gudes().
+
+        Args:
+            start: start position in alignment at which to target
+            curr_activities: list of activities across the target
+                sequences yielded by the current guide set
+            use_last: if set, check for a memoized result by using the last
+                key constructed (it is assumed that curr_activities is
+                identical to the last provided value)
+
+        Returns:
+            result of self._analyze_guides()
+        """
+        def analyze():
+            return self._analyze_guides(start, curr_activities)
+
+        # TODO: If memory usage is high, consider not memoizing when
+        # the current guide set is large; similar to the strategy in
+        # GuideSearcherMinimizeGuides._construct_guide_memoized()
+
+        if self.do_not_memoize_guides:
+            # Analyze the guides and return that; do not memoize the result
+            return analyze()
+
+        def make_key():
+            # Make a key for hashing
+            # curr_activities is a numpy array; hash(x.data.tobytes())
+            # works when x is a numpy array
+            key = curr_activities.data.tobytes()
+            return key
+
+        p = super()._compute_guide_memoized(start, analyze, make_key,
+                use_last=use_last)
+        return p
+
+    def _find_optimal_guide_in_window(self, start, end, curr_guide_set,
+            curr_activities):
+        """Select a guide from the ground set in the given window based on
+        its marginal contribution.
+
+        When algorithm is 'greedy', this is a guide with the maximal marginal
+        contribution. When the algorithm is 'random-greedy', this is one of the
+        guides, selected uniformly at random, from those with the highest
+        marginal contributions.
+
+        Args:
+            start/end: boundaries of the window; the window spans [start, end)
+            curr_guide_set: current guide set; needed to determine what guides
+                in the ground set can be added, and their marginal
+                contributions
+            curr_activities: list of activities between curr_guide_set
+                and the target sequences (one per target sequence)
+
+        Returns:
+            tuple (g, p) where g is a guide sequence str and p is the position
+            of g in the alignment; or None if no guide is selected (only the
+            case when the algorithm is 'random-greedy'
+
+        Raises:
+            CannotFindPositiveMarginalContributionError if no guide gives
+            a positive marginal contribution to the objective (i.e., all hurt
+            it). This is only raised when the algorithm is 'greedy'; it
+            can also be the case when the algorithm is 'random-greedy', but
+            in that case this returns None (or can raise the error if
+            all sites are blacklisted)
+        """
+        if start < 0:
+            raise ValueError("window start must be >= 0")
+        if end <= start:
+            raise ValueError("window end must be > start")
+        if end > self.aln.seq_length:
+            raise ValueError("window end must be <= alignment length")
+
+        # Calculate the end of the search (exclusive), which is the last
+        # position in the window at which a guide can start; a guide needs to
+        # fit completely within the window
+        search_end = end - self.guide_length + 1
+
+        curr_expected_activity = np.mean(curr_activities)
+        curr_num_guides = len(curr_guide_set)
+        curr_obj = self._obj_value_from_params(curr_expected_activity,
+                curr_num_guides)
+        def marginal_contribution(expected_activity_with_new_guide):
+            # Compute a marginal contribution after adding a new guide
+            # Note that if this is slow, we may be able to skip calling
+            # this function and just select the guide(s) with the highest
+            # new objective value(s) because the curr_obj is fixed, so
+            # it should not affect which guide(s) have the highest
+            # marginal contribution(s)
+            new_obj = self._obj_value_from_params(
+                    expected_activity_with_new_guide, curr_num_guides + 1)
+
+        called_analyze_guides = False
+        possible_guides_to_select = []
+        for pos in range(start, search_end):
+            if self._guide_overlaps_blacklisted_range(pos):
+                # guide starting at pos would overlap a blacklisted range,
+                # so skip this site
+                continue
+            else:
+                # After the first call to self._analyze_guides_memoized in
+                # this window, curr_activities will stay the same as the first
+                # call, so tell the function to take advantage of this (by
+                # avoiding hashing this list again)
+                use_last = pos > start and called_analyze_guides
+
+                p = self._analyze_guides_memoized(pos, curr_activities,
+                        use_last=use_last)
+                called_analyze_guides = True
+
+                # Go over each guide in the ground set at pos, and
+                # skip ones already in the guide set
+                for new_guide, new_expected_activity in p.items():
+                    if new_guide in curr_guide_set:
+                        continue
+                    mc = marginal_contribution(new_expected_activity)
+                    possible_guides_to_select += [(mc, new_guide, pos)]
+
+        if len(possible_guides_to_select) == 0:
+            # All sites are blacklisted in this window
+            raise CannotFindPositiveMarginalContributionError(("There are "
+                "no possible guides; most likely all sites are blacklisted"))
+
+        if self.algorithm == 'greedy':
+            # We only want the single guide with the greatest marginal
+            # contribution; optimize for this case
+            r = max(possible_guides_to_select, key=lambda x: x[0])
+            if r[0] <= 0:
+                # The marginal contribution of the best choice is 0 or negative
+                raise CannotFindPositiveMarginalContributionError(("There "
+                    "are no suitable guides to select; all their marginal "
+                    "contributions are non-positive"))
+            else:
+                return (r[1], r[2])
+        elif self.algorithm == 'random-greedy':
+            # We want a set M, with |M| <= self.hard_guide_constraint,
+            # that maximizes \sum_{u \in M} (marginal contribution
+            # from adding u)
+            # We can get this by taking the self.hard_guide_constraint
+            # guides with the largest marginal contributions (just the
+            # positive ones)
+            M = sorted(possible_guides_to_select, key=lambda x: x[0],
+                    reverse=True)[:self.hard_guide_constraint]
+            M = [x for x in M if x[0] > 0]
+
+            # With probability 1-|M|/self.hard_guide_constraint, do not
+            # select a guide. This accounts for the possibility that
+            # some of the best guides have negative marginal contribution
+            # (i.e., |M| < self.hard_guide_constraint)
+            if random.random() < 1.0 - float(len(M))/self.hard_guide_constraint:
+                return None
+
+            # Choose an element from M uniformly at random
+            assert len(M) > 0
+            r = random.choice(M)
+            return (r[1], r[2])
+
+    def _find_guides_in_window(self, start, end):
+        """Find a collection of guides that maximizes expected activity in
+        a given window.
+
+        This attempts to find a guide set that maximizes subject to a
+        penalty for the number of guides and subject to a hard constraint
+        on the number of guides. We treat this is a constrained
+        submodular maximization problem.
+
+        Let d(g, s) be the predicted activity in guide g detecting sequence
+        s. Then, for a guide set G, we define
+          d(G, s) = max_{g \in G} d(g, s).
+        That is, d(G, s) is the activity of the best guide in detecting s.
+
+        We want to find a guide set G that maximizes:
+          Ftilde(G) = F(G) - L*max(0, |G| - h)  subject to  |G| <= H
+        where h represents a soft constraint on |G| and H >= h represents
+        a hard constraint on |G|. F(G) is the expected activity of G
+        in detecting all target sequences; here, we weight target
+        sequences uniformly, so this is the mean of d(G, s) across the
+        s in the target sequences (self.aln). L represents an importance
+        on the penalty. Here: self.penalty_strength is L,
+        self.soft_guide_constraint is h, and self.hard_guide_constraint is H.
+
+        Ftilde(G) is submodular but is not monotone. It can be made to be
+        non-negative by restricting the ground set. The classical discrete
+        greedy algorithm (Nemhauser et al. 1978) assumes a monotone function so
+        in general it does not apply. Nevertheless, it may provide good results
+        in practice despite bad worst-case performance. When self.algorithm is
+        'greedy', this method implements that algorithm: it chooses a guide
+        that provides the greatest marginal contribution at each iteration.
+        Note that, if L=0, then Ftilde(G) is monotone and the classical greedy
+        algorithm ('greedy') is likely the best choice.
+
+        In general, we use the randomized greedy algorithm in Buchbinder et al.
+        2014. We start with a ground set of guides and then greedily select
+        guides, with randomization, that are among ones with the highest
+        marginal contribution. This works as follows:
+          C <- {ground set of guides}
+          C <- C _union_ {2*h 'dummy' elements that contribute 0}
+          G <- {}
+          for i in 1..H:
+            M_i <- H elements from C\G that maximize \sum_{u \in M_i} (
+                    Ftilde(G _union {u}) - Ftilde(G))
+            g* <- element from M_i chosen uniformly at random
+            G <- G _union_ {g*}
+          G <- G \ {dummy elements}
+          return G
+        The collection of guides G is the approximately optimal guide set.
+        This provides a 1/e-approximation when Ftilde(G) is non-monotone
+        and 1-1/e when Ftilde(G) is monotone.
+
+        An equivalent way to look at the above algorithm, and simpler to
+        implement, is the way we implement it here:
+          C <- {ground set of guides}
+          G <- {}
+          for i in 1..H:
+            M_i <- H elements from C\G that maximize \sum_{u \in M_i} (
+                    Ftilde(G _union {u}) - Ftilde(G))
+            With proability (1-|M_i|/H), select no guide and continue
+            Otherwise g* <- element from M_i chosen uniformly at random
+            G <- G _union_ {g*}
+          return G
+
+        The guide set (G, above) is initialized with the guides in
+        self.required_guides that fall within the given window.
+
+        Args:
+            start/end: boundaries of the window; the window spans [start, end)
+
+        Returns:
+            collection of str representing guide sequences that were selected
+        """
+        if start < 0:
+            raise ValueError("window start must be >= 0")
+        if end <= start:
+            raise ValueError("window end must be > start")
+        if end > self.aln.seq_length:
+            raise ValueError("window end must be <= alignment length")
+
+        # Initialize an empty guide set, with 0 activity against each
+        # target sequence
+        curr_guide_set = set()
+        curr_activities = np.zeros(self.aln.num_sequences)
+
+        def add_guide(gd, gd_pos, gd_activities):
+            # Add gd into curr_guide_set and update curr_activities
+            # to reflect the activities of gd
+            logger.debug(("Adding guide '%s' (at %d) to guide set"),
+                    gd, gd_pos)
+
+            # Add the guide to the current guide set
+            assert new_guide not in curr_guide_set
+            curr_guide_set.add(new_guide)
+
+            # Update curr_activities
+            curr_activities = self._activities_after_adding_guide(
+                    curr_activities, gd_activities)
+
+            # Save the position of the guide in case the guide needs to be
+            # revisited
+            self._selected_guide_positions[gd].add(gd_pos)
+
+        # Place all guides from self.required_guides that fall within
+        # this window into curr_guide_set
+        for gd, gd_pos in self.required_guides.items():
+            if (gd_pos < start or
+                    gd_pos + self.guide_length > end):
+                # gd is not fully within this window
+                continue
+            # Predict activities of gd against each target sequence
+            gd_activities = self.aln.compute_activity(
+                    gd_pos, gd, self.predictor)
+            logger.info(("Adding required guide '%s' to the guide set; it "
+                "has mean activity %f over the targets"), gd,
+                np.mean(gd_activities))
+            add_guide(gd, gd_pos, gd_activities)
+
+        # At each iteration of the greedy algorithm (random or deterministic),
+        # we choose 1 guide (possibly 0, for the random algorithm) and can
+        # stop early; therefore, iterate up to self.hard_guide_constraint times
+        logger.debug(("Iterating to construct the guide set"))
+        for i in range(self.hard_guide_constraint):
+            # Pick a guide
+            try:
+                p = self._find_optimal_guide_in_window(
+                        start, end,
+                        curr_guide_set, curr_activities)
+                if p is None:
+                    # The random greedy algorithm did not choose a guide;
+                    # skip this
+                    continue
+                new_gd, gd_pos = p
+            except CannotFindPositiveMarginalContributionError:
+                # No guide adds marginal contribution; stop early
+                logger.debug(("At iteration where no guide adds marginal "
+                    "contribution; stopping early"))
+                break
+
+            # new_guide is from the ground set, so we can get its
+            # activities across target sequences easily
+            new_guide_activities = self._ground_set_with_activities_memoized(
+                    gd_pos)[new_guide]
+
+            add_guide(new_guide, gd_pos, new_guide_activities)
+            logger.debug(("There are currently %d guides in the guide set"),
+                    len(curr_guide_set))
+
+        if len(curr_guide_set) == 0:
+            # It is possible no guides can be found (e.g., if they all
+            # create negative objective values)
+            raise CannotFindAnyGuidesError(("No guides could be constructed "
+                "in the window [%d, %d)") % (start, end))
+
+        return curr_guide_set
+
+    def find_guides_with_maximal_activity(self, window_size, out_fn,
+            window_step=1, sort=False, print_analysis=True):
+        """Find a collection of guides that maximizes expected activity,
+        across all windows.
+
+        This writes a table of the guides to a file, in which each row
+        corresponds to a window in the genome. It also optionally prints
+        an analysis to stdout.
+
+        Args:
+            window_size: length of the window to use when sliding across
+                alignment
+            out_fn: output TSV file to write guide sequences by window
+            window_step: amount by which to increase the window start for
+                every search
+            sort: if set, sort output TSV by objective value
+            print_analysis: print to stdout the best window(s) -- i.e.,
+                the one(s) with the highest objective value
+        """
+        guide_collections = list(self._find_guides_for_each_window(
+            window_size, window_step=window_step))
+
+        if sort:
+            # Sort by objective value descending
+            guide_collections.sort(key=lambda x: self.obj_value(x[2]),
+                    reverse=True)
+
+        with open(out_fn, 'w') as outf:
+            # Write a header
+            outf.write('\t'.join(['window-start', 'window-end',
+                'count', 'objective-value', 'total-frac-bound',
+                'guide-activity-median', 'guide-activity-5thpctile',
+                'target-sequences',
+                'target-sequence-positions']) + '\n')
+
+            for guides_in_window in guide_collections:
+                start, end, guide_seqs = guides_in_window
+                # TODO implement
+                activities = self._compute_activities(guide_seqs)
+                obj = self.obj_value(guide_seqs, activities=activities)
+                # TODO implement as fraction with activity >0
+                frac_bound = self._total_frac_bound_by_guides(guides_seqs,
+                        activities=activities)
+                # TODO implement
+                guides_activity_median, guides_activity5thpctile = \
+                        self.activity_percentile(guide_seqs, [0.5, 0.05],
+                            activities=activities)
+
+                guide_seqs_sorted = sorted(list(guide_seqs))
+                guide_seqs_str = ' '.join(guide_seqs_sorted)
+                positions = [self._selected_guide_positions[gd_seq]
+                             for gd_seq in guide_seqs_sorted]
+                positions_str = ' '.join(str(p) for p in positions)
+                line = [start, end, count, obj, frac_bound,
+                        guides_activity_median, guides_activity_5thpctile,
+                        guide_seqs_str,
+                        positions_str]
+
+                outf.write('\t'.join([str(x) for x in line]) + '\n')
+
+        if print_analysis:
+            num_windows_scanned = len(
+                range(0, self.aln.seq_length - window_size + 1))
+            num_windows_with_guides = len(guide_collections)
+
+            stat_display = [
+                ("Number of windows scanned", num_windows_scanned),
+                ("Number of windows with guides", num_windows_with_guides)
+            ]
+
+            # Print the above statistics, with padding on the left
+            # so that the statistic names are right-justified in a
+            # column and the values line up, left-justified, in a column
+            max_stat_name_len = max(len(name) for name, val in stat_display)
+            for name, val in stat_display:
+                pad_spaces = max_stat_name_len - len(name)
+                name_padded = " "*pad_spaces + name + ":"
+                print(name_padded, str(val))
+
+
 class CannotAchieveDesiredCoverageError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+
+class CannotFindPositiveMarginalContributionError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+
+class CannotFindAnyGuidesError(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):
