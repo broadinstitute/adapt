@@ -144,10 +144,6 @@ class TargetSearcher:
 
         # Determine a best-case objective value from the guide search
         # This is useful for pruning the search
-        # TODO implement best_obj_value in GuideSearcher. For minimization
-        # this can be 1 (i.e., 1 guide). For maximization, this should be
-        # the maximal activity minus the term of the soft constraint for
-        # 1 guide
         best_guide_obj_value = self.gs.best_obj_value()
 
         num_primer_pairs = 0
@@ -301,27 +297,48 @@ class TargetSearcher:
                 # Skip this window
                 continue
 
+            # Compute stats on the guide set
+            if self.gs.predictor is None:
+                # There is no predictor to predict activities
+                # This should only be the case if self.obj_type is 'min',
+                # and may not necessarily be the case if self.obj_type is
+                # 'min'
+                activities = None
+            else:
+                # Compute activities of the guide set across sequences
+                activities = self.gs.guide_set_activities(window_start,
+                        window_end, guides)
             # Calculate fraction of sequences bound by the guides
-            guides_frac_bound = self.gs._total_frac_bound_by_guides(guides)
-
+            if self.obj_type == 'min':
+                guides_frac_bound = self.gs.total_frac_bound_by_guides(guides)
+            elif self.obj_type == 'max':
+                guides_frac_bound = self.gs.total_frac_bound_by_guides(
+                        window_start, window_end, guides,
+                        activities=activities)
             # Calculate median activity and 5'th percentile of activity
             # of the guides
-            # TODO implement below functions
-            guides_activity_median, guides_activity_5thpctile = \
-                    self.gs.activity_percentile(guides, [0.5, 0.05])
+            if activities is None:
+                # There is no predictor to predict activity; make this nan
+                guides_activity_median, guides_activity_5thpctile = \
+                        math.nan, math.nan
+            else:
+                guides_activity_median, guides_activity_5thpctile = \
+                        self.gs.guide_set_activities_percentile(
+                                window_start, window_end, guides, [50, 5],
+                                activities=activities)
             guides_stats = (guides_frac_bound, guides_activity_median,
                     guides_activity_5thpctile)
 
             # Calculate a total objective value
-            # TODO implement GuideSearch.obj_value(guides). For minimization
-            # this can just be len(guides)
             if self.obj_type == 'min':
                 obj_value_total = (self.cost_weight_guides *
                         self.gs.obj_value(guides) + cost_primers + cost_window)
                 obj_value_to_add = -1 * obj_value_total
             elif self.obj_type == 'max':
+                gs_obj_value = self.gs.obj_value(window_start, window_end,
+                        guides, activities=activities)
                 obj_value_total = (self.cost_weight_guides *
-                        self.gs.obj_value(guides) - cost_primers - cost_window)
+                        gs_obj_value - cost_primers - cost_window)
                 obj_value_to_add = obj_value_total
 
             # Add target to the heap (but only keep it if there are not

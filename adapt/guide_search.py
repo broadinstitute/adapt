@@ -31,7 +31,7 @@ class GuideSearcher:
 
     def __init__(self, aln, guide_length, missing_data_params,
                  guide_is_suitable_fn=None,
-                 seq_groups=None, required_guides={}, blacklisted_ranges={},
+                 required_guides={}, blacklisted_ranges={},
                  allow_gu_pairs=False, required_flanking_seqs=(None, None),
                  do_not_memoize_guides=False,
                  predictor=None):
@@ -284,6 +284,94 @@ class GuideSearcher:
                 return True
         return False
 
+    def guide_set_activities(self, window_start, window_end, guide_set):
+        """Compute activity across target sequences for guide set in a window.
+
+        Let S be the set of target sequences. Let G be guide_set, and
+        let the predicted activity of a gudie g in detecting s_i \in S
+        be d(g, s_i). Then the activity of G in detecting s_i is
+        max_{g \in G} d(g, s_i). We can compute an activity for G
+        against all sequences s_i by repeatedly taking element-wise
+        maxima; see
+        GuideSearcherMaximizeActivity._activities_after_adding_guide() for
+        an explanation.
+
+        Note that if guide_set is a subset of the ground set, then
+        we already have these computed in GuideSearcherMaximizeAcitivity.
+        Re-implementing it here lets us use have them with
+        GuideSearcherMinimizeGuides, and is also not a bad check
+        to re-compute.
+
+        This assumes that guide positions for each guide in guide_set
+        are stored in self._selected_guide_positions.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            guide_set: set of strings representing guide sequences that
+                have been selected to be in a guide set
+
+        Returns:
+            list of activities across the target sequences (self.aln)
+            yielded by guide_set
+        """
+        if self.predictor is None:
+            raise NoPredictorError(("Cannot compute activities when "
+                "predictor is not set"))
+
+        activities = np.zeros(self.aln.num_sequences)
+        for gd_seq in guide_set:
+            if gd_seq not in self._selected_guide_positions:
+                raise Exception(("Guide must be selected and its position "
+                    "saved"))
+
+            # The guide could hit multiple places
+            for start in self._selected_guide_positions[gd_seq]:
+                if start < window_start or start > window_end - len(gd_seq):
+                    # Guide is outside window
+                    continue
+                try:
+                    gd_activities = self.aln.compute_activity(start, gd_seq,
+                            self.predictor)
+                except alignment.CannotConstructGuideError:
+                    # Most likely this site is too close to an endpoint and
+                    # does not have enough context_nt; skip it
+                    continue
+
+                # Update activities with gd_activities
+                activities = np.maximum(activities, gd_activities)
+
+        return activities
+
+    def guide_set_activities_percentile(self, window_start, window_end,
+            guide_set, q, activities=None):
+        """Compute percentiles of activity across target sequences for
+        a guide set in a window.
+
+        For example, when percentiles is 0.5, this returns the median
+        activity across the target sequences that the guide set provides.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            guide_set: set of strings representing guide sequences that
+                have been selected to be in a guide set
+            q: list of percentiles to compute, each in [0,100]
+                (0 is minimum, 100 is maximum)
+            activities: output of self.guide_set_activities(); if not set,
+                this calls that function
+
+        Returns:
+            list of percentile values
+        """
+        if activities is None:
+            activities = self.guide_set_activities(window_start, window_end,
+                    guide_set)
+
+        # Do not interpolate (choose lower value)
+        p = np.percentile(activities, q, interpolation='lower')
+        return list(p)
+
     def _find_guides_for_each_window(self, window_size,
             window_step=1, hide_warnings=False):
         """Find a collection of guides in each window.
@@ -514,6 +602,28 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         p = super()._compute_guide_memoized(start, construct_p, make_key,
                 use_last=use_last)
         return p
+
+    def obj_value(self, guide_set):
+        """Compute objective value for a guide set.
+
+        This is just the number of guides, which we seek to minimize.
+
+        Args:
+            guide_set: set of guide sequences
+
+        Returns:
+            number of guides
+        """
+        return float(len(guide_set))
+
+    def best_obj_value(self):
+        """Return the best possible objective value (or a rough estimate).
+
+        Returns:
+            float
+        """
+        # The best objective value occurs when there is 1 guide.
+        return 1.0
 
     def _find_optimal_guide_in_window(self, start, end, seqs_to_consider,
             num_needed):
@@ -892,7 +1002,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                     required_flanking_seqs=self.required_flanking_seqs))
         return seqs_bound
 
-    def _total_frac_bound_by_guides(self, guides):
+    def total_frac_bound_by_guides(self, guides):
         """Calculate the total fraction of sequences in the alignment
         bound by the guides.
 
@@ -950,7 +1060,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             for guides_in_window in guide_collections:
                 start, end, guide_seqs = guides_in_window
                 score = self._score_collection_of_guides(guides_seqs)
-                frac_bound = self._total_frac_bound_by_guides(guides_seqs)
+                frac_bound = self.total_frac_bound_by_guides(guides_seqs)
 
                 guide_seqs_sorted = sorted(list(guide_seqs))
                 guide_seqs_str = ' '.join(guide_seqs_sorted)
@@ -1057,6 +1167,12 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
     def _obj_value_from_params(self, expected_activity, num_guides):
         """Compute value of objective function from parameter values.
 
+        The objective value for a guide set G is:
+          F(G) - max(0, |G| - h)
+        where F(G) is the expected activity of G across the target sequences
+        and h is a soft constraint on the number of guides. The right-hand
+        term represents a penalty for the soft constraint.
+
         Args:
             expected_activity: expected activity of a guide set
             num_guides: number of guides in the guide set
@@ -1069,6 +1185,73 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                 "is not met"))
         return expected_activity - self.penalty_strength * max(0, num_guides -
                 self.soft_guide_constraint)
+
+    def obj_value(self, window_start, window_end, guide_set, activities=None):
+        """Compute value of objective function from guide set in window.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            guide_set: set of strings representing guide sequences that
+                have been selected to be in a guide set
+            activities: output of self.guide_set_activities(); if not set,
+                this calls that function
+
+        Returns:
+            value of objective function
+        """
+        if activities is None:
+            activities = self.guide_set_activities(window_start, window_end,
+                    guide_set)
+        
+        # Use the mean (i.e., uniform prior over target sequences)
+        expected_activity = np.mean(activities)
+
+        num_guides = len(guide_set)
+
+        return self._obj_value_from_params(expected_activity, num_guides)
+
+    def best_obj_value(self):
+        """Return the best possible objective value (or a rough estimate).
+
+        Returns:
+            float
+        """
+        # The highest objective value occurs when expected activity is
+        # at its maximum (which occurs when there is maximal detection for
+        # all sequences) and the number of guides is 1
+        return self._obj_value_from_params(self.predictor.rough_activity_max,
+                1)
+
+    def total_frac_bound_by_guides(self, window_start, window_end, guide_set,
+            activities=None):
+        """Calculate the total fraction of sequences in the alignment
+        bound by the guides.
+
+        This assumes that a sequence is 'bound' if the activity against
+        it is >0; otherwise, it is assumed it is not 'bound'. This
+        is reasonable because an activity=0 is the result of being
+        decided by the classification model to be not active.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            guide_set: set of strings representing guide sequences that
+                have been selected to be in a guide set
+            activities: output of self.guide_set_activities(); if not set,
+                this calls that function
+
+        Returns:
+            total fraction of all sequences detected by a guide
+        """
+        if activities is None:
+            activities = self.guide_set_activities(window_start, window_end,
+                    guide_set)
+
+        # Calculate fraction of activity values >0
+        num_active = sum(1 for x in activities if x > 0)
+
+        return float(num_active) / len(activities)
 
     def _ground_set_with_activities_memoized(self, start):
         """Make a memoized call to determine a ground set of guides at a site.
@@ -1598,16 +1781,14 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
 
             for guides_in_window in guide_collections:
                 start, end, guide_seqs = guides_in_window
-                # TODO implement
-                activities = self._compute_activities(guide_seqs)
-                obj = self.obj_value(guide_seqs, activities=activities)
-                # TODO implement as fraction with activity >0
-                frac_bound = self._total_frac_bound_by_guides(guides_seqs,
+                activities = self.guide_set_activities(start, end, guide_seqs)
+                obj = self.obj_value(start, end, guide_seqs,
                         activities=activities)
-                # TODO implement
+                frac_bound = self.total_frac_bound_by_guides(start, end,
+                        guides_seqs, activities=activities)
                 guides_activity_median, guides_activity5thpctile = \
-                        self.activity_percentile(guide_seqs, [0.5, 0.05],
-                            activities=activities)
+                        self.guide_set_activities_percentile(start, end,
+                                guide_seqs, [50, 5], activities=activities)
 
                 guide_seqs_sorted = sorted(list(guide_seqs))
                 guide_seqs_str = ' '.join(guide_seqs_sorted)
@@ -1656,6 +1837,13 @@ class CannotFindPositiveMarginalContributionError(Exception):
 
 
 class CannotFindAnyGuidesError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+
+class NoPredictorError(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):

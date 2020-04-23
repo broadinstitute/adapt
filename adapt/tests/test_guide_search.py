@@ -517,6 +517,32 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.assertEqual(gs._find_guides_in_window(1, 15),
                          set(['AAAAA']))
 
+    def test_obj_value(self):
+        seqs = ['GTTCCAAAAAATCGGCTACCCCCTCTAC',
+                'CTACCAAAAAACCTGCTAGGGGGCGTAC',
+                'ATCGGAAAAAAACGTCCTCCCCCTGTAC',
+                'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
+
+        # The best guides in [1, 8) are 'CCAAA' and 'GGAAA'
+        guides = gs._find_guides_in_window(1, 8)
+        self.assertEqual(gs.obj_value(guides), 2)
+
+    def test_total_frac_bound_by_guides(self):
+        seqs = ['GTTCCAAAAAATCGGCTACCCCCTCTAC',
+                'CTACCAAAAAACCTGCTAGGGGGCGTAC',
+                'ATCGGAAAAAAACGTCCTCCCCCTGTAC',
+                'TTAGGAAAAAAGCGACCGGGGGGTCTAC']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100))
+
+        # The best guides in [1, 8) are 'CCAAA' and 'GGAAA'
+        guides = gs._find_guides_in_window(1, 8)
+
+        # All sequences are bound by a guide
+        self.assertEqual(gs.total_frac_bound_by_guides(guides), 1.0)
+
     def tearDown(self):
         # Re-enable logging
         logging.disable(logging.NOTSET)
@@ -913,6 +939,52 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
             gs._find_guides_in_window(0, 4)
         with self.assertRaises(guide_search.CannotFindAnyGuidesError):
             gs._find_guides_in_window(6, 10)
+
+    def test_guide_set_activities(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGAGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='greedy')
+        # Guides should be 'AATT' and 'AGGG'
+        guides = gs._find_guides_in_window(2, 8)
+
+        activities = gs.guide_set_activities(2, 8, guides)
+        np.testing.assert_equal(activities, np.array([2, 2, 0, 2]))
+
+        activities_percentile = gs.guide_set_activities_percentile(2, 8,
+                guides, [5, 50])
+        self.assertEqual(activities_percentile, [0, 2])
+
+    def test_obj_value(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGAGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           soft_guide_constraint=1,
+                           penalty_strength=0.1,
+                           algorithm='greedy')
+        # Guides should be 'AATT' and 'AGGG'
+        guides = gs._find_guides_in_window(2, 8)
+
+        expected_activity = (2 + 2 + 0 + 2) / 4.0
+        true_obj_value = expected_activity - 0.1*1
+        self.assertEqual(gs.obj_value(2, 8, guides), true_obj_value)
+
+    def test_total_frac_bound_by_guides(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGAGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='greedy')
+        # Guides should be 'AATT' and 'AGGG'
+        guides = gs._find_guides_in_window(2, 8)
+
+        # 3 of the 4 sequences should be bound
+        self.assertEqual(gs.total_frac_bound_by_guides(2, 8, guides), 0.75)
 
     def tearDown(self):
         # Re-enable logging

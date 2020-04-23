@@ -136,6 +136,11 @@ class Predictor:
                 raise ValueError(("Regression threshold should be >= 0"))
         self.regression_threshold = regression_threshold
 
+        # Store a rough upper bound on the regression activity; this is
+        # used for estimates but is not enforced and does not need to
+        # be met by the regression output
+        self.rough_activity_max = 4.0
+
         # Memoize evaluations, organized by guide start position:
         #   {guide start: {pair: X}}
         # where each X is a tuple of (overall activity, False/True indicating
