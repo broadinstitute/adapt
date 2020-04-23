@@ -6,6 +6,8 @@ import logging
 import math
 import random
 
+import numpy as np
+
 from adapt import alignment
 from adapt.utils import index_compress
 from adapt.utils import lsh
@@ -129,7 +131,7 @@ class GuideSearcher:
         self.predictor = predictor
 
     def _compute_guide_memoized(self, start, call_fn, key_fn,
-            use_last=False):
+            use_last=False, compress=True):
         """Make a memoized call to compute a guide.
 
         The actual computation is defined in a subclass and passed as
@@ -144,6 +146,8 @@ class GuideSearcher:
             use_last: if set, check for a memoized result by using the last
                 key constructed (it is assumed that key is identical to
                 the last provided values)
+            compress: if True, compress the output of call_fn() before
+                memoizing
 
         Returns:
             result of call_fn()
@@ -174,7 +178,10 @@ class GuideSearcher:
             if p_memoized is None:
                 p = None
             else:
-                p = self._decompress_compute_guide_result(p_memoized)
+                if compress:
+                    p = self._decompress_compute_guide_result(p_memoized)
+                else:
+                    p = p_memoized
         else:
             # The result is not memoized; compute it and memoize it
 
@@ -183,8 +190,11 @@ class GuideSearcher:
             if p is None:
                 p_to_memoize = None
             else:
-                # Compress p before memoizing it
-                p_to_memoize = self._compress_compute_guide_result(p)
+                if compress:
+                    # Compress p before memoizing it
+                    p_to_memoize = self._compress_compute_guide_result(p)
+                else:
+                    p_to_memoize = p
 
             inner_dict[start] = p_to_memoize
 
@@ -1020,7 +1030,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         """
         super().__init__(aln, guide_length, missing_data_params, **kwargs)
 
-        if (soft_guide_constriant < 1 or
+        if (soft_guide_constraint < 1 or
                 hard_guide_constraint < soft_guide_constraint):
             raise ValueError(("soft_guide_constraint must be >=1 and "
                 "hard_guide_constraint must be >= soft_guide_constraint"))
@@ -1031,7 +1041,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         if 'predictor' not in kwargs:
             raise Exception(("predictor must be specified to __init__()"))
 
-        if algorihtm not in ['greedy', 'random-greedy']:
+        if algorithm not in ['greedy', 'random-greedy']:
             raise ValueError(("algorithm must be 'greedy' or "
                 "'random-greedy'"))
 
@@ -1057,7 +1067,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         if num_guides > self.hard_guide_constraint:
             raise Exception(("Objective being computed when hard constraint "
                 "is not met"))
-        return expected_activity + self.penalty_strength * max(0, num_guides -
+        return expected_activity - self.penalty_strength * max(0, num_guides -
                 self.soft_guide_constraint)
 
     def _ground_set_with_activities_memoized(self, start):
@@ -1117,8 +1127,10 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             (self.hard_guide_constraint - self.soft_guide_constraint))
 
         # Compute ground set; do so considering all sequences
+        seqs_to_consider = {0: set(range(self.aln.num_sequences))}
         ground_set = self.aln.determine_representative_guides(
-                start, self.guide_length, None, self.guide_clusterer,
+                start, self.guide_length, seqs_to_consider,
+                self.guide_clusterer,
                 missing_threshold=self.missing_threshold,
                 guide_is_suitable_fn=self.guide_is_suitable_fn,
                 required_flanking_seqs=self.required_flanking_seqs)
@@ -1127,8 +1139,15 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         # in ground set
         ground_set_with_activities = {}
         for gd_seq in ground_set:
-            activities = self.aln.compute_activity(start, gd_seq,
-                    self.predictor)
+            try:
+                activities = self.aln.compute_activity(start, gd_seq,
+                        self.predictor)
+            except alignment.CannotConstructGuideError:
+                # Most likely this site is too close to an endpoint
+                # and does not have enough context_nt -- there will be
+                # no ground set at this site -- but skip this guide and
+                # try others anyway
+                continue
             if self.algorithm == 'random-greedy':
                 # Restrict the ground set to only contain guides that
                 # are sufficiently good, as described above
@@ -1212,7 +1231,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                 start)
         for x, activities_for_x in ground_set_with_activities.items():
             curr_activities_with_x = self._activities_after_adding_guide(
-                    curr_activities, new_guide_activities)
+                    curr_activities, activities_for_x)
             expected_activities[x] = np.mean(curr_activities_with_x)
         return expected_activities
 
@@ -1249,8 +1268,9 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             key = curr_activities.data.tobytes()
             return key
 
+        # The output of analyze() is already dense, so do not compress
         p = super()._compute_guide_memoized(start, analyze, make_key,
-                use_last=use_last)
+                use_last=use_last, compress=False)
         return p
 
     def _find_optimal_guide_in_window(self, start, end, curr_guide_set,
@@ -1272,7 +1292,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                 and the target sequences (one per target sequence)
 
         Returns:
-            tuple (g, p) where g is a guide sequence str and p is the position
+            tuple (g, p) where g is a guide sequence str and p is the position)
             of g in the alignment; or None if no guide is selected (only the
             case when the algorithm is 'random-greedy'
 
@@ -1309,6 +1329,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             # marginal contribution(s)
             new_obj = self._obj_value_from_params(
                     expected_activity_with_new_guide, curr_num_guides + 1)
+            return new_obj - curr_obj
 
         called_analyze_guides = False
         possible_guides_to_select = []
@@ -1339,7 +1360,9 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         if len(possible_guides_to_select) == 0:
             # All sites are blacklisted in this window
             raise CannotFindPositiveMarginalContributionError(("There are "
-                "no possible guides; most likely all sites are blacklisted"))
+                "no possible guides; most likely all sites are blacklisted "
+                "or the ground set is empty (no potential guides are "
+                "suitable)"))
 
         if self.algorithm == 'greedy':
             # We only want the single guide with the greatest marginal
@@ -1467,10 +1490,11 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                     gd, gd_pos)
 
             # Add the guide to the current guide set
-            assert new_guide not in curr_guide_set
-            curr_guide_set.add(new_guide)
+            assert gd not in curr_guide_set
+            curr_guide_set.add(gd)
 
             # Update curr_activities
+            nonlocal curr_activities
             curr_activities = self._activities_after_adding_guide(
                     curr_activities, gd_activities)
 
@@ -1509,7 +1533,13 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                     continue
                 new_gd, gd_pos = p
             except CannotFindPositiveMarginalContributionError:
-                # No guide adds marginal contribution; stop early
+                # No guide adds marginal contribution
+                # This should only happen in the greedy case (or if
+                # all sites are blacklisted), and the objective function
+                # is such that its value would continue to decrease if
+                # we were to continue (i.e., it would continue to be
+                # the case that no guides give a positive marginal
+                # contribution) -- so stop early
                 logger.debug(("At iteration where no guide adds marginal "
                     "contribution; stopping early"))
                 break
@@ -1517,9 +1547,9 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             # new_guide is from the ground set, so we can get its
             # activities across target sequences easily
             new_guide_activities = self._ground_set_with_activities_memoized(
-                    gd_pos)[new_guide]
+                    gd_pos)[new_gd]
 
-            add_guide(new_guide, gd_pos, new_guide_activities)
+            add_guide(new_gd, gd_pos, new_guide_activities)
             logger.debug(("There are currently %d guides in the guide set"),
                     len(curr_guide_set))
 

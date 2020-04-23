@@ -5,6 +5,8 @@ import logging
 import random
 import unittest
 
+import numpy as np
+
 from adapt import alignment
 from adapt import guide_search
 from adapt.utils import guide
@@ -514,6 +516,403 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # The best guide in [1, 15) is 'AAAAA'
         self.assertEqual(gs._find_guides_in_window(1, 15),
                          set(['AAAAA']))
+
+    def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
+
+
+class TestGuideSearcherMaximizeActivity(unittest.TestCase):
+    """Tests methods in the GuideSearcherMaximizeActivity class.
+    """
+
+    def setUp(self):
+        # Disable logging
+        logging.disable(logging.WARNING)
+
+        # Set a random seed so hash functions are always the same
+        random.seed(0)
+
+    def make_gs(self, seqs, soft_guide_constraint=1, hard_guide_constraint=3,
+            penalty_strength=0.1, algorithm='random-greedy',
+            guide_is_suitable_fn=None):
+        # Predict guides matching target to have activity 1, and
+        # starting with 'A' to have activity 2 (otherwise, 0)
+        class PredictorTest:
+            def __init__(self):
+                self.context_nt = 1
+            def compute_activity(self, start_pos, pairs):
+                y = []
+                for target, guide in pairs:
+                    target_without_context = target[self.context_nt:len(target)-self.context_nt]
+                    if guide == target_without_context:
+                        if guide[0] == 'A':
+                            y += [2]
+                        else:
+                            y += [1]
+                    else:
+                        y += [0]
+                return y
+            def cleanup_memoized(self, pos):
+                pass
+        predictor = PredictorTest()
+
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        gs = guide_search.GuideSearcherMaximizeActivity(aln, 4,
+                soft_guide_constraint, hard_guide_constraint,
+                penalty_strength, (1, 1, 100), algorithm=algorithm,
+                predictor=predictor,
+                guide_is_suitable_fn=guide_is_suitable_fn)
+        return gs
+
+    def test_obj_value_from_params(self):
+        gs = self.make_gs(['ATCGATCG'])
+        self.assertEqual(gs._obj_value_from_params(10, 2),
+                10 - 0.1*1)
+
+    def test_ground_set_with_activities_memoized(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           algorithm='random-greedy')
+
+        o = gs._ground_set_with_activities_memoized(4)
+        self.assertEqual(o.keys(), {'AATT', 'GGGG', 'CCCC'})
+        np.testing.assert_equal(o['AATT'], np.array([2, 0, 0, 2]))
+        np.testing.assert_equal(o['GGGG'], np.array([0, 1, 0, 0]))
+        np.testing.assert_equal(o['CCCC'], np.array([0, 0, 1, 0]))
+
+        o = gs._ground_set_with_activities_memoized(2)
+        self.assertEqual(o.keys(), {'CGAA', 'GGGG', 'CCCC'})
+        np.testing.assert_equal(o['CGAA'], np.array([1, 0, 0, 1]))
+        np.testing.assert_equal(o['GGGG'], np.array([0, 1, 0, 0]))
+        np.testing.assert_equal(o['CCCC'], np.array([0, 0, 1, 0]))
+
+        # Try position 4 again
+        o = gs._ground_set_with_activities_memoized(4)
+        self.assertEqual(o.keys(), {'AATT', 'GGGG', 'CCCC'})
+        np.testing.assert_equal(o['AATT'], np.array([2, 0, 0, 2]))
+        np.testing.assert_equal(o['GGGG'], np.array([0, 1, 0, 0]))
+        np.testing.assert_equal(o['CCCC'], np.array([0, 0, 1, 0]))
+
+        gs._cleanup_memoized_ground_sets(4)
+
+        # Try position 4 again
+        o = gs._ground_set_with_activities_memoized(4)
+        self.assertEqual(o.keys(), {'AATT', 'GGGG', 'CCCC'})
+        np.testing.assert_equal(o['AATT'], np.array([2, 0, 0, 2]))
+        np.testing.assert_equal(o['GGGG'], np.array([0, 1, 0, 0]))
+        np.testing.assert_equal(o['CCCC'], np.array([0, 0, 1, 0]))
+
+    def test_ground_set_with_activities_memoized_with_insufficient_guides(self):
+        seqs = ['ATCGAATTCG']*100 + ['GGGGGGGGGG'] + ['ATCGAATTCG']*100
+        gs = self.make_gs(seqs, algorithm='random-greedy')
+        o = gs._ground_set_with_activities_memoized(4)
+        self.assertEqual(o.keys(), {'AATT'})
+        np.testing.assert_equal(o['AATT'], np.array([2]*100 + [0] + [2]*100))
+
+    def test_activities_after_adding_guide(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           algorithm='random-greedy')
+        o = gs._activities_after_adding_guide(
+                [1, 1, 1, 2, 0],
+                [1, 0, 2, 2, 1])
+        np.testing.assert_equal(o, np.array([1, 1, 2, 2, 1]))
+
+    def test_analyze_guides(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           algorithm='random-greedy')
+        o = gs._analyze_guides(4, [3, 0, 1, 1])
+        self.assertEqual(o.keys(), {'AATT', 'GGGG', 'CCCC'})
+        self.assertEqual(o, {'AATT': 6/4.0, 'GGGG': 6/4.0, 'CCCC': 5/4.0})
+
+    def test_analyze_guides_memoized(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           algorithm='random-greedy')
+
+        o = gs._analyze_guides(4, [3, 0, 1, 1])
+        self.assertEqual(o, {'AATT': 6/4.0, 'GGGG': 6/4.0, 'CCCC': 5/4.0})
+
+        o = gs._analyze_guides(2, [10, 0, 1, 1])
+        self.assertEqual(o, {'CGAA': 12/4.0, 'GGGG': 13/4.0, 'CCCC': 12/4.0})
+
+        # Try position 4 again
+        o = gs._analyze_guides(4, [3, 0, 1, 1])
+        self.assertEqual(o.keys(), {'AATT', 'GGGG', 'CCCC'})
+        self.assertEqual(o, {'AATT': 6/4.0, 'GGGG': 6/4.0, 'CCCC': 5/4.0})
+
+        gs._cleanup_memoized_guides(4)
+
+        # Try position 4 after cleanup
+        o = gs._analyze_guides(4, [3, 0, 1, 1])
+        self.assertEqual(o.keys(), {'AATT', 'GGGG', 'CCCC'})
+        self.assertEqual(o, {'AATT': 6/4.0, 'GGGG': 6/4.0, 'CCCC': 5/4.0})
+
+    def test_find_optimal_guide_in_window_greedy(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           algorithm='greedy')
+
+        o = gs._find_optimal_guide_in_window(2, 8, {}, np.array([0, 0, 0, 0]))
+        self.assertEqual(o, ('AATT', 4))
+
+        o = gs._find_optimal_guide_in_window(2, 8, {'AATT'},
+                np.array([0, 0, 0, 0]))
+        self.assertNotEqual(o[0], 'AATT')
+
+        o = gs._find_optimal_guide_in_window(2, 8, {'AAAA'},
+                np.array([10, 1, 0, 3]))
+        self.assertIn(o, [('CCCC', 2), ('CCCC', 3), ('CCCC', 4), ('CCCC', 5)])
+
+        o = gs._find_optimal_guide_in_window(2, 8, {'ATCG'},
+                np.array([2, 1, 0, 2]))
+        self.assertIn(o, [('CCCC', 2), ('CCCC', 3), ('CCCC', 4), ('CCCC', 5)])
+
+    def test_find_optimal_guide_in_window_greedy_with_high_penalty(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           penalty_strength=1,
+                           algorithm='greedy')
+
+        o = gs._find_optimal_guide_in_window(2, 8, {}, np.array([0, 0, 0, 0]))
+        self.assertEqual(o, ('AATT', 4))
+
+        # Adding any additional guide will create a negative marginal
+        # contribution
+        with self.assertRaises(guide_search.CannotFindPositiveMarginalContributionError):
+            gs._find_optimal_guide_in_window(2, 8, {'AAAA'},
+                np.array([10, 1, 0, 1]))
+
+        # With a higher soft constraint, another guide is ok
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           soft_guide_constraint=2,
+                           penalty_strength=1,
+                           algorithm='greedy')
+        o = gs._find_optimal_guide_in_window(2, 8, {'AAAA'},
+                np.array([10, 1, 0, 1]))
+        self.assertEqual(o[0], 'CCCC')
+
+    def test_find_optimal_guide_in_window_random_greedy(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=1,
+                           algorithm='random-greedy')
+        o = gs._find_optimal_guide_in_window(2, 8, {}, np.array([0, 0, 0, 0]))
+        self.assertEqual(o, ('AATT', 4))
+
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='random-greedy')
+        o = gs._find_optimal_guide_in_window(2, 8, {'AATT'},
+                np.array([0, 1, 1, 0]))
+        self.assertIn(o[0], ['CGAA', 'GAAT'])
+
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='random-greedy')
+        o = gs._find_optimal_guide_in_window(2, 8, {'ATCG'},
+                np.array([4, 0, 0, 2]))
+        self.assertIn(o[0], ['GGGG', 'CCCC'])
+
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='random-greedy')
+        o = gs._find_optimal_guide_in_window(2, 8, {'GGGG'},
+                np.array([0, 1, 1, 1]))
+        self.assertIn(o[0], ['CGAA', 'GAAT', 'AATT'])
+        o = gs._find_optimal_guide_in_window(2, 8, {'GGGG'},
+                np.array([3, 3, 3, 3]))
+        self.assertIsNone(o)
+
+    def test_find_optimal_guide_in_window_random_greedy_with_high_penalty(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           penalty_strength=0.5,
+                           algorithm='random-greedy')
+
+        # Adding any additional guide will create a negative marginal
+        # contribution
+        o = gs._find_optimal_guide_in_window(2, 8, {'AAAA'},
+                np.array([10, 0, 0, 0]))
+        self.assertIsNone(o)
+
+    def find_guides_in_window_different_hard_constraints(self, algo):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=3,
+                           algorithm=algo)
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(o, {'AATT', 'GGGG', 'CCCC'})
+
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm=algo)
+        o = gs._find_guides_in_window(2, 8)
+        self.assertIn('AATT', o)
+
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=1,
+                           algorithm=algo)
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(o, {'AATT'})
+
+    def find_guides_in_window_high_penalty(self, algo):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=3,
+                           penalty_strength=0.5,
+                           algorithm=algo)
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(o, {'AATT'})
+
+    def test_find_guides_in_window_different_hard_constraints_greedy(self):
+        self.find_guides_in_window_different_hard_constraints('greedy')
+
+    def test_find_guides_in_window_different_hard_constraints_random_greedy(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='random-greedy')
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(len(o), 2) # many possibilities for o
+
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=1,
+                           algorithm='random-greedy')
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(o, {'AATT'})
+
+    def test_find_guides_in_window_high_penalty_greedy(self):
+        self.find_guides_in_window_high_penalty('greedy')
+
+    def test_find_guides_in_window_high_penalty_random_greedy(self):
+        self.find_guides_in_window_high_penalty('random-greedy')
+
+    def find_guides_in_window_with_guide_is_suitable_fn(self, algo):
+        def f(guide):
+            if 'AA' in guide:
+                return False
+            else:
+                return True
+        
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=1,
+                           algorithm=algo,
+                           guide_is_suitable_fn=f)
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(len(o), 1)
+        self.assertIn(list(o)[0], {'CGAA', 'GAAT', 'GGGG', 'CCCC'})
+
+    def test_find_guides_in_window_with_guide_is_suitable_fn_greedy(self):
+        self.find_guides_in_window_with_guide_is_suitable_fn('greedy')
+
+    def test_find_guides_in_window_with_guide_is_suitable_fn_random_greedy(self):
+        self.find_guides_in_window_with_guide_is_suitable_fn('random-greedy')
+
+    def find_guides_in_window_with_gaps_and_missing_data(self, algo):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'ATCGA-TTCG',
+                           'GGGGGNNNGG',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=1,
+                           algorithm=algo)
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(o, {'AATT'})
+
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGGGGGGGG',
+                           'CCCCCCCCCC',
+                           'ATCGA-TTCG',
+                           'GGGGGNNNGG',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm=algo)
+        o = gs._find_guides_in_window(2, 8)
+        self.assertEqual(len(o), 2)
+        if algo == 'greedy':
+            self.assertIn('AATT', o)
+
+    def test_find_guides_in_window_with_gaps_and_missing_data_greedy(self):
+        self.find_guides_in_window_with_gaps_and_missing_data('greedy')
+
+    def test_find_guides_in_window_with_gaps_and_missing_data_random_greedy(self):
+        self.find_guides_in_window_with_gaps_and_missing_data('random-greedy')
+
+    def test_find_guides_in_window_at_endpoint(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'AGGGGGGGGA',
+                           'ACCCCCCCCA',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=1)
+
+        # No guides should start at position 0, since it does not
+        # permit a context_nt of 1 for evaluating activity
+        o = gs._find_guides_in_window(0, 5)
+        self.assertEqual(len(o), 1)
+        self.assertIn(list(o)[0], {'TCGA', 'GGGG', 'CCCC', 'ACGA'})
+        
+        # No guides should end at the end of the alignment, since it
+        # does not permit a context_nt of 1 for evaluating activity
+        o = gs._find_guides_in_window(5, 10)
+        self.assertEqual(len(o), 1)
+        self.assertIn(list(o)[0], {'ATTC', 'GGGG', 'CCCC'})
+
+        # The ranges below should not work because the test predictor
+        # uses a context_nt of 1, which these do not permit
+        with self.assertRaises(guide_search.CannotFindAnyGuidesError):
+            gs._find_guides_in_window(0, 4)
+        with self.assertRaises(guide_search.CannotFindAnyGuidesError):
+            gs._find_guides_in_window(6, 10)
 
     def tearDown(self):
         # Re-enable logging
