@@ -605,7 +605,7 @@ def design_for_id(args):
                 obj_type=obj_type,
                 max_primers_at_site=args.max_primers_at_site,
                 max_target_length=args.max_target_length,
-                cost_weights=args.cost_fn_weights,
+                obj_weights=args.obj_fn_weights,
                 only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
                 halt_early=args.halt_search_early)
             ts.find_and_write_targets(args.out_tsv[i],
@@ -973,12 +973,15 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('--max-target-length', type=int,
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))
-    # TODO: only use 2 weights (primers and amplicon length)
-    parser_ct_args.add_argument('--cost-fn-weights', type=float, nargs=3,
-        help=("Specify custom weights in the cost function; given as "
-              "3 weights (A B C), where the cost funct_argsion is "
-              "A*(total number of primers) + B*log2(amplicon length) + "
-              "C*(number of guides)"))
+    parser_ct_args.add_argument('--obj-fn-weights', type=float, nargs=2,
+        help=("Specify custom weights to use in the objective function "
+              "for a target. These specify weights for penalties on primers "
+              "and amplicons relative to the guide objective. There are "
+              "2 weights (A B), where the target objective function "
+              "is [(guide objective value) +/- (A*(total number of "
+              "primers) + B*log2(amplicon length)]. It is + when "
+              "--obj is minimize-guides and - when --obj is "
+              "maximize-activity."))
     parser_ct_args.add_argument('--best-n-targets', type=int, default=10,
         help=("Only compute and output up to this number of targets. Note "
               "that runtime will generally be longer for higher values"))

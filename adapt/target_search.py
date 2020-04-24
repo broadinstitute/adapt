@@ -26,7 +26,7 @@ class TargetSearcher:
 
     def __init__(self, ps, gs, obj_type='min',
             max_primers_at_site=None,
-            max_target_length=None, cost_weights=None,
+            max_target_length=None, obj_weights=None,
             only_account_for_amplified_seqs=False,
             halt_early=False, obj_value_shift=None):
         """
@@ -41,8 +41,11 @@ class TargetSearcher:
                 no limit
             max_target_length: only allow amplicons whose length is at
                 most this; or None for no limit
-            cost_weights: a tuple giving weights in the cost function
-                in the order (primers, window, guides)
+            obj_weights: a tuple giving weights in the target objective
+                function for penalties on number of primers and amplicon
+                length, relative to the guide objective value. Tuple
+                (A, B) where A weighs total number of primers and B weighs
+                amplicon length
             only_account_for_amplified_seqs: design guides so as to account for
                 only sequences bound by primers (e.g., when obj_type is 'min',
                 cover only sequences bound by the primers), rather than
@@ -70,11 +73,10 @@ class TargetSearcher:
         self.max_primers_at_site = max_primers_at_site
         self.max_target_length = max_target_length
 
-        if cost_weights is None:
-            cost_weights = (0.6667, 0.2222, 0.1111)
-        self.cost_weight_primers = cost_weights[0]
-        self.cost_weight_window = cost_weights[1]
-        self.cost_weight_guides = cost_weights[2]
+        if obj_weights is None:
+            obj_weights = (0.50, 0.25)
+        self.obj_weight_primers = obj_weights[0]
+        self.obj_weight_length = obj_weights[1]
 
         if (only_account_for_amplified_seqs and
                 isinstance(self.gs, guide_search.GuideSearcherMaximizeActivity)):
@@ -219,20 +221,20 @@ class TargetSearcher:
             # Calculate a cost of the primers
             p1_num = p1.num_primers
             p2_num = p2.num_primers
-            cost_primers = self.cost_weight_primers * (p1_num + p2_num)
+            cost_primers = self.obj_weight_primers * (p1_num + p2_num)
 
-            # Calculate a cost of the window
-            cost_window = self.cost_weight_window * math.log2(window_length)
+            # Calculate a cost of the window length
+            cost_window = self.obj_weight_length * math.log2(window_length)
 
             # Calculate a best-case objective value for this target,
             # which can be done assuming a best-case for the guide search
             # This is useful for pruning the search
             if self.obj_type == 'min':
-                best_possible_obj_value = (self.cost_weight_guides *
-                        best_guide_obj_value + cost_primers + cost_window)
+                best_possible_obj_value = (best_guide_obj_value +
+                        cost_primers + cost_window)
             elif self.obj_type == 'max':
-                best_possible_obj_value = (self.cost_weight_guides *
-                        best_guide_obj_value - cost_primers - cost_window)
+                best_possible_obj_value = (best_guide_obj_value -
+                        cost_primers - cost_window)
 
             # Check if we should bother trying to find guides in this window
             if len(target_heap) >= best_n:
@@ -383,14 +385,14 @@ class TargetSearcher:
 
             # Calculate a total objective value
             if self.obj_type == 'min':
-                obj_value_total = (self.cost_weight_guides *
-                        self.gs.obj_value(guides) + cost_primers + cost_window)
+                obj_value_total = (self.gs.obj_value(guides) +
+                        cost_primers + cost_window)
                 obj_value_to_add = -1 * obj_value_total
             elif self.obj_type == 'max':
                 gs_obj_value = self.gs.obj_value(window_start, window_end,
                         guides, activities=activities)
-                obj_value_total = (self.cost_weight_guides *
-                        gs_obj_value - cost_primers - cost_window)
+                obj_value_total = (gs_obj_value -
+                        cost_primers - cost_window)
                 obj_value_to_add = obj_value_total
 
             # Add target to the heap (but only keep it if there are not
