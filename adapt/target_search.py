@@ -335,11 +335,14 @@ class TargetSearcher:
                 # Skip this window
                 continue
 
-            # Compute activities across target sequences, and median and
-            # 5'th percentile of activities
+            # Compute activities across target sequences, and expected, median,
+            # and 5th percentile of activities
             if self.gs.predictor is not None:
                 activities = self.gs.guide_set_activities(window_start,
                         window_end, guides)
+                guides_activity_expected = self.gs.guide_set_activities_expected_value(
+                        window_start, window_end, guides,
+                        activities=activities)
                 guides_activity_median, guides_activity_5thpctile = \
                         self.gs.guide_set_activities_percentile(
                                 window_start, window_end, guides, [50, 5],
@@ -350,6 +353,7 @@ class TargetSearcher:
                 # and may not necessarily be the case if self.obj_type is
                 # 'min'
                 activities = None
+                guides_activity_expected = math.nan
                 guides_activity_median, guides_activity_5thpctile = \
                         math.nan, math.nan
             # Calculate fraction of sequences bound by the guides
@@ -359,8 +363,8 @@ class TargetSearcher:
                 guides_frac_bound = self.gs.total_frac_bound_by_guides(
                         window_start, window_end, guides,
                         activities=activities)
-            guides_stats = (guides_frac_bound, guides_activity_median,
-                    guides_activity_5thpctile)
+            guides_stats = (guides_frac_bound, guides_activity_expected,
+                    guides_activity_median, guides_activity_5thpctile)
 
             # Calculate a total objective value
             if self.obj_type == 'min':
@@ -491,7 +495,8 @@ class TargetSearcher:
                 'right-primer-start', 'right-primer-num-primers',
                 'right-primer-frac-bound', 'right-primer-target-sequences',
                 'num-guides', 'total-frac-bound-by-guides',
-                'guides-median-activity', 'guides-5th-pctile-activity',
+                'guide-expected-activity',
+                'guide-median-activity', 'guide-5th-pctile-activity',
                 'guide-target-sequences', 'guide-target-sequence-positions']) +
                 '\n')
 
@@ -499,7 +504,7 @@ class TargetSearcher:
                 ((p1, p2), (guides_stats, guides)) = target
 
                 # Break out guides_stats
-                guides_frac_bound, guides_activity_median, guides_activity_5thpctile = guides_stats
+                guides_frac_bound, guides_activity_expected, guides_activity_median, guides_activity_5thpctile = guides_stats
 
                 # Determine the target endpoints
                 target_start = p1.start
@@ -522,9 +527,9 @@ class TargetSearcher:
                 line = [obj_value, target_start, target_end, target_length,
                     p1.start, p1.num_primers, p1.frac_bound, p1_seqs_str,
                     p2.start, p2.num_primers, p2.frac_bound, p2_seqs_str,
-                    len(guides), guides_frac_bound, guides_activity_median,
-                    guides_activity_5thpctile, guides_seqs_str,
-                    guides_positions_str]
+                    len(guides), guides_frac_bound, guides_activity_expected,
+                    guides_activity_median, guides_activity_5thpctile,
+                    guides_seqs_str, guides_positions_str]
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')
 

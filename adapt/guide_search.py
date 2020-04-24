@@ -372,6 +372,31 @@ class GuideSearcher:
         p = np.percentile(activities, q, interpolation='lower')
         return list(p)
 
+    def guide_set_activities_expected_value(self, window_start, window_end,
+            guide_set, activities=None):
+        """Compute expected activity across target sequences for
+        a guide set in a window.
+
+        This assumes the distribution across target sequences is uniform,
+        so it is equivalent to the mean.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            guide_set: set of strings representing guide sequences that
+                have been selected to be in a guide set
+            activities: output of self.guide_set_activities(); if not set,
+                this calls that function
+
+        Returns:
+            expected (here, mean) activity
+        """
+        if activities is None:
+            activities = self.guide_set_activities(window_start, window_end,
+                    guide_set)
+
+        return np.mean(activities)
+
     def _find_guides_for_each_window(self, window_size,
             window_step=1, hide_warnings=False):
         """Find a collection of guides in each window.
@@ -1791,11 +1816,10 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             # Write a header
             outf.write('\t'.join(['window-start', 'window-end',
                 'count', 'objective-value', 'total-frac-bound',
+                'guide-activity-expected',
                 'guide-activity-median', 'guide-activity-5thpctile',
                 'target-sequences',
                 'target-sequence-positions']) + '\n')
-
-            # TODO add col for mean activity, and in target_search
 
             for guides_in_window in guide_collections:
                 start, end, guide_seqs = guides_in_window
@@ -1805,6 +1829,8 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                         activities=activities)
                 frac_bound = self.total_frac_bound_by_guides(start, end,
                         guide_seqs, activities=activities)
+                guides_activity_expected = self.guide_set_activities_expected_value(
+                        start, end, guide_seqs, activities=activities)
                 guides_activity_median, guides_activity_5thpctile = \
                         self.guide_set_activities_percentile(start, end,
                                 guide_seqs, [50, 5], activities=activities)
@@ -1815,6 +1841,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                              for gd_seq in guide_seqs_sorted]
                 positions_str = ' '.join(str(p) for p in positions)
                 line = [start, end, count, obj, frac_bound,
+                        guides_activity_expected,
                         guides_activity_median, guides_activity_5thpctile,
                         guide_seqs_str,
                         positions_str]
