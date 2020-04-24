@@ -120,8 +120,8 @@ class TargetSearcher:
             best_n: only store and output the best_n targets according
                 to the objective
             no_overlap: if True, do not allow targets in the output
-                whose primers overlap on both ends. When True, if a
-                target overlaps with a target already in the output,
+                whose amplicons (target range) overlap. When True,
+                if a target overlaps with a target already in the output,
                 this *replaces* the overlapping one with the new one
                 if the new one has a better objective value. When False,
                 many targets in the best_n may be very similar
@@ -257,15 +257,30 @@ class TargetSearcher:
             # already in target_heap, check if we should bother trying to
             # find guides in this window
             overlapping_i = []
-            # TODO: be more strict and assume overlap means overlap of
-            # anywhere in the region (not just primers)
             if no_overlap:
-                # Check if any targets already in target_heap have
-                # primer pairs overlapping with (p1, p2)
+                # Check if any targets already in target_heap overlap
+                # with this target
+                # Note that this strategy does have the possibility of leading
+                # to suboptimal solutions. Effectively, successive windows
+                # can repeatedly remove other overlapping ones that might
+                # otherwise be in the best_n. For example, consider targets
+                # A, B, and C where A overlaps B and B overlaps C but A
+                # does not overlap C. And say the true ranking is
+                # A<B<C, but their objective values are close and better than
+                # any other possible target option. Adding B would remove
+                # A, and then adding C would remove B. So we are left with
+                # only C from this set of targets, but ideally we would
+                # like to have both A and C. One way around this might be
+                # to keep a heap with >best_n options and only prune for
+                # diverse solutions (non-overlap) later on.
+                this_start = p1.start
+                this_end = this_start + target_length
                 for i in range(len(target_heap)):
                     _, _, target_i = target_heap[i]
                     (p1_i, p2_i), _ = target_i
-                    if p1.overlaps(p1_i) and p2.overlaps(p2_i):
+                    i_start = p1_i.start
+                    i_end = p2_i.start + p2_i.primer_length
+                    if (this_start < i_end) and (i_start < this_end):
                         # Replace target_i
                         overlapping_i += [i]
             if overlapping_i:

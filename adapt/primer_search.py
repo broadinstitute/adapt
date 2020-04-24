@@ -48,6 +48,18 @@ class PrimerResult:
                 (other.start - expand <= self.start < (other.start +
                     other.primer_length + expand)))
 
+    def overlaps_range(self, start, end):
+        """Determine if self overlaps a range.
+
+        Args:
+            start: start of range (inclusive)
+            end: end of range (exclusive)
+
+        Returns:
+            True iff self overlaps (start, end)
+        """
+        return ((self.start < end) and (start < self.start + self.primer_length))
+
     def __str__(self):
         return str((self.start, self.num_primers, self.primer_length,
             self.frac_bound, self.primers_in_cover))
