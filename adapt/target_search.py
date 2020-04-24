@@ -46,7 +46,7 @@ class TargetSearcher:
             guides_should_consider_all_seqs: design guides so as to account for
                 *all* sequences (e.g., when obj_type is 'min', cover
                 gs.cover_frac of all sequences, rather than only sequences
-                bound by the primers)
+                bound by the primers); must be True if obj_type is 'max'
             halt_early: if True, stop as soon as there are the desired number
                 of targets found, even if this does not complete the
                 search over the whole genome (i.e., the targets meet the
@@ -65,6 +65,13 @@ class TargetSearcher:
         self.cost_weight_guides = cost_weights[2]
 
         self.guides_should_consider_all_seqs = guides_should_consider_all_seqs
+
+        if ((not guides_should_consider_all_seqs) and
+                isinstance(self.gs, guide_search.GuideSearcherMaximizeActivity)):
+            # GuideSearcherMaximizeActivity only considers all sequences --
+            # this is mostly for technical implementation reasons
+            raise ValueError(("When maximizing activity, "
+                "guides_should_consider_all_seqs must be True"))
 
         self.halt_early = halt_early
 
@@ -276,19 +283,28 @@ class TargetSearcher:
             else:
                 # Find the sequences that are bound by some primer in p1 AND
                 # some primer in p2
+                # Note that this is only implemented when self.gs is an
+                # instance of GuideSearcherMinimizeGuides (i.e., not for
+                # MaximizeActivity -- mostly for technical implementation
+                # reasons)
                 p1_bound_seqs = self.ps.seqs_bound_by_primers(p1.primers_in_cover)
                 p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
                 primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
                 guide_seqs_to_consider = primer_bound_seqs
 
-            # Find guides in the window, only searching across
-            # the sequences in guide_seqs_to_consider
+            # Find guides in the window
+            if isinstance(self.gs, guide_search.GuideSearcherMinimizeGuides):
+                extra_args = {'only_consider': guide_seqs_to_consider}
+            else:
+                extra_args = {}
             try:
                 guides = self.gs._find_guides_in_window(
-                    window_start, window_end,
-                    only_consider=guide_seqs_to_consider)
+                    window_start, window_end, **extra_args)
             except guide_search.CannotAchieveDesiredCoverageError:
                 # No more suitable guides; skip this window
+                continue
+            except guide_search.CannotFindAnyGuidesError:
+                # No suitable guides in this window; skip it
                 continue
 
             if len(guides) == 0:
@@ -297,35 +313,30 @@ class TargetSearcher:
                 # Skip this window
                 continue
 
-            # Compute stats on the guide set
-            if self.gs.predictor is None:
+            # Compute activities across target sequences, and median and
+            # 5'th percentile of activities
+            if self.gs.predictor is not None:
+                activities = self.gs.guide_set_activities(window_start,
+                        window_end, guides)
+                guides_activity_median, guides_activity_5thpctile = \
+                        self.gs.guide_set_activities_percentile(
+                                window_start, window_end, guides, [50, 5],
+                                activities=activities)
+            else:
                 # There is no predictor to predict activities
                 # This should only be the case if self.obj_type is 'min',
                 # and may not necessarily be the case if self.obj_type is
                 # 'min'
                 activities = None
-            else:
-                # Compute activities of the guide set across sequences
-                activities = self.gs.guide_set_activities(window_start,
-                        window_end, guides)
+                guides_activity_median, guides_activity_5thpctile = \
+                        math.nan, math.nan
             # Calculate fraction of sequences bound by the guides
-            if self.obj_type == 'min':
+            if isinstance(self.gs, guide_search.GuideSearcherMinimizeGuides):
                 guides_frac_bound = self.gs.total_frac_bound_by_guides(guides)
-            elif self.obj_type == 'max':
+            elif isinstance(self.gs, guide_search.GuideSearcherMaximizeActivity):
                 guides_frac_bound = self.gs.total_frac_bound_by_guides(
                         window_start, window_end, guides,
                         activities=activities)
-            # Calculate median activity and 5'th percentile of activity
-            # of the guides
-            if activities is None:
-                # There is no predictor to predict activity; make this nan
-                guides_activity_median, guides_activity_5thpctile = \
-                        math.nan, math.nan
-            else:
-                guides_activity_median, guides_activity_5thpctile = \
-                        self.gs.guide_set_activities_percentile(
-                                window_start, window_end, guides, [50, 5],
-                                activities=activities)
             guides_stats = (guides_frac_bound, guides_activity_median,
                     guides_activity_5thpctile)
 

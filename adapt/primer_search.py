@@ -169,7 +169,7 @@ class PrimerSearcher(guide_search.GuideSearcherMinimizeGuides):
                 window_size, hide_warnings=True):
             start, end, primers_in_cover = cover
             num_primers = len(primers_in_cover)
-            frac_bound = self._total_frac_bound_by_guides(primers_in_cover)
+            frac_bound = self.total_frac_bound_by_guides(primers_in_cover)
 
             # Check constraints
             if max_at_site is not None and num_primers > max_at_site:
