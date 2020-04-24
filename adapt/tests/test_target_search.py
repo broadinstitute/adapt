@@ -77,7 +77,7 @@ class TestTargetSearch(unittest.TestCase):
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
                 window_length = window_end - window_start
-                guides_frac_bound, _, _ = guides_stats
+                guides_frac_bound, _, _, _ = guides_stats
 
                 # All windows are at least 10 nt long; verify this
                 self.assertGreaterEqual(window_length, 10)
@@ -94,14 +94,17 @@ class TestTargetSearch(unittest.TestCase):
     def test_find_targets_without_overlap_minimize(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
             targets = self.a_min.find_targets(best_n=best_n, no_overlap=True)
-            self.assertEqual(len(targets), best_n)
+
+            # It is possible the number of targets is slightly
+            # less than best_n
+            self.assertLessEqual(len(targets), best_n)
 
             for cost, target in targets:
                 (p1, p2), (guides_stats, guides) = target
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
                 window_length = window_end - window_start
-                guides_frac_bound, _, _ = guides_stats
+                guides_frac_bound, _, _, _ = guides_stats
 
                 # All windows are at least 10 nt long; verify this
                 # Since here targets cannot overlap, some may be
@@ -143,7 +146,7 @@ class TestTargetSearch(unittest.TestCase):
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
                 window_length = window_end - window_start
-                guides_frac_bound, _, _ = guides_stats
+                guides_frac_bound, _,  _, _ = guides_stats
 
                 # Windows must be at least the guide length (6)
                 self.assertGreaterEqual(window_length, 6)
@@ -215,7 +218,7 @@ class TestTargetSearch(unittest.TestCase):
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
                 window_length = window_end - window_start
-                guides_frac_bound, guides_activity_median, guides_activity_5thpctile = guides_stats
+                guides_frac_bound, guides_activity_expected, guides_activity_median, guides_activity_5thpctile = guides_stats
 
                 # All windows are at least 10 nt long; verify this
                 # Since here targets cannot overlap, some may be
