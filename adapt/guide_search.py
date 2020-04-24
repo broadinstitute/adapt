@@ -1149,7 +1149,8 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             raise ValueError("penalty_strength must be >= 0")
 
         if 'predictor' not in kwargs:
-            raise Exception(("predictor must be specified to __init__()"))
+            raise Exception(("predictor must be specified to __init__() "
+                "in order to maximize expected activity"))
 
         if algorithm not in ['greedy', 'random-greedy']:
             raise ValueError(("algorithm must be 'greedy' or "
@@ -1220,7 +1221,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         # The highest objective value occurs when expected activity is
         # at its maximum (which occurs when there is maximal detection for
         # all sequences) and the number of guides is 1
-        return self._obj_value_from_params(self.predictor.rough_activity_max,
+        return self._obj_value_from_params(self.predictor.rough_max_activity,
                 1)
 
     def total_frac_bound_by_guides(self, window_start, window_end, guide_set,
