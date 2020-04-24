@@ -10,6 +10,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 import numpy as np
 import tensorflow as tf
 
+# Again, suppress TensorFlow warnings
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 

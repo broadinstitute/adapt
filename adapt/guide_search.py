@@ -1020,7 +1020,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
         return frac_bound
 
-    def find_guides_that_cover(self, window_size, out_fn,
+    def find_guides_with_sliding_window(self, window_size, out_fn,
                                window_step=1, sort=False, print_analysis=True):
         """Find the smallest collection of guides that cover sequences, across
         all windows.
@@ -1059,8 +1059,9 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
 
             for guides_in_window in guide_collections:
                 start, end, guide_seqs = guides_in_window
-                score = self._score_collection_of_guides(guides_seqs)
-                frac_bound = self.total_frac_bound_by_guides(guides_seqs)
+                score = self._score_collection_of_guides(guide_seqs)
+                frac_bound = self.total_frac_bound_by_guides(guide_seqs)
+                count = len(guide_seqs)
 
                 guide_seqs_sorted = sorted(list(guide_seqs))
                 guide_seqs_str = ' '.join(guide_seqs_sorted)
@@ -1148,7 +1149,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         if penalty_strength < 0:
             raise ValueError("penalty_strength must be >= 0")
 
-        if 'predictor' not in kwargs:
+        if 'predictor' not in kwargs or kwargs['predictor'] is None:
             raise Exception(("predictor must be specified to __init__() "
                 "in order to maximize expected activity"))
 
@@ -1312,12 +1313,17 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
 
         # Compute ground set; do so considering all sequences
         seqs_to_consider = {0: set(range(self.aln.num_sequences))}
-        ground_set = self.aln.determine_representative_guides(
-                start, self.guide_length, seqs_to_consider,
-                self.guide_clusterer,
-                missing_threshold=self.missing_threshold,
-                guide_is_suitable_fn=self.guide_is_suitable_fn,
-                required_flanking_seqs=self.required_flanking_seqs)
+        try:
+            ground_set = self.aln.determine_representative_guides(
+                    start, self.guide_length, seqs_to_consider,
+                    self.guide_clusterer,
+                    missing_threshold=self.missing_threshold,
+                    guide_is_suitable_fn=self.guide_is_suitable_fn,
+                    required_flanking_seqs=self.required_flanking_seqs)
+        except alignment.CannotConstructGuideError:
+            # There may be too much missing data or a related issue
+            # at this site; do not have a ground set here
+            ground_set = set()
 
         # Predict activity against all target sequences for each guide
         # in ground set
@@ -1740,12 +1746,21 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         if len(curr_guide_set) == 0:
             # It is possible no guides can be found (e.g., if they all
             # create negative objective values)
+            if self.algorithm == 'random-greedy':
+                logger.warning(("No guides could be found, possibly because "
+                    "the ground set in this window is empty. 'random-greedy' "
+                    "restricts the ground set so that the objective function "
+                    "is non-negative. This is more likely to be the case "
+                    "if penalty_strength is relatively high and/or the "
+                    "difference (hard_guide_constraint - soft_guide_constraint) "
+                    "is large. Trying the 'greedy' maximization "
+                    "algorithm may avoid this."))
             raise CannotFindAnyGuidesError(("No guides could be constructed "
                 "in the window [%d, %d)") % (start, end))
 
         return curr_guide_set
 
-    def find_guides_with_maximal_activity(self, window_size, out_fn,
+    def find_guides_with_sliding_window(self, window_size, out_fn,
             window_step=1, sort=False, print_analysis=True):
         """Find a collection of guides that maximizes expected activity,
         across all windows.
@@ -1780,14 +1795,17 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                 'target-sequences',
                 'target-sequence-positions']) + '\n')
 
+            # TODO add col for mean activity, and in target_search
+
             for guides_in_window in guide_collections:
                 start, end, guide_seqs = guides_in_window
+                count = len(guide_seqs)
                 activities = self.guide_set_activities(start, end, guide_seqs)
                 obj = self.obj_value(start, end, guide_seqs,
                         activities=activities)
                 frac_bound = self.total_frac_bound_by_guides(start, end,
-                        guides_seqs, activities=activities)
-                guides_activity_median, guides_activity5thpctile = \
+                        guide_seqs, activities=activities)
+                guides_activity_median, guides_activity_5thpctile = \
                         self.guide_set_activities_percentile(start, end,
                                 guide_seqs, [50, 5], activities=activities)
 

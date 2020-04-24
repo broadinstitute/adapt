@@ -27,8 +27,8 @@ class TargetSearcher:
     def __init__(self, ps, gs, obj_type='min',
             max_primers_at_site=None,
             max_target_length=None, cost_weights=None,
-            guides_should_consider_all_seqs=False,
-            halt_early=False):
+            only_account_for_amplified_seqs=False,
+            halt_early=False, obj_value_shift=None):
         """
         Args:
             ps: PrimerSearcher object
@@ -43,18 +43,30 @@ class TargetSearcher:
                 most this; or None for no limit
             cost_weights: a tuple giving weights in the cost function
                 in the order (primers, window, guides)
-            guides_should_consider_all_seqs: design guides so as to account for
-                *all* sequences (e.g., when obj_type is 'min', cover
-                gs.cover_frac of all sequences, rather than only sequences
-                bound by the primers); must be True if obj_type is 'max'
+            only_account_for_amplified_seqs: design guides so as to account for
+                only sequences bound by primers (e.g., when obj_type is 'min',
+                cover only sequences bound by the primers), rather than
+                all sequences; must be False if obj_type is 'max'
             halt_early: if True, stop as soon as there are the desired number
                 of targets found, even if this does not complete the
                 search over the whole genome (i.e., the targets meet the
                 constraints but may not be optimal)
+            obj_value_shift: amount by which to shift objective values
+                before they are reported. This is only intended to avoid
+                confusion about reported objective values -- e.g., if
+                values for some targets would be positive and others
+                negative, we can shift all values upward so they are all
+                positive so that there is not confusion about differences
+                between positive/negative. If None (default), defaults are
+                set below based on obj_type.
         """
         self.ps = ps
         self.gs = gs
+
+        if obj_type not in ['min', 'max']:
+            raise ValueError(("obj_type must be 'min' or 'max'"))
         self.obj_type = obj_type
+
         self.max_primers_at_site = max_primers_at_site
         self.max_target_length = max_target_length
 
@@ -64,16 +76,26 @@ class TargetSearcher:
         self.cost_weight_window = cost_weights[1]
         self.cost_weight_guides = cost_weights[2]
 
-        self.guides_should_consider_all_seqs = guides_should_consider_all_seqs
-
-        if ((not guides_should_consider_all_seqs) and
+        if (only_account_for_amplified_seqs and
                 isinstance(self.gs, guide_search.GuideSearcherMaximizeActivity)):
             # GuideSearcherMaximizeActivity only considers all sequences --
             # this is mostly for technical implementation reasons
             raise ValueError(("When maximizing activity, "
-                "guides_should_consider_all_seqs must be True"))
+                "only_account_for_amplified_seqs must be False"))
+
+        self.only_account_for_amplified_seqs = only_account_for_amplified_seqs
 
         self.halt_early = halt_early
+
+        if obj_value_shift is None:
+            if obj_type == 'min':
+                # Values for all design options should all be positive, so
+                # no need to shift
+                self.obj_value_shift = 0
+            elif obj_type == 'max':
+                # Values for some design options may be positive and others
+                # negative, so shift all up so that most are positive
+                self.obj_value_shift = 4.0
 
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.ps.
@@ -269,18 +291,7 @@ class TargetSearcher:
                 window_start, window_end, best_n, len(target_heap))
 
             # Determine what set of sequences the guides should account for
-            if self.guides_should_consider_all_seqs:
-                # Design across the entire collection of sequences
-                # This may lead to more guides being designed than if only
-                # designing across primer_bound_seqs (below) because more
-                # sequences must be considered in the design
-                # But this can improve runtime because the seqs_to_consider
-                # used by self.gs in the design will be more constant
-                # across different windows, which will enable it to better
-                # take advantage of memoization (in self.gs._memoized_guides)
-                # during the design
-                guide_seqs_to_consider = None
-            else:
+            if self.only_account_for_amplified_seqs:
                 # Find the sequences that are bound by some primer in p1 AND
                 # some primer in p2
                 # Note that this is only implemented when self.gs is an
@@ -291,6 +302,17 @@ class TargetSearcher:
                 p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
                 primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
                 guide_seqs_to_consider = primer_bound_seqs
+            else:
+                # Design across the entire collection of sequences
+                # This may lead to more guides being designed than if only
+                # designing across primer_bound_seqs (below) because more
+                # sequences must be considered in the design
+                # But this can improve runtime because the seqs_to_consider
+                # used by self.gs in the design will be more constant
+                # across different windows, which will enable it to better
+                # take advantage of memoization (in self.gs._memoized_guides)
+                # during the design
+                guide_seqs_to_consider = None
 
             # Find guides in the window
             if isinstance(self.gs, guide_search.GuideSearcherMinimizeGuides):
@@ -440,6 +462,10 @@ class TargetSearcher:
             r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
         r = [(obj_value, target) for sort_tuple, obj_value, target in r_with_sort_tuple]
 
+        # Shift obj_value
+        r = [(obj_value + self.obj_value_shift, target)
+                for obj_value, target in r]
+
         return r
 
     def find_and_write_targets(self, out_fn, best_n=10):
@@ -473,7 +499,7 @@ class TargetSearcher:
                 ((p1, p2), (guides_stats, guides)) = target
 
                 # Break out guides_stats
-                guides_frac_bound, guides_activity_median, guide_activity_5thpctile = guides_stats
+                guides_frac_bound, guides_activity_median, guides_activity_5thpctile = guides_stats
 
                 # Determine the target endpoints
                 target_start = p1.start
@@ -493,7 +519,7 @@ class TargetSearcher:
                                     for gd_seq in guides_seqs_sorted]
                 guides_positions_str = ' '.join(str(p) for p in guides_positions)
 
-                line = [cost, target_start, target_end, target_length,
+                line = [obj_value, target_start, target_end, target_length,
                     p1.start, p1.num_primers, p1.frac_bound, p1_seqs_str,
                     p2.start, p2.num_primers, p2.frac_bound, p2_seqs_str,
                     len(guides), guides_frac_bound, guides_activity_median,

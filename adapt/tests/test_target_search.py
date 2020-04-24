@@ -200,7 +200,7 @@ class TestTargetSearch(unittest.TestCase):
                 lsh.HammingDistanceFamily(6), k=6)
 
         a_max = target_search.TargetSearcher(a_ps, a_max_gs, obj_type='max',
-            max_primers_at_site=2, guides_should_consider_all_seqs=True)
+            max_primers_at_site=2)
 
         for best_n in [1, 2, 3, 4, 5, 6]:
             targets = a_max.find_targets(best_n=best_n, no_overlap=False)
