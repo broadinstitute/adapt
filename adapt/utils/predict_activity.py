@@ -97,6 +97,27 @@ class Predictor:
                 "have been trained with the same context_nt, but they differ"))
         self.context_nt = classification_context_nt
 
+        # Load guide_length; this should be the same for the classification
+        # and regression models
+        classification_guide_length_path = os.path.join(
+                classification_model_path, 'assets.extra/guide_length.arg')
+        regression_guide_length_path = os.path.join(
+                regression_model_path, 'assets.extra/guide_length.arg')
+        if not os.path.isfile(classification_guide_length_path):
+            raise Exception(("Unknown guide_length for classification model; "
+                "the model should have a assets.extra/guide_length.arg file"))
+        if not os.path.isfile(regression_guide_length_path):
+            raise Exception(("Unknown guide_length for regression model; "
+                "the model should have a assets.extra/guide_length.arg file"))
+        with open(classification_guide_length_path) as f:
+            classification_guide_length = int(f.readline().strip())
+        with open(regression_guide_length_path) as f:
+            regression_guide_length = int(f.readline().strip())
+        if classification_guide_length != regression_guide_length:
+            raise Exception(("Classification and regression models should "
+                "have been trained with the same guide_length, but they differ"))
+        self.guide_length = classification_guide_length
+
         # Read classification and regression thresholds
         # The classification threshold decides which guide-target pairs are
         # active, and the regression threshold (trained only on active pairs)
@@ -302,6 +323,12 @@ class Predictor:
             start_pos: start position of all guides in pairs
             pairs: list of tuples (target with context, guide)
         """
+        # Verify guide length
+        for target_with_context, guide in pairs:
+            if len(guide) != self.guide_length:
+                raise ValueError(("For the models being used, length of "
+                    "guide must be %d") % self.guide_length)
+
         # Create one-hot encoding of pairs
         pairs_onehot = self._model_input_from_nt(pairs)
 
