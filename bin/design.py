@@ -39,7 +39,7 @@ OBJ_PARAM_DEFAULTS = {
         },
         'maximize-activity': {
             'soft_guide_constraint': 1,
-            'hard_guide_constraint': 4,
+            'hard_guide_constraint': 5,
             'penalty_strength': 0.25,
             'maximization_algorithm': 'random-greedy'
         }
