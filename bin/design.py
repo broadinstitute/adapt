@@ -40,7 +40,7 @@ OBJ_PARAM_DEFAULTS = {
         'maximize-activity': {
             'soft_guide_constraint': 1,
             'hard_guide_constraint': 4,
-            'penalty_strength': 0.5,
+            'penalty_strength': 0.25,
             'maximization_algorithm': 'random-greedy'
         }
 }
@@ -772,7 +772,10 @@ if __name__ == "__main__":
               "exceeds the soft guide constraint. Namely, for a guide "
               "set G, if the penalty strength is L and the soft "
               "guide constraint is h, then the penalty in the objective "
-              "function is L*max(0, |G|-h). Must be >= 0."))
+              "function is L*max(0, |G|-h). Must be >= 0. The value "
+              "depends on the output of activity model and reflects a "
+              "tolerance for more guides; for the default activity model "
+              "reasonable values are in the range [0.1, 0.5]."))
     # Algorithm for solving
     base_subparser.add_argument('--maximization-algorithm',
         choices=['greedy', 'random-greedy'],
