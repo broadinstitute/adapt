@@ -22,6 +22,7 @@ However, the problems share some similarity with the problems solved by CATCH, w
   * [Testing](#testing)
 * [Using ADAPT](#using-adapt)
   * [Designing guides](#designing-guides)
+  * [Objective](#objective)
   * [Common options](#common-options)
   * [Output](#output)
 * [Examples](#examples)
@@ -263,9 +264,9 @@ It sorts by `count` (ascending) followed by `score` (descending), so that window
 
 ### Complete targets
 
-When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and guide combination) and there are additional columns giving information about primer pairs.
-There is also a `cost` column, giving the cost of each target according to `--cost-fn-weights`.
-The rows in the output are sorted by the cost (ascending, so that better targets are on top).
+When SEARCH-TYPE is `complete-targets`, each row is a possible design option (primer pair and guide combination) and there are additional columns giving information about primer pairs and the guide sets.
+There is also an `objective-value` column, giving the objective value of each design option according to `--obj-fn-weights`.
+The rows in the output are sorted by the objective value (better options are on top); smaller values are better with `--obj minimize-guides` and larger values are better with `--obj maximize-activity`.
 
 When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV file for each cluster of input sequences.
 
@@ -273,6 +274,7 @@ When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV
 
 Note that output sequences are in the same sense as the input sequences.
 Synthesized guide sequences should be reverse complements of the output!
+Likewise, synthesized primer sequences should account for this.
 
 # Examples
 
@@ -299,7 +301,7 @@ See [Output](#output) above for a description of this file.
 ADAPT can automatically download and curate sequences during design, and search efficiently over the space of genomic regions to find primers/amplicons as well as guides.
 For example:
 ```bash
-design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
+design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 --obj minimize-guides -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
 ```
 downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable.
@@ -315,6 +317,8 @@ This randomly selects 100 sequences (`--sample-seqs 100`) prior to design to spe
 You can set `--verbose` to obtain more detailed output.
 
 Note that this example does not account for taxon-specificity.
+
+To find guide sets that maximize expected activity, use `--obj maximize-activity` instead and remove `-gm` and `-gp`.
 
 # Contributing
 
