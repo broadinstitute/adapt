@@ -75,8 +75,24 @@ def find_test_targets(design_target, aln, args):
     minhash_N = min(50, min_seq_len - minhash_k - 1)
 
     # Find representative sequences
+    if args.num_representative_targets:
+        # Use a maximum number of clusters, ignoring the inter-cluster
+        # distance threshold
+        threshold = None
+        num_clusters = args.num_representative_targets
+
+        if args.min_frac_to_cover_with_rep_seqs < 1.0:
+            logger.warning(("Fewer than %d targets may be reported "
+                "because --min-frac-to-cover-with-rep-seqs is <1.0; set "
+                "it to 1.0 to obtain %d representative targets") %
+                (num_clusters, num_clusters))
+    else:
+        # Use an inter-cluster distance threhsold
+        threshold = args.max_cluster_distance
+        num_clusters = None
     rep_seqs_idx = cluster.find_representative_sequences(aln_extract_seqs_dict,
-            k=minhash_k, N=minhash_N, threshold=0.1,
+            k=minhash_k, N=minhash_N, threshold=threshold,
+            num_clusters=num_clusters,
             frac_to_cover=args.min_frac_to_cover_with_rep_seqs)
     rep_seqs = [aln_extract_seqs[i] for i in rep_seqs_idx]
 
@@ -168,6 +184,19 @@ if __name__ == "__main__":
               "that the clusters account for at least this fraction of all "
               "sequences. This allows ignoring outlier clusters (whose "
               "sequence(s) may have not been covered by the design."))
+
+    parser.add_argument('--max-cluster-distance',
+        type=float, default=0.1,
+        help=("Maximum inter-cluster distance to merge clusters (measured "
+              "as 1-ANI). Higher values result in fewer representative "
+              "targets."))
+    parser.add_argument('--num-representative-targets',
+        type=int,
+        help=("Maximum number of clusters (equivalent to maximum number "
+              "of representative targets). If set, then "
+              "--max-cluster-distance is ignored. Note that fewer may "
+              "be reported if --min-frac-to-cover-with-rep-seqs is "
+              "<1.0; set it to 1.0 to report all."))
 
     # Log levels
     parser.add_argument("--debug",

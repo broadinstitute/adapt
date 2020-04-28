@@ -107,3 +107,23 @@ class TestFindRepresentativeSequences(unittest.TestCase):
         rep_seqs = cluster.find_representative_sequences(
                 seqs, k=3, N=12, threshold=0.3)
         self.assertCountEqual(rep_seqs, {'c', 'b'})
+
+    def test_num_clusters(self):
+        random.seed(1)
+        np.random.seed(1)
+
+        seqs = {'a': 'ATCGAATTCGGATCG',
+                'b': 'CCCCCCCCCCCCCCC',
+                'c': 'ATCGTATTCGGATCG',
+                'd': 'ATCGTATTCGGTTCG'}
+
+        # The expected clusters should be [a, c, d], [b]
+        # The medoid of the [a,c,d] cluster should be c
+        rep_seqs = cluster.find_representative_sequences(
+                seqs, k=3, N=12, threshold=None, num_clusters=2)
+        self.assertCountEqual(rep_seqs, {'c', 'b'})
+
+        # The expected cluster should be [a, b, c, d] with medoid c
+        rep_seqs = cluster.find_representative_sequences(
+                seqs, k=3, N=12, threshold=None, num_clusters=1)
+        self.assertCountEqual(rep_seqs, {'c'})
