@@ -512,8 +512,9 @@ class TargetSearcher:
                 'right-primer-start', 'right-primer-num-primers',
                 'right-primer-frac-bound', 'right-primer-target-sequences',
                 'num-guides', 'total-frac-bound-by-guides',
-                'guide-expected-activity',
-                'guide-median-activity', 'guide-5th-pctile-activity',
+                'guide-set-expected-activity',
+                'guide-set-median-activity', 'guide-set-5th-pctile-activity',
+                'guide-expected-activities',
                 'guide-target-sequences', 'guide-target-sequence-positions']) +
                 '\n')
 
@@ -541,11 +542,22 @@ class TargetSearcher:
                                     for gd_seq in guides_seqs_sorted]
                 guides_positions_str = ' '.join(str(p) for p in guides_positions)
 
+                # Find expected activity for each guide
+                window_start = p1.start + p1.primer_length
+                window_end = p2.start
+                expected_activities_per_guide = \
+                        [self.gs.guide_activities_expected_value(
+                            window_start, window_end, gd_seq)
+                            for gd_seq in guides_seqs_sorted]
+                expected_activities_per_guide_str = ' '.join(
+                        str(a) for a in expected_activities_per_guide)
+
                 line = [obj_value, target_start, target_end, target_length,
                     p1.start, p1.num_primers, p1.frac_bound, p1_seqs_str,
                     p2.start, p2.num_primers, p2.frac_bound, p2_seqs_str,
                     len(guides), guides_frac_bound, guides_activity_expected,
                     guides_activity_median, guides_activity_5thpctile,
+                    expected_activities_per_guide_str,
                     guides_seqs_str, guides_positions_str]
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')

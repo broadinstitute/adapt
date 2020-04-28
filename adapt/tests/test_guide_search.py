@@ -957,6 +957,22 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
                 guides, [5, 50])
         self.assertEqual(activities_percentile, [0, 2])
 
+    def test_guide_activities_expected_value(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGAGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='greedy')
+        # Guides should be 'AATT' and 'AGGG'
+        guides = gs._find_guides_in_window(2, 8)
+
+        aatt = gs.guide_activities_expected_value(2, 8, 'AATT')
+        self.assertEqual(aatt, 1.0)
+
+        aggg = gs.guide_activities_expected_value(2, 8, 'AGGG')
+        self.assertEqual(aggg, 0.5)
+
     def test_obj_value(self):
         gs = self.make_gs(['ATCGAATTCG',
                            'GGGAGGGGGG',
