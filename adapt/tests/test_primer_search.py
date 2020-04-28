@@ -58,6 +58,18 @@ class TestPrimerResult(unittest.TestCase):
         self.assertFalse(a.overlaps(c, expand=5))
         self.assertFalse(c.overlaps(a, expand=5))
 
+    def test_does_overlap_range(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        self.assertTrue(a.overlaps_range(5, 20))
+        self.assertTrue(a.overlaps_range(5, 12))
+        self.assertTrue(a.overlaps_range(12, 20))
+        self.assertTrue(a.overlaps_range(11, 13))
+
+    def test_does_not_overlap_range(self):
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        self.assertFalse(a.overlaps_range(2, 8))
+        self.assertFalse(a.overlaps_range(20, 25))
+
 
 class TestPrimerSearch(unittest.TestCase):
     """Tests methods in the PrimerSearch class.

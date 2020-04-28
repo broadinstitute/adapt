@@ -304,7 +304,7 @@ def fetch_sequences_for_taxonomy(taxid, segment):
     # Only fetch each accession once
     acc_to_fetch = list(set([n.acc for n in neighbors]))
 
-    if len(acc_to_fetch):
+    if len(acc_to_fetch) == 0:
         logger.critical(("There are 0 accessions for tax %d (segment: %s)"),
                 taxid, segment)
 

@@ -103,9 +103,12 @@ design.py [SEARCH-TYPE] [INPUT-TYPE] ...
 
 SEARCH-TYPE is one of:
 
-* `sliding-window`: Search for guides within a sliding window of a fixed size, and output an optimal guide set for each window.
 * `complete-targets`: Search for primer pairs and guides between them.
-Output the top _N_ targets, where each target contains primer pairs and guides between them.
+Output the best _N_ design options, where each option contains primers and guides.
+The _N_ options should represent a diverse selection of genomic regions.
+There is no set length for the region.
+ADAPT uses a beam search to prune options.
+* `sliding-window`: Search for guides within a sliding window of a fixed size, and output an optimal guide set for each window.
 
 INPUT-TYPE is one of:
 
@@ -123,28 +126,64 @@ design.py [SEARCH-TYPE] [INPUT-TYPE] --help
 ```
 This includes required positional arguments for each choice of subcommands.
 
+## Objective
+
+ADAPT supports two objective functions, specified using the `--obj` argument, to identify guide sets:
+
+* Minimize number of guides (`--obj minimize-guides`): Minimize the number of guides in the guide set subject to constraints on coverage of the input sequences.
+* Maximize activity (`--obj maximize-activity`): Maximize an expected activity for detecting the input sequences subject to soft and hard constraints on the size of the guide set.
+
+When the objective is to minimize the number of guides in the guide sets, the following arguments are relevant:
+
+* `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide hybridizes to a sequence.
+(Default: 0.)
+* `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
+(Default: 1.0.)
+* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
+Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
+* `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
+THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
+Higher values have higher precision and less recall.
+THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
+Higher values limit the number of pairs determined to be highly active.
+When this argument is set, to count as detecting a target sequence, a guide must be: (a) within MISMATCHES mismatches of the target sequences; (b) classified as active; and (c) determined to be highly active against the target sequence.
+This argument requires also setting `--predict-activity-model-path`.
+(Default: use the default thresholds included with the model.)
+
+When the objective is to maximize the expected activity of the guide sets, the following arguments are relevant:
+
+* `-sgc SOFT_GUIDE_CONSTRAINT`: Soft constraint on the number of guides.
+There is no penalty for a number of guides &le; SOFT_GUIDE_CONSTRAINT.
+Having a number of guides beyond this is penalized linearly according to PENALTY_STRENGTH.
+(Default: 1.)
+* `-hgc HARD_GUIDE_CONSTRAINT`: Hard constraint on the number of guides.
+The number of guides in a design will be &le; HARD_GUIDE_CONSTRAINT.
+HARD_GUIDE_CONSTRAINT must be &ge; SOFT_GUIDE_CONSTRAINT.
+(Default: 5.)
+* `--penalty-strength PENALTY_STRENGTH`: Importance of the penalty when the number of guides exceeds the soft guide constraint.
+For a guide set G, the penalty in the objective is PENALTY_STRENGTH\*max(0, |G| - SOFT_GUIDE_CONSTRAINT).
+Must be &ge; 0.
+The value depends on the output values of the activity model and reflects a tolerance for more guides; for the default activity model, reasonable values are in the range \[0.1, 0.5\].
+(Default: 0.25.)
+* `--maximization-algorithm [greedy|random-greedy]`: Algorithm to use for solving the submodular maximization problem.
+'greedy' uses the canonical greedy algorithm (Nemhauser 1978) for constrained monotone submodular maximization, which can perform well in practice but has poor worst-case guarantees because the function is not monotone (unless PENALTY_STRENGTH is 0).
+'random-greedy' uses a randomized greedy algorithm (Buchbinder 2014) for constrained non-monotone submodular maximization, which has good worst-case guarantees.
+(Default: 'random-greedy'.)
+
+Note that, when the objective is to maximize activity, this requires a predictive model of activity and thus `--predict-activity-model-path` (described below) must be specified.
+
 ## Common options
 
 Below is a summary of some common arguments to [`design.py`](./bin/design.py):
 
 * `-gl GUIDE_LENGTH`: Design guides to be GUIDE_LENGTH nt long.
 (Default: 28.)
-* `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide hybridizes to a sequence.
-(Default: 0.)
-* `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
-(Default: 1.0.)
 * `--predict-activity-model-path MODEL_C MODEL_R`: Predict activity of guide-target pairs and only count guides as detecting a target if they are predicted to be highly active against it.
 MODEL_C is for a classification model that predicts whether a guide-target pair is active, and MODEL_R is for a regression model that predicts a measure of activity on active pairs.
 Each argument is a path to a serialized model in TensorFlow's SavedModel format.
 Example classification and regression models are in [`models/`](./models).
 (Default: not set, which does not use predicted activity as a constraint during design.)
-* `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
-THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
-Higher values have higher precision and less recall.
-THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
-Higher values limit the number of pairs determined to be highly active.
-To count as detecting a target, a guide must be classified as active and determined to be highly active against the target.
-(Default: use the default thresholds included with the model.)
 * `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
 Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
 ADAPT does not output guides that hit group/taxons other than the one for which they are being designed.
@@ -163,25 +202,23 @@ Note that this is the 5'/3' end in the target sequence (not the spacer sequence)
 See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GUIDES file format.
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
 * `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
-* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
-See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
-Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
 
-Below are some additional arguments when SEARCH-TYPE is `complete-targets`:
+When SEARCH-TYPE is `complete-targets`, ADAPT performs a beam search to find a diverse collection of design options, each containing primers and guides.
+Below are some additional arguments when SEARCH-TYPE is `complete-targets`.
 
 * `-pl PRIMER_LENGTH`: Design primers to be PRIMER_LENGTH nt long.
 (Default: 30.)
-* `-pp PRIMER_COVER_FRAC`: Same as `-gp`, except for the design of primers.
+* `-pp PRIMER_COVER_FRAC`: Same as `-gp` described above, except for the design of primers.
 (Default: 1.0.)
 * `-pm PRIMER_MISMATCHES`: Tolerate up to PRIMER_MISMATCHES mismatches when determining whether a primer hybridizes to a sequence.
 (Default: 0.)
-* `--max-primers-at-site MAX_PRIMERS_AT_SITE`: Only allow up to MAX_PRIMERS_ATE_SITE primers at each primer set.
+* `--max-primers-at-site MAX_PRIMERS_AT_SITE`: Only allow up to MAX_PRIMERS_AT_SITE primers at each primer set.
 If not set, there is no limit.
 Smaller values can significantly improve runtime.
 (Default: not set.)
-* `--cost-fn-weights COST_FN_WEIGHTS`: Coefficients to use in a cost function for each target.
+* `--obj-fn-weights OBJ_FN_WEIGHTS`: Coefficients to use in an objective function for each design target.
 See `design.py complete-targets [INPUT-TYPE] --help` for details.
-* `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS targets, where each target receives a cost according to COST_FN_WEIGHTS.
+* `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS design options, where receives an objective value according to OBJ_FN_WEIGHTS.
 Note that higher values can significantly increase runtime.
 (Default: 10.)
 
