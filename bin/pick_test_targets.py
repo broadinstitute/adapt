@@ -111,6 +111,35 @@ def find_test_targets(design_target, aln, args):
                 rep_seq, args.gm, guide_allow_gu_pairs)
         overlap_labels = {'primer': primer_overlap, 'guide': guide_overlap}
 
+        if len(primer_overlap) == 0 and len(guide_overlap) == 0:
+            logger.warning(("Neither primers nor guides could be found "
+                "in a representative target sequence; it is possible that "
+                "the representative is from the wrong region, or it is "
+                "too divergent from the primer/guide sequences (for the "
+                "latter, try raising -pm and -gm). The representative target "
+                "sequence is for a design from the window [%d, %d) of the input "
+                "alignment. This only matters for tagging the target, and it "
+                "is ok to ignore this message.") % (design_target.target_start,
+                    design_target.target_end))
+        elif len(primer_overlap) == 0:
+            logger.warning(("Primers could not be found in a representative "
+                "target sequence; it is possible that the representative "
+                "is from the wrong region, or it is too divergent from the "
+                "primer sequences (for the latter, try raising -pm). The "
+                "representative target sequence is for a design from the "
+                "window [%d, %d) of the input alignment. This only matters "
+                "for tagging the target, and it is ok to ignore this message.") %
+                (design_target.target_start, design_target.target_end))
+        elif len(guide_overlap) == 0:
+            logger.warning(("Guides could not be found in a representative "
+                "target sequence; it is possible that the representative "
+                "is from the wrong region, or it is too divergent from the "
+                "guide sequences (for the latter, try raising -gm). The "
+                "representative target sequence is for a design from the "
+                "window [%d, %d) of the input alignment. This only matters "
+                "for tagging the target, and it is ok to ignore this message.") %
+                (design_target.target_start, design_target.target_end))
+
         rep_seq_tagged = formatting.tag_seq_overlap(overlap_labels, rep_seq)
         rep_seqs_tagged += [rep_seq_tagged]
 
@@ -145,10 +174,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument('design_tsv',
-        help=("Path to TSV with complete targets output by design.py"))
+            help=("Path to TSV with design options, as output by design.py. "
+                  "Alternatively, it can be a custom-made TSV, with one "
+                  "row per design option, containing the following columns: "
+                  "'target-start' (5' end of a targeted genomic region, e.g., "
+                  "an amplicon); 'target-end' (3' end); 'guide-target-"
+                  "sequences' (space-separated list of guide sequences); "
+                  "'left-primer-target-sequences' (space-separated list of "
+                  "forward primer sequences); 'right-primer-target-"
+                  "sequences' (space-separated list of reverse primer "
+                  "sequences)"))
     parser.add_argument('alignment_fasta',
-        help=("Path to alignment (FASTA) used for design of DESIGN_TSV (e.g., "
-              "as output by design.py --write-input-aln"))
+        help=("Path to alignment (FASTA) from which to extract targets. "
+              "Target positions in DESIGN_TSV must correspond to positions "
+              "in this alignment. If DESIGN_TSV is the output of design.py, "
+              "then this can be the output of `design.py --write-input-aln`."))
     parser.add_argument('out_tsv',
         help=("Path to output TSV with recommended targets for testing"))
 
