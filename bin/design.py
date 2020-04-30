@@ -444,7 +444,7 @@ def design_for_id(args):
             args.taxa_to_ignore_for_specificity):
         tax_ignore = seq_io.read_taxonomy_specificity_ignore(
                 args.taxa_to_ignore_for_specificity)
-        if args.specific_against_fastas or args.specific_against_taxs:
+        if args.specific_against_fastas or args.specific_against_taxa:
             logger.warning(("Taxa to ignore for specificity cannot from "
                 "--specific-against-*"))
 
