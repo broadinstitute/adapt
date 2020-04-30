@@ -5,6 +5,8 @@ from collections import defaultdict
 import logging
 import statistics
 
+import numpy as np
+
 from adapt.utils import guide
 from adapt.utils import lsh
 
@@ -13,7 +15,54 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
-class Alignment:
+class SequenceList:
+    """Immutable collection of sequences.
+    """
+
+    def __init__(self, seqs):
+        """
+        Args:
+            seqs: list of str, where seqs[i] is the i'th sequence
+        """
+        self.seqs = seqs
+        self.num_sequences = len(seqs)
+
+    def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False,
+                          remove_gaps=False):
+        """Construct list of sequences.
+
+        Args:
+            seqs_to_consider: collection of indices of sequences to use (if None,
+                use all)
+            include_idx: instead of a list of str giving the sequences in
+                the alignment, return a list of tuples (seq, idx) where seq
+                is a str giving a sequence and idx is the index in the
+                list
+            remove_gaps: if True, remove gaps ('-') from the returned
+                sequences; note that there should not be gaps because,
+                in general, this should represent unaligned sequences
+
+        Returns:
+            list of str giving the sequences (or, list of
+            tuples if include_idx is True)
+        """
+        if seqs_to_consider is None:
+            seqs_to_consider = range(self.num_sequences)
+
+        def seq_str(i):
+            # Get the str of the sequence with index i
+            s = self.seqs[i]
+            if remove_gaps:
+                s = s.replace('-', '')
+            return s
+
+        if include_idx:
+            return [(seq_str(i), i) for i in seqs_to_consider]
+        else:
+            return [seq_str(i) for i in seqs_to_consider]
+
+
+class Alignment(SequenceList):
     """Immutable collection of sequences that have been aligned.
 
     This stores sequences in column-major order, which should make it more
@@ -200,16 +249,14 @@ class Alignment:
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
             predictor: if set, a adapt.utils.predict_activity.Predictor
-                object, with evaluate() function to predict activity and
-                determine whether a guide has sufficiently high activity
-                for a target. If None, do not predict activity.
+                object. If None, do not predict activity.
             stop_early: if True, impose early stopping criteria while iterating
                 over clusters to improve runtime
 
         Returns:
             tuple (x, y) where:
                 x is the sequence of the constructed guide
-                y is a list of indices of sequences (a subset of
+                y is a set of indices of sequences (a subset of
                     values in seqs_to_consider) to which the guide x will
                     hybridize
             (Note that it is possible that x binds to no sequences and that
@@ -295,11 +342,12 @@ class Alignment:
             # Memoize activity evaluations
             pair_eval = {}
         def determine_binding_and_active_seqs(gd_sequence):
-            binding_seqs = []
+            binding_seqs = set()
             num_bound = 0
             if predictor is not None:
                 num_passed_predict_active = 0
-                # Determine what calls to make to predictor.evaluate(); it
+                # Determine what calls to make to
+                # predictor.determine_highly_active(); it
                 # is best to batch these
                 pairs_to_eval = []
                 for i, (seq, seq_idx) in enumerate(seq_rows):
@@ -309,7 +357,7 @@ class Alignment:
                         pair = (seq_with_context, gd_sequence)
                         pairs_to_eval += [pair]
                 # Evaluate activity
-                evals = predictor.evaluate(start, pairs_to_eval)
+                evals = predictor.determine_highly_active(start, pairs_to_eval)
                 for pair, y in zip(pairs_to_eval, evals):
                     pair_eval[pair] = y
                 # Fill in binding_seqs
@@ -321,14 +369,14 @@ class Alignment:
                         pair = (seq_with_context, gd_sequence)
                         if pair_eval[pair]:
                             num_passed_predict_active += 1
-                            binding_seqs += [seq_idx]
+                            binding_seqs.add(seq_idx)
             else:
                 num_passed_predict_active = None
                 for i, (seq, seq_idx) in enumerate(seq_rows):
                     if guide.guide_binds(gd_sequence, seq, mismatches,
                             allow_gu_pairs):
                         num_bound += 1
-                        binding_seqs += [seq_idx]
+                        binding_seqs.add(seq_idx)
             return binding_seqs, num_bound, num_passed_predict_active
 
         # Define a score function (higher is better) for a collection of
@@ -441,7 +489,7 @@ class Alignment:
                     continue
                 if predictor is not None:
                     s_with_context, _ = seq_rows_with_context[i]
-                    if not predictor.evaluate(start, [(s_with_context, s)])[0]:
+                    if not predictor.determine_highly_active(start, [(s_with_context, s)])[0]:
                         # s is not active against itself; skip it
                         continue
                 # s has no ambiguity and is a suitable guide; use it
@@ -585,6 +633,162 @@ class Alignment:
         counts_sorted = sorted(list(seq_count.items()))
         max_seq_str = max(counts_sorted, key=lambda x: x[1])[0]
         return max_seq_str
+
+    def determine_representative_guides(self, start, guide_length,
+            seqs_to_consider, guide_clusterer, missing_threshold=1,
+            guide_is_suitable_fn=None,
+            required_flanking_seqs=(None, None)):
+        """Construct a set of guides representative of the target sequences.
+
+        This is similar to construct_guide(), except returns a set of
+        representative sequences rather than a single best one.
+
+        Args:
+            start: start position in alignment at which to target
+            guide_length: length of the representative sequence (guide)
+            seqs_to_consider: dict mapping universe group ID to collection of
+                indices to use when constructing the representative sequences
+            guide_clusterer: object of SequenceClusterer to use for clustering
+                potential guide sequences; it must have been initialized with
+                a family suitable for guides of length guide_length; if None,
+                then don't cluster, and instead draw a consensus from all
+                the sequences
+            missing_threshold: do not construct representative sequences if
+                the fraction of sequences with missing data, at any position
+                in the target range, exceeds this threshold
+            guide_is_suitable_fn: if set, a function f(x) such that this
+                will only construct a guide x for which f(x) is True
+            required_flanking_seqs: tuple (s5, s3) that specifies sequences
+                on the 5' (left; s5) end and 3' (right; s3) end flanking
+                the guide (in the target, not the guide) that must be
+                present for a guide to bind; if either is None, no
+                flanking sequence is required for that end
+
+        Returns:
+            set of representative sequences
+        """
+        assert start + guide_length <= self.seq_length
+        assert len(seqs_to_consider) > 0
+
+        for pos in range(start, start + guide_length):
+            if self.frac_missing_at_pos(pos) > missing_threshold:
+                raise CannotConstructGuideError(("Too much missing data at "
+                    "a position in the target range"))
+
+        aln_for_guide = self.extract_range(start, start + guide_length)
+
+        # Before modifying seqs_to_consider, make a copy of it
+        seqs_to_consider_cp = {}
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider_cp[group_id] = set(seqs_to_consider[group_id])
+        seqs_to_consider = seqs_to_consider_cp
+
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # Ignore any sequences in the alignment that have a gap in
+        # this region
+        seqs_with_gap = set(aln_for_guide.seqs_with_gap(all_seqs_to_consider))
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider[group_id].difference_update(seqs_with_gap)
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # Only consider sequences in the alignment that have the
+        # required flanking sequence(s)
+        seqs_with_flanking = self.seqs_with_required_flanking(
+            start, guide_length, required_flanking_seqs,
+            seqs_to_consider=all_seqs_to_consider)
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider[group_id].intersection_update(seqs_with_flanking)
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # If every sequence in this region has a gap or does not contain
+        # required flanking sequence, then there are none left to consider
+        if len(all_seqs_to_consider) == 0:
+            raise CannotConstructGuideError(("All sequences in region have "
+                "a gap and/or do not contain required flanking sequences"))
+
+        seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
+            include_idx=True)
+
+        # Cluster the sequences
+        clusters = guide_clusterer.cluster(seq_rows)
+
+        # Take the consensus of each cluster to be the representative
+        representatives = set()
+        for cluster_idxs in clusters:
+            gd = aln_for_guide.determine_consensus_sequence(
+                cluster_idxs)
+            if 'N' in gd:
+                # Skip this; all sequences at a position in this cluster
+                # are 'N'
+                continue
+            if guide_is_suitable_fn is not None:
+                if guide_is_suitable_fn(gd) is False:
+                    # Skip this cluster; it is not suitable (e.g., may
+                    # not be specific)
+                    continue
+            representatives.add(gd)
+        return representatives
+
+    def compute_activity(self, start, gd_sequence, predictor):
+        """Compute activity between a guide sequence and every target sequence
+        in the alignment.
+
+        This only considers the region of the alignment within the range
+        [start, start + len(gd_sequence)), along with sequence context.
+
+        Args:
+            start: start position in alignment at which to target
+            gd_sequence: str representing guide sequence
+            predictor: a adapt.utils.predict_activity.Predictor object
+
+        Returns:
+            numpy array x where x[i] gives the predicted activity between
+            gd_sequence and the sequence in the alignment at index i
+        """
+        guide_length = len(gd_sequence)
+        assert start + guide_length <= self.seq_length
+
+        # Extract the target sequences, including context to use with
+        # prediction
+        if (start - predictor.context_nt < 0 or
+                start + guide_length + predictor.context_nt > self.seq_length):
+            raise CannotConstructGuideError(("The context needed for "
+                "the target to predict activity falls outside the "
+                "range of the alignment at this position"))
+        aln_for_guide_with_context = self.extract_range(
+                start - predictor.context_nt,
+                start + guide_length + predictor.context_nt)
+
+        # Ignore any sequences in the alignment that have a gap in
+        # this region
+        all_seqs_to_consider = set(range(self.num_sequences))
+        seqs_with_gap = set(aln_for_guide_with_context.seqs_with_gap(all_seqs_to_consider))
+        seqs_to_consider = all_seqs_to_consider.difference(seqs_with_gap)
+
+        seq_rows_with_context = aln_for_guide_with_context.make_list_of_seqs(
+                seqs_to_consider, include_idx=True)
+
+        # Start array of predicted activities; make this all 0s so that
+        # sequences for which activities are not computed (e.g., gap)
+        # have activity=0
+        activities = np.zeros(self.num_sequences)
+
+        # Determine what calls to make to predictor.compute_activity(); it
+        # is best to batch these
+        pairs_to_eval = []
+        pairs_to_eval_seq_idx = []
+        for seq_with_context, seq_idx in seq_rows_with_context:
+            pair = (seq_with_context, gd_sequence)
+            pairs_to_eval += [pair]
+            pairs_to_eval_seq_idx += [seq_idx]
+        # Evaluate activity
+        evals = predictor.compute_activity(start, pairs_to_eval)
+        for activity, seq_idx in zip(evals, pairs_to_eval_seq_idx):
+            # Fill in the activity for seq_idx
+            activities[seq_idx] = activity
+
+        return activities
 
     def sequences_bound_by_guide(self, gd_seq, gd_start, mismatches,
             allow_gu_pairs, required_flanking_seqs=(None, None)):

@@ -54,7 +54,7 @@ class TestPredictor(unittest.TestCase):
                 np.array_equal(self.predictor._model_input_from_nt(pairs),
                     expected))
 
-    def test_classify(self):
+    def test_classify_and_decide(self):
         # Target context is all A and, at guide, is all G
         # Guide is GC repeated, so has 14 mismatches against the target
         # Should be inactive
@@ -73,7 +73,7 @@ class TestPredictor(unittest.TestCase):
             guide_2)]
         pairs_onehot = self.predictor._model_input_from_nt(pairs)
 
-        self.assertListEqual(self.predictor._classify(pairs_onehot),
+        self.assertListEqual(self.predictor._classify_and_decide(pairs_onehot),
                 [False, True])
 
     def test_regress(self):
@@ -95,10 +95,11 @@ class TestPredictor(unittest.TestCase):
             guide_2)]
         pairs_onehot = self.predictor._model_input_from_nt(pairs)
 
-        self.assertListEqual(self.predictor._regress(pairs_onehot),
-                [False, True])
+        r = self.predictor._regress(pairs_onehot)
+        self.assertLess(r[0], self.predictor.regression_threshold)
+        self.assertGreater(r[1], self.predictor.regression_threshold)
 
-    def test_determine_highly_active(self):
+    def test_determine_highly_active_computations(self):
         # Target context is all A and, at guide, is all G
         # Guide is GC repeated, so has 14 mismatches against the target
         # Should be inactive
@@ -140,10 +141,16 @@ class TestPredictor(unittest.TestCase):
                 (target_with_context_4, guide_4),
                 (target_with_context_5, guide_5)]
 
-        self.assertListEqual(self.predictor._determine_highly_active(pairs),
-                [False, True, False, False, True])
+        # Use _run_models_and_memoize() to compute results, and use a
+        # nonsense start position (-1) (it doesn't matter), and pull
+        # output determinations about highly active
+        self.predictor._run_models_and_memoize(-1, pairs)
+        r = [self.predictor._memoized_evaluations[-1][pair] for pair in pairs]
+        highly_active = [x[1] for x in r]
 
-    def test_evaluate(self):
+        self.assertListEqual(highly_active, [False, True, False, False, True])
+
+    def test_memoized_evaluations(self):
         # Target context is all A and, at guide, is all G
         # Guide is GC repeated, so has 14 mismatches against the target
         # Should be inactive
@@ -169,10 +176,15 @@ class TestPredictor(unittest.TestCase):
         pairs_23 = [(target_with_context_2, guide_2),
                 (target_with_context_3, guide_3)]
 
-        self.assertListEqual(self.predictor.evaluate(1, pairs_1),
+        self.assertListEqual(self.predictor.determine_highly_active(1, pairs_1),
                 [False])
-        self.assertListEqual(self.predictor.evaluate(5, pairs_23),
+        self.assertListEqual(self.predictor.determine_highly_active(5, pairs_23),
                 [True, False])
+        self.assertEqual(self.predictor.compute_activity(1, pairs_1)[0], 0)
+        self.assertGreater(self.predictor.compute_activity(5, pairs_23)[0], 0)
+        self.assertEqual(self.predictor.compute_activity(5, pairs_23)[1], 0)
+        self.predictor.cleanup_memoized(1)
+        self.assertEqual(self.predictor.compute_activity(1, pairs_1)[0], 0)
         self.predictor.cleanup_memoized(1)
 
         # Target context is all A (except G PFS) and, at guide, is all G
@@ -195,12 +207,30 @@ class TestPredictor(unittest.TestCase):
                 (target_with_context_4, guide_4)]
 
         # Should be memoized
-        self.assertListEqual(self.predictor.evaluate(5, pairs_45),
+        self.assertListEqual(self.predictor.determine_highly_active(5, pairs_45),
                 [False, True])
+        self.assertEqual(self.predictor.compute_activity(5, pairs_45)[0], 0)
+        self.assertGreater(self.predictor.compute_activity(5, pairs_45)[1], 0)
 
         # Cleanup memoizations and test
         self.predictor.cleanup_memoized(5)
-        self.assertListEqual(self.predictor.evaluate(5, pairs_45),
+        self.assertListEqual(self.predictor.determine_highly_active(5, pairs_45),
                 [False, True])
-        self.assertListEqual(self.predictor.evaluate(5, pairs_54),
+        self.assertListEqual(self.predictor.determine_highly_active(5, pairs_54),
                 [True, False])
+        self.assertEqual(self.predictor.compute_activity(5, pairs_45)[0], 0)
+        self.assertGreater(self.predictor.compute_activity(5, pairs_45)[1], 0)
+        self.assertGreater(self.predictor.compute_activity(5, pairs_54)[0], 0)
+        self.assertEqual(self.predictor.compute_activity(5, pairs_54)[1], 0)
+
+        # Do this again, with activity values first
+        self.predictor.cleanup_memoized(5)
+        self.assertEqual(self.predictor.compute_activity(5, pairs_45)[0], 0)
+        self.assertGreater(self.predictor.compute_activity(5, pairs_45)[1], 0)
+        self.assertGreater(self.predictor.compute_activity(5, pairs_54)[0], 0)
+        self.assertEqual(self.predictor.compute_activity(5, pairs_54)[1], 0)
+        self.assertListEqual(self.predictor.determine_highly_active(5, pairs_45),
+                [False, True])
+        self.assertListEqual(self.predictor.determine_highly_active(5, pairs_54),
+                [True, False])
+

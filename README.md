@@ -22,6 +22,7 @@ However, the problems share some similarity with the problems solved by CATCH, w
   * [Testing](#testing)
 * [Using ADAPT](#using-adapt)
   * [Designing guides](#designing-guides)
+  * [Objective](#objective)
   * [Common options](#common-options)
   * [Output](#output)
 * [Examples](#examples)
@@ -103,9 +104,12 @@ design.py [SEARCH-TYPE] [INPUT-TYPE] ...
 
 SEARCH-TYPE is one of:
 
-* `sliding-window`: Search for guides within a sliding window of a fixed size, and output an optimal guide set for each window.
 * `complete-targets`: Search for primer pairs and guides between them.
-Output the top _N_ targets, where each target contains primer pairs and guides between them.
+Output the best _N_ design options, where each option contains primers and guides.
+The _N_ options should represent a diverse selection of genomic regions.
+There is no set length for the region.
+ADAPT uses a beam search to prune options.
+* `sliding-window`: Search for guides within a sliding window of a fixed size, and output an optimal guide set for each window.
 
 INPUT-TYPE is one of:
 
@@ -123,35 +127,74 @@ design.py [SEARCH-TYPE] [INPUT-TYPE] --help
 ```
 This includes required positional arguments for each choice of subcommands.
 
+## Objective
+
+ADAPT supports two objective functions, specified using the `--obj` argument, to identify guide sets:
+
+* Minimize number of guides (`--obj minimize-guides`): Minimize the number of guides in the guide set subject to constraints on coverage of the input sequences.
+* Maximize activity (`--obj maximize-activity`): Maximize an expected activity for detecting the input sequences subject to soft and hard constraints on the size of the guide set.
+
+When the objective is to minimize the number of guides in the guide sets, the following arguments are relevant:
+
+* `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide hybridizes to a sequence.
+(Default: 0.)
+* `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
+(Default: 1.0.)
+* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
+Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
+* `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
+THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
+Higher values have higher precision and less recall.
+THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
+Higher values limit the number of pairs determined to be highly active.
+When this argument is set, to count as detecting a target sequence, a guide must be: (a) within MISMATCHES mismatches of the target sequences; (b) classified as active; and (c) determined to be highly active against the target sequence.
+This argument requires also setting `--predict-activity-model-path`.
+(Default: use the default thresholds included with the model.)
+
+When the objective is to maximize the expected activity of the guide sets, the following arguments are relevant:
+
+* `-sgc SOFT_GUIDE_CONSTRAINT`: Soft constraint on the number of guides.
+There is no penalty for a number of guides &le; SOFT_GUIDE_CONSTRAINT.
+Having a number of guides beyond this is penalized linearly according to PENALTY_STRENGTH.
+(Default: 1.)
+* `-hgc HARD_GUIDE_CONSTRAINT`: Hard constraint on the number of guides.
+The number of guides in a design will be &le; HARD_GUIDE_CONSTRAINT.
+HARD_GUIDE_CONSTRAINT must be &ge; SOFT_GUIDE_CONSTRAINT.
+(Default: 5.)
+* `--penalty-strength PENALTY_STRENGTH`: Importance of the penalty when the number of guides exceeds the soft guide constraint.
+For a guide set G, the penalty in the objective is PENALTY_STRENGTH\*max(0, |G| - SOFT_GUIDE_CONSTRAINT).
+Must be &ge; 0.
+The value depends on the output values of the activity model and reflects a tolerance for more guides; for the default activity model, reasonable values are in the range \[0.1, 0.5\].
+(Default: 0.25.)
+* `--maximization-algorithm [greedy|random-greedy]`: Algorithm to use for solving the submodular maximization problem.
+'greedy' uses the canonical greedy algorithm (Nemhauser 1978) for constrained monotone submodular maximization, which can perform well in practice but has poor worst-case guarantees because the function is not monotone (unless PENALTY_STRENGTH is 0).
+'random-greedy' uses a randomized greedy algorithm (Buchbinder 2014) for constrained non-monotone submodular maximization, which has good worst-case guarantees.
+(Default: 'random-greedy'.)
+
+Note that, when the objective is to maximize activity, this requires a predictive model of activity and thus `--predict-activity-model-path` (described below) must be specified.
+
 ## Common options
 
 Below is a summary of some common arguments to [`design.py`](./bin/design.py):
 
 * `-gl GUIDE_LENGTH`: Design guides to be GUIDE_LENGTH nt long.
 (Default: 28.)
-* `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide hybridizes to a sequence.
-(Default: 0.)
-* `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
-(Default: 1.0.)
 * `--predict-activity-model-path MODEL_C MODEL_R`: Predict activity of guide-target pairs and only count guides as detecting a target if they are predicted to be highly active against it.
 MODEL_C is for a classification model that predicts whether a guide-target pair is active, and MODEL_R is for a regression model that predicts a measure of activity on active pairs.
 Each argument is a path to a serialized model in TensorFlow's SavedModel format.
 Example classification and regression models are in [`models/`](./models).
 (Default: not set, which does not use predicted activity as a constraint during design.)
-* `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
-THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
-Higher values have higher precision and less recall.
-THRES_R is a decision threshold on the output of tHE REgression model (at least 0); predictions above this threshold are decided to be highly active.
-Higher values limit the number of pairs determined to be highly active.
-To count as detecting a target, a guide must be classified as active and determined to be highly active against the target.
-(Default: use the default thresholds included with the model.)
 * `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
 Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
 ADAPT does not output guides that hit group/taxons other than the one for which they are being designed.
 Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
 (Default: 2 for ID_M, 0.05 for ID_FRAC.)
-* `--specific-against [alignment] [alignment ...]`: Design guides to be specific against the provided alignments (in FASTA format).
+* `--specific-against-fastas [fasta] [fasta ...]`: Design guides to be specific against the provided sequences (in FASTA format; do not need to be aligned).
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
+* `--specific-against-taxa SPECIFIC_TSV`: Design guides to be specific against the provided taxa.
+SPECIFIC_TSV is a path to a TSV file where each row specifies a taxonomy with two columns: (1) NCBI taxonomic ID; (2) segment label, or 'None' if unsegmented.
+That is, the guides should not hit sequences in these taxonomies, as measured by ID_M and ID_FRAC.
 * `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs between guide and target sequence as matching.
 * `--require-flanking5 REQUIRE_FLANKING5` / `--require-flanking3 REQUIRE_FLANKING3`: Require the given sequence on the 5' (REQUIRE_FLANKING5) and/or 3' (REQUIRE_FLANKING3) protospacer flanking site (PFS) for each designed guide.
 This tolerates ambiguity in the sequence (e.g., 'H' requires 'A', 'C', or 'T').
@@ -160,25 +203,23 @@ Note that this is the 5'/3' end in the target sequence (not the spacer sequence)
 See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GUIDES file format.
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
 * `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
-* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
-See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
-Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
 
-Below are some additional arguments when SEARCH-TYPE is `complete-targets`:
+When SEARCH-TYPE is `complete-targets`, ADAPT performs a beam search to find a diverse collection of design options, each containing primers and guides.
+Below are some additional arguments when SEARCH-TYPE is `complete-targets`.
 
 * `-pl PRIMER_LENGTH`: Design primers to be PRIMER_LENGTH nt long.
 (Default: 30.)
-* `-pp PRIMER_COVER_FRAC`: Same as `-gp`, except for the design of primers.
+* `-pp PRIMER_COVER_FRAC`: Same as `-gp` described above, except for the design of primers.
 (Default: 1.0.)
 * `-pm PRIMER_MISMATCHES`: Tolerate up to PRIMER_MISMATCHES mismatches when determining whether a primer hybridizes to a sequence.
 (Default: 0.)
-* `--max-primers-at-site MAX_PRIMERS_AT_SITE`: Only allow up to MAX_PRIMERS_ATE_SITE primers at each primer set.
+* `--max-primers-at-site MAX_PRIMERS_AT_SITE`: Only allow up to MAX_PRIMERS_AT_SITE primers at each primer set.
 If not set, there is no limit.
 Smaller values can significantly improve runtime.
 (Default: not set.)
-* `--cost-fn-weights COST_FN_WEIGHTS`: Coefficients to use in a cost function for each target.
+* `--obj-fn-weights OBJ_FN_WEIGHTS`: Coefficients to use in an objective function for each design target.
 See `design.py complete-targets [INPUT-TYPE] --help` for details.
-* `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS targets, where each target receives a cost according to COST_FN_WEIGHTS.
+* `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS design options, where receives an objective value according to OBJ_FN_WEIGHTS.
 Note that higher values can significantly increase runtime.
 (Default: 10.)
 
@@ -223,9 +264,9 @@ It sorts by `count` (ascending) followed by `score` (descending), so that window
 
 ### Complete targets
 
-When SEARCH-TYPE is `complete-targets`, each row is a possible target (primer pair and guide combination) and there are additional columns giving information about primer pairs.
-There is also a `cost` column, giving the cost of each target according to `--cost-fn-weights`.
-The rows in the output are sorted by the cost (ascending, so that better targets are on top).
+When SEARCH-TYPE is `complete-targets`, each row is a possible design option (primer pair and guide combination) and there are additional columns giving information about primer pairs and the guide sets.
+There is also an `objective-value` column, giving the objective value of each design option according to `--obj-fn-weights`.
+The rows in the output are sorted by the objective value (better options are on top); smaller values are better with `--obj minimize-guides` and larger values are better with `--obj maximize-activity`.
 
 When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV file for each cluster of input sequences.
 
@@ -233,6 +274,7 @@ When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV
 
 Note that output sequences are in the same sense as the input sequences.
 Synthesized guide sequences should be reverse complements of the output!
+Likewise, synthesized primer sequences should account for this.
 
 # Examples
 
@@ -259,14 +301,14 @@ See [Output](#output) above for a description of this file.
 ADAPT can automatically download and curate sequences during design, and search efficiently over the space of genomic regions to find primers/amplicons as well as guides.
 For example:
 ```bash
-design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
+design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 --obj minimize-guides -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
 ```
 downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable.
 
 This designs primers and a minimal collection of guides within the amplicons they bind, such that:
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
-* guides detect 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`) and only counting as detecting a target if predicted to be highly active against the target (`--predict-activity-model-path`)
+* guides detect 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`), and only counting as detecting a target if predicted to be highly active against the target (`--predict-activity-model-path`)
 
 It outputs a file, `guides.tsv.0`, that contains the best 10 design choices (`--best-n-targets 10`) as measured by a cost function.
 See [Output](#output) above for a description of this file.
@@ -274,7 +316,9 @@ See [Output](#output) above for a description of this file.
 This randomly selects 100 sequences (`--sample-seqs 100`) prior to design to speed the process for this example; the command should take about 10 minutes to run in full.
 You can set `--verbose` to obtain more detailed output.
 
-Note that this example does not account for taxon-specificity or predicted activity of designs.
+Note that this example does not account for taxon-specificity.
+
+To find guide sets that maximize expected activity, use `--obj maximize-activity` instead and remove `-gm` and `-gp`.
 
 # Contributing
 

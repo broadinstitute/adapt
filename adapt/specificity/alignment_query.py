@@ -403,7 +403,10 @@ class AlignmentQuerierWithKmerSharding(AlignmentQuerier):
         frac_of_aln_hit = []
         for i, aln in enumerate(self.alns):
             num_hit = len(seqs_hit_by_aln[i]) if i in seqs_hit_by_aln else 0
-            frac_hit = float(num_hit) / aln.num_sequences
+            if aln.num_sequences == 0:
+                frac_hit = 0
+            else:
+                frac_hit = float(num_hit) / aln.num_sequences
             frac_of_aln_hit += [frac_hit]
         return frac_of_aln_hit
 

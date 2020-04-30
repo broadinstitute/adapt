@@ -10,6 +10,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 import numpy as np
 import tensorflow as tf
 
+# Again, suppress TensorFlow warnings
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
@@ -94,6 +97,27 @@ class Predictor:
                 "have been trained with the same context_nt, but they differ"))
         self.context_nt = classification_context_nt
 
+        # Load guide_length; this should be the same for the classification
+        # and regression models
+        classification_guide_length_path = os.path.join(
+                classification_model_path, 'assets.extra/guide_length.arg')
+        regression_guide_length_path = os.path.join(
+                regression_model_path, 'assets.extra/guide_length.arg')
+        if not os.path.isfile(classification_guide_length_path):
+            raise Exception(("Unknown guide_length for classification model; "
+                "the model should have a assets.extra/guide_length.arg file"))
+        if not os.path.isfile(regression_guide_length_path):
+            raise Exception(("Unknown guide_length for regression model; "
+                "the model should have a assets.extra/guide_length.arg file"))
+        with open(classification_guide_length_path) as f:
+            classification_guide_length = int(f.readline().strip())
+        with open(regression_guide_length_path) as f:
+            regression_guide_length = int(f.readline().strip())
+        if classification_guide_length != regression_guide_length:
+            raise Exception(("Classification and regression models should "
+                "have been trained with the same guide_length, but they differ"))
+        self.guide_length = classification_guide_length
+
         # Read classification and regression thresholds
         # The classification threshold decides which guide-target pairs are
         # active, and the regression threshold (trained only on active pairs)
@@ -136,8 +160,15 @@ class Predictor:
                 raise ValueError(("Regression threshold should be >= 0"))
         self.regression_threshold = regression_threshold
 
+        # Store a rough upper bound on the regression activity; this is
+        # used for estimates but is not enforced and does not need to
+        # be met by the regression output
+        self.rough_max_activity = 4.0
+
         # Memoize evaluations, organized by guide start position:
-        #   {guide start: {pair: result of evaluation}}
+        #   {guide start: {pair: X}}
+        # where each X is a tuple of (overall activity, False/True indicating
+        # whether highly active)
         self._memoized_evaluations = {}
 
     def _model_input_from_nt(self, pairs):
@@ -192,8 +223,8 @@ class Predictor:
         pred_activity = [p[0] for p in pred_activity.numpy()]
         return pred_activity
 
-    def _classify(self, pairs_onehot):
-        """Run classification model.
+    def _classify_and_decide(self, pairs_onehot):
+        """Run classification model and decide activity.
 
         Args:
             pairs_onehot: list of one-hot encoded pairs of target and guide
@@ -217,9 +248,7 @@ class Predictor:
             pairs_onehot: list of one-hot encoded pairs of target and guide
 
         Returns:
-            list of False or True giving result of whether each pair is highly
-            active based on regression, after making decision based on
-            self.regression_threshold
+            list of regression results
         """
         if len(pairs_onehot) == 0:
             return []
@@ -231,27 +260,80 @@ class Predictor:
         pred_regression_score = [max(self.regression_lower_bound,
             p + self.regression_shift) for p in pred_regression_score]
 
-        return [bool(p >= self.regression_threshold)
-                for p in pred_regression_score]
+        return pred_regression_score
 
-    def _determine_highly_active(self, pairs):
-        """Run classification model and regression model.
+    def _combine_model_results(self, classification_results,
+            regression_results):
+        """Combine classification and regression results to calculate
+        a single activity for each pair and determine whether each pair
+        is highly acitve.
+
+        The single activity is 0 if the point is classified as inactive,
+        and is the regression output if classified as active. Note that
+        the activity value can be 0 even if classified as active, if the
+        regression value is <= 0.
+
+        A pair is determined to be highly active if it is *both* classified
+        as active and its regression output is above a threshold.
+
+        Args:
+            classification_results: output of classification decisions
+                for each pair (list of False or True, indicating
+                whether active)
+            regression_results: output of regression model, only on
+                pairs decided to be active from classification
+
+        Returns:
+            list of tuples (a, h) where a is a single activity score for
+            a pair and h is False or True to indicate whether a pair is
+            both active and highly active
+        """
+        num_pairs = len(classification_results)
+
+        # Merge the results of classification and regression
+        results = [(None, None) for _ in range(len(classification_results))]
+        j = 0
+        for i in range(num_pairs):
+            if classification_results[i] is False:
+                # Classified inactive
+                # The activity is 0, and it is not highly active
+                results[i] = (0, False)
+            else:
+                # Classified active, so use regression results
+                # that decide if highly active
+                activity = regression_results[j]
+                highly_active = bool(regression_results[j] >=
+                        self.regression_threshold)
+                results[i] = (activity, highly_active)
+                j += 1
+        assert j == len(regression_results)
+
+        return results
+
+    def _run_models_and_memoize(self, start_pos, pairs):
+        """Run classification model and regression model, and memoize
+        all results.
 
         This runs classification on all pairs, and then regression
         on just the ones decided to be active.
 
-        Args:
-            pairs: list of tuples (target with context, guide)
+        It memoizes results returned by _combine_model_results().
 
-        Returns:
-            list of False or True giving result of whether a guide-target
-            pair is predicted to be *both* active and highly active
+        Args:
+            start_pos: start position of all guides in pairs
+            pairs: list of tuples (target with context, guide)
         """
+        # Verify guide length
+        for target_with_context, guide in pairs:
+            if len(guide) != self.guide_length:
+                raise ValueError(("For the models being used, length of "
+                    "guide must be %d") % self.guide_length)
+
         # Create one-hot encoding of pairs
         pairs_onehot = self._model_input_from_nt(pairs)
 
         # Run classification on all pairs
-        classification_results = self._classify(pairs_onehot)
+        classification_results = self._classify_and_decide(pairs_onehot)
 
         # Pull out pairs that are active
         pairs_onehot_active = [pair_onehot
@@ -261,44 +343,61 @@ class Predictor:
         # Run regression on the active pairs
         regression_results = self._regress(pairs_onehot_active)
 
-        # Merge the results of classification and regression
-        results = [None for _ in range(len(pairs))]
-        j = 0
-        for i in range(len(pairs)):
-            if classification_results[i] is False:
-                # Classified inactive
-                results[i] = False
-            else:
-                # Classified active, so use regression results
-                # that decide if highly active
-                results[i] = regression_results[j]
-                j += 1
-        assert j == len(regression_results)
+        # Compute results
+        combined_results = self._combine_model_results(classification_results,
+                regression_results)
 
-        return results
-
-    def evaluate(self, start_pos, pairs):
-        """Evaluate guide-target pairs, with memoized results.
-
-        Args:
-            start_pos: start position of all guides in pairs
-            pairs: list of tuples (target with context, guide)
-
-        Returns:
-            results of self._determine_highly_active() on these pairs
-        """
+        # Memoize results
         if start_pos not in self._memoized_evaluations:
             self._memoized_evaluations[start_pos] = {}
         mem = self._memoized_evaluations[start_pos]
+        for pair, r in zip(pairs, combined_results):
+            mem[pair] = r
 
+    def determine_highly_active(self, start_pos, pairs):
+        """Evaluate whether guide-target pairs are highly active.
+
+        Args:
+            start_pos: start position of all guides in pairs; used for
+                memoizations
+            pairs: list of tuples (target with context, guide)
+
+        Returns:
+            list of False or True indicating whether each pair is highly active
+        """
         # Determine which pairs do not have memoized results, and call
         # these
-        unique_pairs_to_evaluate = [pair for pair in set(pairs) if pair not in mem]
-        evaluations = self._determine_highly_active(unique_pairs_to_evaluate)
-        for pair, e in zip(unique_pairs_to_evaluate, evaluations):
-            mem[pair] = e
+        if start_pos not in self._memoized_evaluations:
+            self._memoized_evaluations[start_pos] = {}
+        mem = self._memoized_evaluations[start_pos]
+        unique_pairs_to_evaluate = [pair for pair in set(pairs)
+                if pair not in mem]
+        self._run_models_and_memoize(start_pos, unique_pairs_to_evaluate)
 
-        return [mem[pair] for pair in pairs]
+        mem = self._memoized_evaluations[start_pos]
+        return [mem[pair][1] for pair in pairs]
+
+    def compute_activity(self, start_pos, pairs):
+        """Compute a single activity measurement for pairs.
+
+        Args:
+            start_pos: start position of all guides in pairs; used for
+                memoizations
+            pairs: list of tuples (target with context, guide)
+
+        Returns:
+            activity value for each pair
+        """
+        # Determine which pairs do not have memoized results, and call
+        # these
+        if start_pos not in self._memoized_evaluations:
+            self._memoized_evaluations[start_pos] = {}
+        mem = self._memoized_evaluations[start_pos]
+        unique_pairs_to_evaluate = [pair for pair in set(pairs)
+                if pair not in mem]
+        self._run_models_and_memoize(start_pos, unique_pairs_to_evaluate)
+
+        return [mem[pair][0] for pair in pairs]
 
     def cleanup_memoized(self, start_pos):
         """Cleanup memoizations no longer needed at a start position.

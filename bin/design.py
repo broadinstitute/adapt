@@ -28,6 +28,56 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
+# Define defaults for parameters associated with different objectives
+# The reason to define them here, rather than in argparse, is that
+# defining them outside of argparse lets us check whether the
+# argument has been set (versus just set to its default)
+OBJ_PARAM_DEFAULTS = {
+        'minimize-guides': {
+            'guide_mismatches': 0,
+            'guide_cover_frac': 1.0
+        },
+        'maximize-activity': {
+            'soft_guide_constraint': 1,
+            'hard_guide_constraint': 5,
+            'penalty_strength': 0.25,
+            'maximization_algorithm': 'random-greedy'
+        }
+}
+
+
+def check_obj_args(args):
+    """Check argument depending on the objective function and set defaults.
+
+    Raise critical messages if arguments are set for the wrong objective
+    function than what is specified, and set defaults for these arguments if
+    they are not specified
+
+    Args:
+        args: namespace of arguments provided to this executable
+    """
+    if args.obj == 'minimize-guides':
+        if (args.soft_guide_constraint or args.hard_guide_constraint or
+                args.penalty_strength or args.maximization_algorithm):
+            logger.critical(("When --obj is 'minimize-guides', the "
+                "following arguments are not used: --soft-guide-constraint, "
+                "--hard-guide-constraint, --penalty-strength, "
+                "--maximization-algorithm"))
+        for arg in OBJ_PARAM_DEFAULTS['minimize-guides'].keys():
+            if vars(args)[arg] is None:
+                vars(args)[arg] = OBJ_PARAM_DEFAULTS['minimize-guides'][arg]
+
+    if args.obj == 'maximize-activity':
+        if (args.guide_mismatches or args.guide_cover_frac or
+                args.cover_by_year_decay):
+            logger.critical(("When --obj is 'maximize-activity', the "
+                "following arguments are not used: --guide-mismatches, "
+                "--guide-cover-frac, --cover-by-year-decay"))
+        for arg in OBJ_PARAM_DEFAULTS['maximize-activity'].keys():
+            if vars(args)[arg] is None:
+                vars(args)[arg] = OBJ_PARAM_DEFAULTS['maximize-activity'][arg]
+
+
 def seqs_grouped_by_year(seqs, args):
     """Group sequences according to their year and assigned partial covers.
 
@@ -321,6 +371,8 @@ def design_for_id(args):
         args: namespace of arguments provided to this executable
     """
     # Create an alignment object for each input
+    # If obj is not 'minimize-guides', guide_cover_frac and seq_groups
+    #  will be set to None
     alns = []
     seq_groups_per_input = []
     guide_cover_frac_per_input = []
@@ -347,13 +399,29 @@ def design_for_id(args):
         guide_cover_frac_per_input += [guide_cover_frac]
         primer_cover_frac_per_input += [primer_cover_frac]
 
-    # Also add the specific_against alignments into alns, but keep
-    # track of how many use for design (the first N of them)
+    # Also add the specific_against_fastas sequences into alns, but keep
+    # track of how many items in alns to use for design (the first N of them)
+    # Note that although these are being place in alns, they may not
+    # be actual alignments (they can be unaligned sequences)
     num_aln_for_design = len(args.in_fasta)
-    for specific_against_fasta in args.specific_against:
+    for specific_against_fasta in args.specific_against_fastas:
         seqs = seq_io.read_fasta(specific_against_fasta)
-        aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
-        alns += [aln]
+        seqs_list = alignment.SequenceList(list(seqs.values()))
+        alns += [seqs_list]
+    # Similarly, add specific_against_taxa sequences into alns after
+    # downloading them
+    if args.specific_against_taxa:
+        taxs_to_be_specific_against = seq_io.read_taxonomies_to_design_for(
+                args.specific_against_taxa)
+        for taxid, segment in taxs_to_be_specific_against:
+            logger.info(("Fetching sequences to be specific against tax "
+                "%d (segment: %s)"), taxid, segment)
+            seqs = prepare_alignment.fetch_sequences_for_taxonomy(
+                    taxid, segment)
+            seqs_list = alignment.SequenceList(list(seqs.values()))
+            alns += [seqs_list]
+    specific_against_exists = (len(args.specific_against_fastas) > 0 or
+            args.specific_against_taxa is not None)
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
@@ -362,7 +430,7 @@ def design_for_id(args):
     # Allow G-U base pairing, unless it is explicitly disallowed
     allow_gu_pairs = not args.do_not_allow_gu_pairing
 
-    # Assign an id in [0, 1, 2, ...] for each taxid
+    # Assign an id in [0, 1, 2, ...] for each taxid to design for
     # Find all alignments with each taxid
     aln_with_taxid = defaultdict(set)
     for i, taxid in enumerate(args.taxid_for_fasta):
@@ -376,10 +444,13 @@ def design_for_id(args):
             args.taxa_to_ignore_for_specificity):
         tax_ignore = seq_io.read_taxonomy_specificity_ignore(
                 args.taxa_to_ignore_for_specificity)
+        if args.specific_against_fastas or args.specific_against_taxs:
+            logger.warning(("Taxa to ignore for specificity cannot from "
+                "--specific-against-*"))
 
     # Construct the data structure for guide queries to perform
     # differential identification
-    if num_taxa > 1:
+    if num_taxa > 1 or specific_against_exists:
         logger.info(("Constructing data structure to permit guide queries for "
             "differential identification"))
         if args.diff_id_method == "lshnn":
@@ -452,7 +523,6 @@ def design_for_id(args):
 
         # Construct activity predictor
         if args.predict_activity_model_path:
-            pass
             cla_path, reg_path = args.predict_activity_model_path
             if args.predict_activity_thres:
                 # Use specified thresholds on classification and regression
@@ -467,27 +537,49 @@ def design_for_id(args):
             if args.predict_activity_thres:
                 raise Exception(("Cannot set --predict-activity-thres without "
                     "setting --predict-activity-model-path"))
+            if args.obj == 'maximize-activity':
+                raise Exception(("--predict-activity-model-path must be "
+                    "specified if --obj is 'maximize-activity'"))
             # Do not predict activity
             predictor = None
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
         # specific to this alignment
-        gs = guide_search.GuideSearcher(aln, args.guide_length,
-                                        args.guide_mismatches,
-                                        guide_cover_frac, args.missing_thres,
-                                        guide_is_suitable_fn=guide_is_suitable,
-                                        seq_groups=seq_groups,
-                                        required_guides=required_guides_for_aln,
-                                        blacklisted_ranges=blacklisted_ranges_for_aln,
-                                        allow_gu_pairs=allow_gu_pairs,
-                                        required_flanking_seqs=required_flanking_seqs,
-                                        predictor=predictor)
+        if args.obj == 'minimize-guides':
+            gs = guide_search.GuideSearcherMinimizeGuides(
+                    aln,
+                    args.guide_length,
+                    args.guide_mismatches,
+                    guide_cover_frac,
+                    args.missing_thres,
+                    seq_groups=seq_groups,
+                    guide_is_suitable_fn=guide_is_suitable,
+                    required_guides=required_guides_for_aln,
+                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    allow_gu_pairs=allow_gu_pairs,
+                    required_flanking_seqs=required_flanking_seqs,
+                    predictor=predictor)
+        elif args.obj == 'maximize-activity':
+            gs = guide_search.GuideSearcherMaximizeActivity(
+                    aln,
+                    args.guide_length,
+                    args.soft_guide_constraint,
+                    args.hard_guide_constraint,
+                    args.penalty_strength,
+                    args.missing_thres,
+                    algorithm=args.maximization_algorithm,
+                    guide_is_suitable_fn=guide_is_suitable,
+                    required_guides=required_guides_for_aln,
+                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    allow_gu_pairs=allow_gu_pairs,
+                    required_flanking_seqs=required_flanking_seqs,
+                    predictor=predictor)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
             # and write them to a file
-            gs.find_guides_that_cover(args.window_size,
+            gs.find_guides_with_sliding_window(args.window_size,
                 args.out_tsv[i],
                 window_step=args.window_step,
                 sort=args.sort_out)
@@ -504,11 +596,17 @@ def design_for_id(args):
                                               args.missing_thres,
                                               seq_groups=seq_groups,
                                               primer_gc_content_bounds=primer_gc_content_bounds)
+
+            if args.obj == 'minimize-guides':
+                obj_type = 'min'
+            elif args.obj == 'maximize-activity':
+                obj_type = 'max'
             ts = target_search.TargetSearcher(ps, gs,
+                obj_type=obj_type,
                 max_primers_at_site=args.max_primers_at_site,
                 max_target_length=args.max_target_length,
-                cost_weights=args.cost_fn_weights,
-                guides_should_cover_over_all_seqs=args.gp_over_all_seqs,
+                obj_weights=args.obj_fn_weights,
+                only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
                 halt_early=args.halt_search_early)
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets)
@@ -522,6 +620,8 @@ def design_for_id(args):
 
 def main(args):
     logger = logging.getLogger(__name__)
+
+    check_obj_args(args)
 
     logger.info("Running design.py with arguments: %s", args)
 
@@ -577,13 +677,28 @@ if __name__ == "__main__":
     ###########################################################################
     base_subparser = argparse.ArgumentParser(add_help=False)
 
-    # Parameters on guide length and mismatches
+    # Guide length
     base_subparser.add_argument('-gl', '--guide-length', type=int, default=28,
         help="Length of guide to construct")
-    base_subparser.add_argument('-gm', '--guide-mismatches', type=int, default=0,
+
+    # Objective function
+    base_subparser.add_argument('--obj',
+        choices=['maximize-activity', 'minimize-guides'],
+        default='minimize-guides',
+        help=(("Objective function to solve. 'maximize-activity' maximizes "
+               "the expected activity of the guide set of the target genomes "
+               "subject to soft and hard constraints on the size of the guide "
+               "set. 'minimize-guides' minimizes the number of guides in the "
+               "guide set subject to coverage constraints across the target "
+               "genomes.")))
+
+    ##########
+    # Parameters for minimization objective
+
+    # Number of guide mismatches
+    base_subparser.add_argument('-gm', '--guide-mismatches', type=int,
         help=("Allow for this number of mismatches when "
               "determining whether a guide covers a sequence"))
-
     # Desired coverage of target sequences
     def check_cover_frac(val):
         fval = float(val)
@@ -593,14 +708,9 @@ if __name__ == "__main__":
         else:
             raise argparse.ArgumentTypeError("%s is an invalid -p value" % val)
     base_subparser.add_argument('-gp', '--guide-cover-frac',
-        type=check_cover_frac, default=1.0,
-        help=("The fraction of sequences that must be covered "
-              "by the selected guides. If complete-targets is used, then "
-              "this is the fraction of sequences *that are bound by the "
-              "primers* that must be covered (so, in total, >= "
-              "(GUIDE_COVER_FRAC * (2 * PRIMER_COVER_FRAC - 1)) sequences will "
-              "be covered)."))
-
+        type=check_cover_frac,
+        help=("The fraction of all sequences that must be covered "
+              "by the guides."))
     # Automatically setting desired coverage of target sequences based
     # on their year
     class ParseCoverDecayWithYearsFile(argparse.Action):
@@ -639,6 +749,46 @@ if __name__ == "__main__":
                 raise argparse.ArgumentTypeError(("%s is an invalid decay; it "
                     "must be a float in (0,1)" % b))
             setattr(namespace, self.dest, (ai, bf))
+    ##########
+
+    ##########
+    # Parameters for maximization objective
+
+    # Soft guide constraint
+    base_subparser.add_argument('-sgc', '--soft-guide-constraint', type=int,
+        help=("Soft constraint on the number of guides. There is no "
+              "penalty for a number of guides <= SOFT_GUIDE_CONSTRAINT, "
+              "and having a number of guides beyond this is penalized. "
+              "See --penalty-strength. This value must be <= "
+              "HARD_GUIDE_CONSTRAINT."))
+    # Hard guide constraint
+    base_subparser.add_argument('-hgc', '--hard-guide-constraint', type=int,
+        help=("Hard constraint on the number of guides. The number of "
+              "guides designed for a target will be <= "
+              "HARD_GUIDE_CONSTRAINT."))
+    # Penalty strength
+    base_subparser.add_argument('--penalty-strength', type=float,
+        help=("Importance of the penalty when the number of guides "
+              "exceeds the soft guide constraint. Namely, for a guide "
+              "set G, if the penalty strength is L and the soft "
+              "guide constraint is h, then the penalty in the objective "
+              "function is L*max(0, |G|-h). Must be >= 0. The value "
+              "depends on the output of activity model and reflects a "
+              "tolerance for more guides; for the default activity model "
+              "reasonable values are in the range [0.1, 0.5]."))
+    # Algorithm for solving
+    base_subparser.add_argument('--maximization-algorithm',
+        choices=['greedy', 'random-greedy'],
+        help=("Algorithm to use for solving submodular maximization "
+              "problem. 'greedy' is the canonical deterministic greedy "
+              "algorithm (Nemhauser 1978) for constrained monotone submodular "
+              "maximization, which may perform well in practice but has "
+              "poor theoretical guarantees here because the function is "
+              "not monotone (unless --penalty-strength is 0). 'random-"
+              "greedy' is the randomized greedy algorithm (Buchbinder "
+              "2014) for constrained non-monotone submodular maximization "
+              "that has good worst-case theoretical guarantees."))
+    ##########
 
     # Handling missing data
     base_subparser.add_argument('--missing-thres', nargs=3,
@@ -668,14 +818,20 @@ if __name__ == "__main__":
         help=("Choice of method to query for specificity. 'lshnn' for "
               "LSH near-neighbor approach. 'shard' for approach that "
               "shards k-mers across small tries."))
-    base_subparser.add_argument('--specific-against', nargs='+',
+    base_subparser.add_argument('--specific-against-fastas', nargs='+',
         default=[],
-        help=("Path to one or more FASTA files giving alignments, such that "
+        help=("Path to one or more FASTA files giving sequences, such that "
               "guides are designed to be specific against (i.e., not hit) "
-              "these alignments, according to --id-m and --id-frac. This "
+              "these sequences, according to --id-m and --id-frac. This "
               "is equivalent to specifying the FASTAs in the main input "
               "(as positional inputs), except that, when provided here, "
-              "guides are not designed for these alignments."))
+              "guides are not designed for them and they do not "
+              "need to be aligned."))
+    base_subparser.add_argument('--specific-against-taxa',
+        help=("Path to TSV file giving giving taxonomies from which to "
+              "download all genomes and ensure guides are specific against "
+              "(i.e., not hit) these. The TSV file has 2 columns: (1) a "
+              "taxonomic ID; (2) segment label, or 'None' if unsegmented"))
 
     # G-U pairing options
     base_subparser.add_argument('--do-not-allow-gu-pairing', action='store_true',
@@ -820,11 +976,15 @@ if __name__ == "__main__":
     parser_ct_args.add_argument('--max-target-length', type=int,
         help=("Only allow amplicons (incl. primers) to be at most this "
               "number of nucleotides long; if not set, there is no limit"))
-    parser_ct_args.add_argument('--cost-fn-weights', type=float, nargs=3,
-        help=("Specify custom weights in the cost function; given as "
-              "3 weights (A B C), where the cost funct_argsion is "
-              "A*(total number of primers) + B*log2(amplicon length) + "
-              "C*(number of guides)"))
+    parser_ct_args.add_argument('--obj-fn-weights', type=float, nargs=2,
+        help=("Specify custom weights to use in the objective function "
+              "for a target. These specify weights for penalties on primers "
+              "and amplicons relative to the guide objective. There are "
+              "2 weights (A B), where the target objective function "
+              "is [(guide objective value) +/- (A*(total number of "
+              "primers) + B*log2(amplicon length)]. It is + when "
+              "--obj is minimize-guides and - when --obj is "
+              "maximize-activity."))
     parser_ct_args.add_argument('--best-n-targets', type=int, default=10,
         help=("Only compute and output up to this number of targets. Note "
               "that runtime will generally be longer for higher values"))
@@ -834,17 +994,18 @@ if __name__ == "__main__":
               'have been identified. The targets will meet the given '
               'constraints but may not be optimal over the whole genome. '
               'They will likely be from the beginning of the genome.'))
-    parser_ct_args.add_argument('--gp-over-all-seqs',
+    parser_ct_args.add_argument('--only-account-for-amplified-seqs',
         action='store_true',
-        help=("If set, design the guides so as to cover GUIDE_COVER_FRAC "
-              "of *all* sequences, rather than GUIDE_COVER_FRAC of just "
+        help=("If set, design guides to cover GUIDE_COVER_FRAC of just "
               "the sequences covered by the primers. This changes the "
-              "behavior of -gp/--guide-cover-frac. It may lead to "
-              "more than the optimal number of guides because it requires "
-              "covering more sequences. However, it may improve runtime "
-              "because the the sequences to consider for guide design will "
-              "be more similar across amplicons and therefore designs can "
-              "be more easily memoized."))
+              "behavior of -gp/--guide-cover-frac. This is only "
+              "applicable when --obj is 'minimize-guides' as it is "
+              "not implemented for 'maximize-activity'. In total, "
+              ">= (GUIDE_COVER_FRAC * (2 * PRIMER_COVER_FRAC - 1)) "
+              "sequences will be covered. Using this may worsen runtime "
+              "because the sequences to consider for guide design will "
+              "change more often across amplicons and therefore designs "
+              "can be less easily memoized."))
     ###########################################################################
 
     ###########################################################################
@@ -927,7 +1088,7 @@ if __name__ == "__main__":
     input_auto_common_subparser.add_argument('--only-design-for',
         help=("If set, only design for given taxonomies. This provides a "
               "path to a TSV file with 2 columns: (1) a taxonomid ID; (2) "
-              "segment label, if 'None' if unsegmented"))
+              "segment label, or 'None' if unsegmented"))
     input_auto_common_subparser.add_argument('--taxa-to-ignore-for-specificity',
         help=("If set, specificity which taxa should be ignored when "
               "enforcing specificity while designing for other taxa. "

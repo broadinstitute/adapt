@@ -83,6 +83,10 @@ def prepare_for(taxid, segment, ref_accs, out,
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
         "references %s") % (taxid, segment, ref_accs))
 
+    if taxid in [11320, 11520, 11552]:
+        # Represents influenza
+        prep_influenza = True
+
     if sequences_to_use is not None:
         seqs_unaligned = sequences_to_use
         seqs_unaligned_curated = seqs_unaligned
@@ -268,3 +272,44 @@ def prepare_for(taxid, segment, ref_accs, out,
 
     return len(clusters)
 
+
+def fetch_sequences_for_taxonomy(taxid, segment):
+    """Fetch list of sequences for a NCBI taxonomy.
+
+    Args:
+        taxid: taxonomic ID from NCBI, for which to download
+            sequences
+        segment: only use sequences of this segment (ignored if set
+            to '' or None, e.g., if taxid is unsegmented)
+
+    Returns:
+        dict mapping sequence header to sequence string
+    """
+    if taxid in [11320, 11520, 11552]:
+        # Represents influenza
+        prep_influenza = True
+    else:
+        prep_influenza = False
+
+    # Download neighbors for taxid
+    if prep_influenza:
+        neighbors = ncbi_neighbors.construct_influenza_genome_neighbors(taxid)
+    else:
+        neighbors = ncbi_neighbors.construct_neighbors(taxid)
+
+    # Filter neighbors by segment
+    if segment != None and segment != '':
+        neighbors = [n for n in neighbors if n.segment == segment]
+
+    # Only fetch each accession once
+    acc_to_fetch = list(set([n.acc for n in neighbors]))
+
+    if len(acc_to_fetch) == 0:
+        logger.critical(("There are 0 accessions for tax %d (segment: %s)"),
+                taxid, segment)
+
+    seqs_unaligned_fp = ncbi_neighbors.fetch_fastas(acc_to_fetch)
+    seqs_unaligned = align.read_unaligned_seqs(seqs_unaligned_fp)
+    seqs_unaligned_fp.close()
+
+    return seqs_unaligned
