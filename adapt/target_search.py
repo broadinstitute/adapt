@@ -592,6 +592,7 @@ class DesignTarget:
             return None
 
         rows = []
+        has_objective_value = False
         with open(fn) as f:
             col_names = {}
             for i, line in enumerate(f):
@@ -606,12 +607,18 @@ class DesignTarget:
                     cols = {}
                     for j in range(len(ls)):
                         cols[col_names[j]] = ls[j]
-                    rows += [(cols['objective-value'], cols['target-start'],
-                             cols['target-end'], cols)]
+                    if has_objective_value:
+                        rows += [(cols['objective-value'], cols['target-start'],
+                                 cols['target-end'], cols)]
+                    else:
+                        rows += [cols]
 
         # Pull out the best N targets, assuming rows are already sorted
         # as desired
         if num_targets != None:
+            if has_objective_value is False:
+                raise Exception(("Cannot pull out best targets; objective "
+                    "value is not given"))
             if len(rows) < num_targets:
                 raise Exception(("The number of rows in a design (%d) is fewer "
                     "than the number of targets to read (%d)") %
@@ -620,14 +627,19 @@ class DesignTarget:
 
         targets = []
         for row in rows:
-            _, _, _, cols = row
+            if has_objective_value:
+                _, _, _, cols = row
+                obj_value = float(cols['objective-value'])
+            else:
+                cols = row
+                obj_value = None
             targets += [DesignTarget(
                 int(cols['target-start']),
                 int(cols['target-end']),
                 cols['guide-target-sequences'].split(' '),
                 cols['left-primer-target-sequences'].split(' '),
                 cols['right-primer-target-sequences'].split(' '),
-                float(cols['objective-value'])
+                obj_value
             )]
 
         return targets
