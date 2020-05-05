@@ -64,32 +64,44 @@ def create_condensed_dist_matrix(n, dist_fn):
     return dist_matrix
 
 
-def cluster_from_dist_matrix(dist_matrix, threshold):
+def cluster_from_dist_matrix(dist_matrix, threshold, num_clusters=None):
     """Use scipy to cluster a distance matrix.
 
     Args:
         dist_matrix: distance matrix, represented in scipy's 1d condensed form
         threshold: maximum inter-cluster distance to merge clusters (higher
             results in fewer clusters)
+        num_clusters: if set, cluster such that this is the maximum number
+            of clusters; threshold is ignored and must be None
 
     Returns:
         list c such that c[i] is a collection of all the observations
         (whose pairwise distances are indexed in dist) in the i'th
         cluster, in sorted order by descending cluster size
     """
+    if threshold is None and num_clusters is None:
+        raise ValueError(("threshold or num_clusters must be set"))
+    elif threshold is not None and num_clusters is not None:
+        raise ValueError(("Only one of threshold or num_clusters can be "
+            "set"))
+
     linkage = hierarchy.linkage(dist_matrix, method='average')
-    clusters = hierarchy.fcluster(linkage, threshold, criterion='distance')
+    if threshold:
+        clusters = hierarchy.fcluster(linkage, threshold, criterion='distance')
+    elif num_clusters:
+        clusters = hierarchy.fcluster(linkage, num_clusters,
+            criterion='maxclust')
 
     # clusters are numbered starting at 1, but base the count on
     # first_clust_num just in case this changes
     first_clust_num = min(clusters)
-    num_clusters = max(clusters) + 1 - first_clust_num
+    num_clusters_found = max(clusters) + 1 - first_clust_num
     elements_in_cluster = defaultdict(list)
     for i, clust_num in enumerate(clusters):
         elements_in_cluster[clust_num].append(i)
     cluster_sizes = {c: len(elements_in_cluster[c])
                      for c in range(first_clust_num,
-                                    num_clusters + first_clust_num)}
+                                    num_clusters_found + first_clust_num)}
 
     elements_in_cluster_sorted = []
     for clust_num, _ in sorted(cluster_sizes.items(),
@@ -99,7 +111,7 @@ def cluster_from_dist_matrix(dist_matrix, threshold):
 
 
 def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
-        return_dist_matrix_and_indices=False):
+        num_clusters=None, return_dist_matrix_and_indices=False):
     """Cluster sequences based on their MinHash signatures.
 
     Args:
@@ -113,6 +125,8 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
             average nucleotide dissimilarity (1-ANI, where ANI is
             average nucleotide identity); higher results in fewer
             clusters
+        num_clusters: if set, cluster such that this is the maximum number
+            of clusters; threshold is ignored and must be None
         return_dist_matrix_and_indices: if set, return the pairwise distance
             matrix and sequences indices in each cluster; when used,
             seqs should be an OrderedDict
@@ -158,7 +172,11 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
     #  1.0 - 1/(2*exp(k*D) - 1)
     # We can use this to calculate a clustering threshold in terms of
     # Jaccard distance
-    jaccard_dist_threshold = 1.0 - 1.0/(2.0*np.exp(k*threshold) - 1)
+    if threshold is not None:
+        jaccard_dist_threshold = 1.0 - 1.0/(2.0*np.exp(k*threshold) - 1)
+    else:
+        # Ignore inter-cluster distance; use num_clusters instead
+        jaccard_dist_threshold = None
 
     def jaccard_dist(i, j):
         # Return estimated Jaccard dist between signatures at
@@ -168,7 +186,7 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
 
     dist_matrix = create_condensed_dist_matrix(num_seqs, jaccard_dist)
     clusters = cluster_from_dist_matrix(dist_matrix,
-        jaccard_dist_threshold)
+        jaccard_dist_threshold, num_clusters=num_clusters)
 
     if return_dist_matrix_and_indices:
         return dist_matrix, clusters
@@ -180,7 +198,7 @@ def cluster_with_minhash_signatures(seqs, k=12, N=100, threshold=0.1,
 
 
 def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
-        frac_to_cover=1.0):
+        num_clusters=None, frac_to_cover=1.0):
     """Find a set of representative sequences.
 
     This clusters seqs, and then determines a medoid for each cluster.
@@ -189,7 +207,7 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
     This will not return representative sequences with ambiguity or NNNs.
 
     Args:
-        seqs, k, N, threshold: see cluster_with_minhash_signatures()
+        seqs, k, N, threshold, num_clusters: see cluster_with_minhash_signatures()
         frac_to_cover: return medoids from clusters that collectively
             account for at least this fraction of all sequences; this
             allows ignoring representative sequences for outlier
@@ -200,7 +218,7 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
     """
     seqs = OrderedDict(seqs)
     dist_matrix, clusters = cluster_with_minhash_signatures(
-            seqs, k=k, N=N, threshold=threshold,
+            seqs, k=k, N=N, threshold=threshold, num_clusters=num_clusters,
             return_dist_matrix_and_indices=True)
 
     seqs_items = list(seqs.items())
