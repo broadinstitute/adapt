@@ -408,3 +408,65 @@ class Predictor:
         if start_pos in self._memoized_evaluations:
             del self._memoized_evaluations[start_pos]
 
+
+class SimpleBinaryPredictor:
+    """A mock Predictor object telling alignment.Alignment to compute
+    activity only based on mismatches (distance) and required flanking
+    sequences.
+
+    This does not use any machine learning models. The output is intended
+    to be 1.0 (active) if a guide binds to a target, and 0 otherwise.
+    """
+
+    def __init__(self, mismatches, allow_gu_pairs,
+            required_flanking_seqs=(None, None)):
+        """
+        Args:
+            mismatches: threshold on number of mismatches for determining whether
+                a guide would hybridize to a target sequence
+            allow_gu_pairs: if True, tolerate G-U base pairs between a
+                guide and target when computing whether a guide binds
+            required_flanking_seqs: tuple (s5, s3) that specifies sequences
+                on the 5' (left; s5) end and 3' (right; s3) end flanking
+                the guide (in the target, not the guide) that must be
+                present for a guide to bind; if either is None, no
+                flanking sequence is required for that end
+        """
+        self.mismatches = mismatches
+        self.allow_gu_pairs = allow_gu_pairs
+        self.required_flanking_seqs = required_flanking_seqs
+
+    def compute_activity(self, start_pos, gd_sequence, aln):
+        """Compute activity by checking hybridization across an alignment.
+
+        This says the activity is 1.0 if a guide is deemed to bind to
+        a target, and 0 otherwise.
+
+        Args:
+            start_pos: start position of guide sequence in aln
+            gd_sequence: str representing guide sequence
+            aln: alignment.Alignment object
+
+        Returns:
+            numpy array x where x[i] gives the activity (1 or 0) between
+            gd_sequence and the sequence in the alignment at index i
+        """
+        # Start with all 0s
+        activities = np.zeros(aln.num_sequences)
+
+        # Find indices in alignment where gd_sequence binds
+        seqs_bound = aln.sequences_bound_by_guide(gd_sequence, start_pos,
+                self.mismatches, self.allow_gu_pairs,
+                required_flanking_seqs=self.required_flanking_seqs)
+
+        # Set activity to 1 when bound
+        for seq_idx in seqs_bound:
+            activities[seq_idx] = 1.0
+
+        return activities
+
+    def cleanup_memoized(self, start_pos):
+        """Cleanup memoizations; not needed here because there are
+        no memoizations.
+        """
+        pass

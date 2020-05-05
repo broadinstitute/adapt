@@ -5,6 +5,7 @@ import unittest
 
 import numpy as np
 
+from adapt import alignment
 from adapt.utils import predict_activity
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -233,4 +234,25 @@ class TestPredictor(unittest.TestCase):
                 [False, True])
         self.assertListEqual(self.predictor.determine_highly_active(5, pairs_54),
                 [True, False])
+
+
+class TestSimpleBinaryPredictor(unittest.TestCase):
+    """Tests methods in the SimpleBinaryPredictor class.
+    """
+
+    def test_compute_activity(self):
+        seqs = ['ATCGAA',
+                'ATCGAA',
+                'GGGCCC',
+                'ATCGAA',
+                'AT-GAA',
+                'ATCAAA',
+                'GGGCCC']
+        seqs_aln = alignment.Alignment.from_list_of_seqs(seqs)
+
+        predictor = predict_activity.SimpleBinaryPredictor(1, False)
+        activities = predictor.compute_activity(1, 'TCG', seqs_aln)
+        expected = np.array([1, 1, 0, 1, 0, 1, 0])
+
+        np.testing.assert_array_equal(activities, expected)
 
