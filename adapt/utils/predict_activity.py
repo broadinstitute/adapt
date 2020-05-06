@@ -436,6 +436,8 @@ class SimpleBinaryPredictor:
         self.allow_gu_pairs = allow_gu_pairs
         self.required_flanking_seqs = required_flanking_seqs
 
+        self.rough_max_activity = 1.0
+
     def compute_activity(self, start_pos, gd_sequence, aln):
         """Compute activity by checking hybridization across an alignment.
 

@@ -63,16 +63,28 @@ def check_obj_args(args):
                 "following arguments are not used: --soft-guide-constraint, "
                 "--hard-guide-constraint, --penalty-strength, "
                 "--maximization-algorithm"))
+        if args.use_simple_binary_activity_prediction:
+            raise Exception(("Cannot use --use-simple-binary-activity-prediction "
+                "when --obj is 'minimize-guides'"))
         for arg in OBJ_PARAM_DEFAULTS['minimize-guides'].keys():
             if vars(args)[arg] is None:
                 vars(args)[arg] = OBJ_PARAM_DEFAULTS['minimize-guides'][arg]
 
     if args.obj == 'maximize-activity':
-        if (args.guide_mismatches or args.guide_cover_frac or
-                args.cover_by_year_decay):
-            logger.critical(("When --obj is 'maximize-activity', the "
-                "following arguments are not used: --guide-mismatches, "
-                "--guide-cover-frac, --cover-by-year-decay"))
+        if args.use_simple_binary_activity_prediction:
+            if (args.guide_cover_frac or args.cover_by_year_decay):
+                logger.critical(("When --obj is 'maximize-activity', the "
+                    "following arguments are not used: "
+                    "--guide-cover-frac, --cover-by-year-decay"))
+            if args.predict_activity_model_path:
+                logger.critical(("When --use-simple-binary-activity-prediction "
+                    "is set, --predict-activity-model-path is not used"))
+        else:
+            if (args.guide_mismatches or args.guide_cover_frac or
+                    args.cover_by_year_decay):
+                logger.critical(("When --obj is 'maximize-activity', the "
+                    "following arguments are not used: --guide-mismatches, "
+                    "--guide-cover-frac, --cover-by-year-decay"))
         for arg in OBJ_PARAM_DEFAULTS['maximize-activity'].keys():
             if vars(args)[arg] is None:
                 vars(args)[arg] = OBJ_PARAM_DEFAULTS['maximize-activity'][arg]
@@ -522,7 +534,12 @@ def design_for_id(args):
                         aq.mask_aln(j)
 
         # Construct activity predictor
-        if args.predict_activity_model_path:
+        if args.use_simple_binary_activity_prediction:
+            predictor = predict_activity.SimpleBinaryPredictor(
+                    args.guide_mismatches,
+                    allow_gu_pairs,
+                    required_flanking_seqs=required_flanking_seqs)
+        elif args.predict_activity_model_path:
             cla_path, reg_path = args.predict_activity_model_path
             if args.predict_activity_thres:
                 # Use specified thresholds on classification and regression
@@ -539,7 +556,8 @@ def design_for_id(args):
                     "setting --predict-activity-model-path"))
             if args.obj == 'maximize-activity':
                 raise Exception(("--predict-activity-model-path must be "
-                    "specified if --obj is 'maximize-activity'"))
+                    "specified if --obj is 'maximize-activity' (unless "
+                    "--use-simple-binary-activity-prediction is set)"))
             # Do not predict activity
             predictor = None
 
@@ -910,6 +928,15 @@ if __name__ == "__main__":
             "determined to be highly active). If not set but --predict-"
             "activity-model-path is set, then ADAPT uses default thresholds "
             "stored with the models."))
+    base_subparser.add_argument('--use-simple-binary-activity-prediction',
+        action='store_true',
+        help=("If set, predict activity using a simple binary prediction "
+              "between guide and target according to their distance, with "
+              "the threshold determined based on --guide-mismatches. This "
+              "is only applicable when OBJ is 'maxmimize-activity'. This "
+              "does not use a serialized model for predicting activity, so "
+              "--predict-activity-model-path should not be set when this "
+              "is set."))
 
     # Log levels
     base_subparser.add_argument("--debug",
