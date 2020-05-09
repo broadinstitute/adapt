@@ -214,7 +214,8 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
             clusters
 
     Returns:
-        set of sequence headers representing cluster medoids
+        tuple (set of sequence headers representing cluster medoids,
+        fraction of all sequences contained in cluster)
     """
     seqs = OrderedDict(seqs)
     dist_matrix, clusters = cluster_with_minhash_signatures(
@@ -230,6 +231,7 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
         return int((-1 * i*i)/2 + i*n - 3*i/2 + j - 1)
 
     rep_seqs = []
+    rep_seqs_frac = []
     num_seqs_accounted_for = 0
     for cluster_idxs in clusters:
         # Stop if we have already accounted for frac_to_cover of the
@@ -264,6 +266,7 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
                 curr_medoid_dist_total = dist_total
         if curr_medoid is not None:
             rep_seqs += [curr_medoid]
+            rep_seqs_frac += [float(len(cluster_idxs)) / len(seqs)]
             num_seqs_accounted_for += len(cluster_idxs)
         else:
             # All sequences have ambiguity or NNNs; raise a warning and
@@ -273,4 +276,4 @@ def find_representative_sequences(seqs, k=12, N=100, threshold=0.1,
                 "this cluster"),
                 len(cluster_idxs))
 
-    return [seqs_items[i][0] for i in rep_seqs]
+    return ([seqs_items[i][0] for i in rep_seqs], rep_seqs_frac)

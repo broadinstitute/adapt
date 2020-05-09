@@ -9,6 +9,7 @@ import numpy as np
 
 from adapt.utils import guide
 from adapt.utils import lsh
+from adapt.utils import predict_activity
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -748,6 +749,11 @@ class Alignment(SequenceList):
         """
         guide_length = len(gd_sequence)
         assert start + guide_length <= self.seq_length
+
+        if isinstance(predictor, predict_activity.SimpleBinaryPredictor):
+            # Do not use a model; just predict binary activity (1 or 0)
+            # based on distance between guide and targets
+            return predictor.compute_activity(start, gd_sequence, self)
 
         # Extract the target sequences, including context to use with
         # prediction

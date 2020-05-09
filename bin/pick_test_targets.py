@@ -32,9 +32,10 @@ def find_test_targets(design_target, aln, args):
         args: parsed arguments
 
     Returns:
-        collection of tuples (s, s_tagged) where s is a target sequence
-        to use for testing and s_tagged is s tagged to show where
-        primers and guides may bind s
+        collection of tuples (s, s_tagged, f) where s is a target sequence
+        to use for testing; s_tagged is s tagged to show where
+        primers and guides may bind s; and f is the fraction of all sequences
+        that s represents
     """
     logger.info(("Finding test targets for design option with endpoints "
         "[%d, %d)"), design_target.target_start, design_target.target_end)
@@ -90,7 +91,8 @@ def find_test_targets(design_target, aln, args):
         # Use an inter-cluster distance threhsold
         threshold = args.max_cluster_distance
         num_clusters = None
-    rep_seqs_idx = cluster.find_representative_sequences(aln_extract_seqs_dict,
+    rep_seqs_idx, rep_seqs_frac = cluster.find_representative_sequences(
+            aln_extract_seqs_dict,
             k=minhash_k, N=minhash_N, threshold=threshold,
             num_clusters=num_clusters,
             frac_to_cover=args.min_frac_to_cover_with_rep_seqs)
@@ -143,7 +145,7 @@ def find_test_targets(design_target, aln, args):
         rep_seq_tagged = formatting.tag_seq_overlap(overlap_labels, rep_seq)
         rep_seqs_tagged += [rep_seq_tagged]
 
-    return list(zip(rep_seqs, rep_seqs_tagged))
+    return list(zip(rep_seqs, rep_seqs_tagged, rep_seqs_frac))
 
 
 def main(args):
@@ -160,13 +162,14 @@ def main(args):
             line = '\t'.join(str(x) for x in row)
             f.write(line + '\n')
         header = ['design-target-start', 'design-target-end',
+                'test-target-frac-represented',
                 'test-target-seq', 'test-target-seq-tagged']
         write_row(header)
         for design_target in targets:
             targets_to_test = find_test_targets(design_target, aln, args)
             for tt in targets_to_test:
                 row = [design_target.target_start, design_target.target_end,
-                        tt[0], tt[1]]
+                        tt[2], tt[0], tt[1]]
                 write_row(row)
 
 
