@@ -1,7 +1,11 @@
 """Functions for formatting text.
 """
 
+import logging
+
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
+
+logger = logging.getLogger(__name__)
 
 
 def tag_seq_overlap(overlap_labels, target_seq):
@@ -22,18 +26,25 @@ def tag_seq_overlap(overlap_labels, target_seq):
     curr_label = None
     for i, base in enumerate(target_seq):
         # Check that position i is in at most 1 label
+        ignore = set()
         found_overlap = False
         for label, overlaps in overlap_labels.items():
             if i in overlaps:
                 if found_overlap:
                     # position i is in two different
-                    # labels (curr_label and label); not allows
-                    raise Exception(("Position in target sequence cannot "
-                        "be tagged with two labels"))
+                    # labels (curr_label and label)
+                    # This can happen in some edge cases (e.g., indel in
+                    # a target relative to the design); warn and choose one
+                    # label
+                    logger.warning(("Position in target sequence is "
+                        "tagged with two labels; picking one"))
+                    ignore.add(label)
                 found_overlap = True
 
         # Start or close a tag
         for label, overlaps in overlap_labels.items():
+            if label in ignore:
+                continue
             if i in overlaps:
                 # position i is in a tag
                 if curr_label is None:
