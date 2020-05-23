@@ -35,26 +35,19 @@ class CoverageAnalyzer:
     """Methods to analyze coverage of a design.
     """
 
-    def __init__(self, seqs, designs, guide_mismatches, primer_mismatches=None,
-            allow_gu_pairs=True):
+    def __init__(self, seqs, designs, primer_mismatches=None):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
                 designs against these sequences
             designs: dict mapping an identifier for a design to Design object
-            guide_mismatches: number of mismatches to tolerate when determining
-                whether a guide hybridizes to a target sequence
             primer_mismatches: number of mismatches to tolerate when determining
                 whether a primer hybridizes to a target sequence (if not
                 set, the designs are assumed to not contain primers)
-            allow_gu_pairs: if True, tolerate G-U base pairs between a guide
-                and target when computing whether a guide binds
         """
         self.seqs = seqs
         self.designs = designs
-        self.guide_mismatches = guide_mismatches
         self.primer_mismatches = primer_mismatches
-        self.allow_gu_pairs = allow_gu_pairs
         self.seqs_are_indexed = False
         self.seqs_index_k = None
 
@@ -88,8 +81,40 @@ class CoverageAnalyzer:
         self.seqs_are_indexed = True
         logger.info(("Done indexing sequences"))
 
-    def find_binding_pos(self, target_seq_name, seq, mismatches,
-            allow_gu_pairs, allow_not_all_positions=True,
+    def evaluate_pos_by_mismatches(self, seq, target_seq, pos,
+            mismatches, allow_gu_pairs):
+        """Evaluate binding with a mismatch model.
+
+        Args:
+            seq: guide or primer sequence to lookup
+            target_seq: target sequence against which to check
+            pos: list of positions indicating subsequence in target_seq
+                to check for binding of seq
+            mismatches: number of mismatches to tolerate when determining
+                whether seq binds to target_seq at a position
+            allow_gu_pairs: if True, tolerate G-U base pairs between
+                seq and a subsequence of target_seq
+
+        Returns:
+            set of positions in pos where seq binds to target_seq
+        """
+        bind_pos = set()
+        for i in pos:
+            target_subseq = target_seq[i:(i + len(seq))]
+            if guide.guide_binds(seq, target_subseq, mismatches,
+                    allow_gu_pairs):
+                bind_pos.add(i)
+        return bind_pos
+
+    def guide_bind_fn(self, seq, target_seq, pos):
+        """Determine whether guide detects target at positions.
+
+        This should be implemented in a subclass.
+        """
+        raise NotImplementedError()
+
+    def find_binding_pos(self, target_seq_name, seq, bind_fn,
+            allow_not_all_positions=True,
             allow_not_fully_sensitive=True):
         """Find if and where a sequence binds to in a target sequence.
 
@@ -107,10 +132,8 @@ class CoverageAnalyzer:
             target_seq_name: name of target sequence against which to check
                 (target sequence is self.seqs[target_seq_name])
             seq: guide or primer sequence to lookup
-            mismatches: number of mismatches to tolerate when determining
-                whether seq binds to target_seq at a position
-            allow_gu_pairs: if True, tolerate G-U base pairs between
-                seq and a subsequence of target_seq
+            bind_fn: function accepting (seq, target_seq, pos) and outputs
+                positions in pos to which seq binds to target_seq
             allow_not_all_positions: if set, the returned collection of
                 positions may not include *all* positions that seq
                 binds to; using this can significantly improve runtime
@@ -125,15 +148,9 @@ class CoverageAnalyzer:
         if not self.seqs_are_indexed:
             self._index_seqs()
 
-        bind_pos = set()
-
         target_seq = self.seqs[target_seq_name]
-        def evaluate_pos(i):
-            target_subseq = target_seq[i:(i + len(seq))]
-            if guide.guide_binds(seq, target_subseq, mismatches,
-                    allow_gu_pairs):
-                bind_pos.add(i)
 
+        bind_pos = set()
         if allow_not_all_positions:
             # Use the index of the target sequences to find potential hits,
             # and only report these, but looking up every k-mer in seq
@@ -151,7 +168,9 @@ class CoverageAnalyzer:
                     # target_seq
                     if (kmer_start - j >= 0 and
                             kmer_start - j + len(seq) <= len(target_seq)):
-                        evaluate_pos(kmer_start - j)
+                        pos_to_evaluate = [kmer_start - j]
+                        bind_pos.update(bind_fn(seq, target_seq,
+                            pos_to_evaluate))
             if len(bind_pos) > 0:
                 # We have found at least 1 binding position; this may
                 # not be all but we do not need to find all
@@ -163,8 +182,8 @@ class CoverageAnalyzer:
             # If len(bind_pos) == 0, then do the fully sensitive naive
             # sliding approach
 
-        for i in range(len(target_seq) - len(seq) + 1):
-            evaluate_pos(i)
+        pos_to_evaluate = list(range(len(target_seq) - len(seq) + 1))
+        bind_pos = bind_fn(seq, target_seq, pos_to_evaluate)
         return bind_pos
 
     def seqs_where_guides_bind(self, guide_seqs):
@@ -181,7 +200,7 @@ class CoverageAnalyzer:
         for seq_name, target_seq in self.seqs.items():
             for guide_seq in guide_seqs:
                 bind_pos = self.find_binding_pos(seq_name, guide_seq,
-                        self.guide_mismatches, self.allow_gu_pairs)
+                        self.guide_bind_fn)
                 if len(bind_pos) > 0:
                     # guide_seq binds somewhere in target_seq
                     seqs_bound.add(seq_name)
@@ -201,13 +220,17 @@ class CoverageAnalyzer:
             collection of names of sequences in self.seqs to which
             some pair of primers and guide between them binds
         """
+        def primer_bind_fn(seq, target_seq, pos):
+            return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
+                self.primer_mismatches, False)
+
         seqs_bound = set()
         for seq_name, target_seq in self.seqs.items():
             guide_bind_pos = set()
             min_guide_len_at_pos = {}
             for guide_seq in guide_seqs:
                 bind_pos = self.find_binding_pos(seq_name, guide_seq,
-                        self.guide_mismatches, self.allow_gu_pairs)
+                        self.guide_bind_fn)
                 guide_bind_pos.update(bind_pos)
                 for pos in bind_pos:
                     if pos not in min_guide_len_at_pos:
@@ -219,7 +242,7 @@ class CoverageAnalyzer:
             min_primer_len_at_pos = {}
             for primer_seq in primer_left_seqs:
                 bind_pos = self.find_binding_pos(seq_name, primer_seq,
-                        self.primer_mismatches, False)
+                        primer_bind_fn)
                 primer_left_bind_pos.update(bind_pos)
                 for pos in bind_pos:
                     if pos not in min_primer_len_at_pos:
@@ -230,7 +253,7 @@ class CoverageAnalyzer:
             primer_right_bind_pos = set()
             for primer_seq in primer_right_seqs:
                 bind_pos = self.find_binding_pos(seq_name, primer_seq,
-                        self.primer_mismatches, False)
+                        primer_bind_fn)
                 primer_right_bind_pos.update(bind_pos)
 
             # Determine if there exists some combination of (5' primer)/guide/
@@ -288,3 +311,105 @@ class CoverageAnalyzer:
             seqs_bound = self.seqs_bound_by_design(design)
             frac_bound[design_id] = float(len(seqs_bound)) / len(self.seqs)
         return frac_bound
+
+
+class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
+    """Methods to analyze coverage of a design using model with fixed number
+    of mismatches for guide-target binding.
+    """
+
+    def __init__(self, seqs, designs, guide_mismatches, primer_mismatches=None,
+            allow_gu_pairs=True):
+        """
+        Args:
+            seqs: dict mapping sequence name to sequence; checks coverage of the
+                designs against these sequences
+            designs: dict mapping an identifier for a design to Design object
+            guide_mismatches: number of mismatches to tolerate when determining
+                whether a guide hybridizes to a target sequence
+            primer_mismatches: number of mismatches to tolerate when determining
+                whether a primer hybridizes to a target sequence (if not
+                set, the designs are assumed to not contain primers)
+            allow_gu_pairs: if True, tolerate G-U base pairs between a guide
+                and target when computing whether a guide binds
+        """
+        super().__init__(seqs, designs, primer_mismatches=primer_mismatches)
+        self.guide_mismatches = guide_mismatches
+        self.allow_gu_pairs = allow_gu_pairs
+
+    def guide_bind_fn(self, seq, target_seq, pos):
+        """Evaluate binding with a mismatch model.
+
+        Args:
+            seq: guide or primer sequence to lookup
+            target_seq: target sequence against which to check
+            pos: list of positions indicating subsequence in target_seq
+                to check for binding of seq
+
+        Returns:
+            set of positions in pos where seq binds to target_seq
+        """
+        return self.evaluate_pos_by_mismatches(seq, target_seq,
+                pos, self.guide_mismatches, self.allow_gu_pairs)
+
+
+class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
+    """Methods to analyze coverage of a design using model that determines
+    guide-target binding based on whether it is predicted to be highly active.
+    """
+
+    def __init__(self, seqs, designs, predictor, primer_mismatches=None):
+        """
+        Args:
+            seqs: dict mapping sequence name to sequence; checks coverage of the
+                designs against these sequences
+            designs: dict mapping an identifier for a design to Design object
+            predictor: adapt.utils.predict_activity.Predictor object, used to
+                determine whether a guide-target pair is predicted to be
+                highly active
+            primer_mismatches: number of mismatches to tolerate when determining
+                whether a primer hybridizes to a target sequence (if not
+                set, the designs are assumed to not contain primers)
+        """
+        super().__init__(seqs, designs, primer_mismatches=primer_mismatches)
+        self.predictor = predictor
+
+    def guide_bind_fn(self, seq, target_seq, pos):
+        """Evaluate binding with a predictor -- i.e., based on what is
+        predicted to be highly active.
+
+        Args:
+            seq: guide or primer sequence to lookup
+            target_seq: target sequence against which to check
+            pos: list of positions indicating subsequence in target_seq
+                to check for binding of seq
+
+        Returns:
+            set of positions in pos where seq binds to target_seq
+        """
+        pairs_to_evaluate = []
+        pos_evaluating = []
+        for i in pos:
+            # Extract a subsequence with context
+            extract_start = i - self.predictor.context_nt
+            extract_end = i + len(seq) + self.predictor.context_nt
+            if (extract_start < 0 or extract_end > len(target_seq)):
+                # The context needed for the target to predict activity
+                # falls outside the range of target_seq; do not allow binding
+                # at this position
+                continue
+            target_subseq_with_context = target_seq[extract_start:extract_end]
+            pairs_to_evaluate += [(target_subseq_with_context, seq)]
+            pos_evaluating += [i]
+
+        # Do not bother memoizing predictions because target_seq are not
+        # aligned; a position for one target_seq may not correspond to the
+        # same position in another
+        predictions = self.predictor.determine_highly_active(-1,
+                pairs_to_evaluate)
+        bind_pos = set()
+        for i, p in zip(pos_evaluating, predictions):
+            if p is True:
+                # subsequence at i is highly active
+                bind_pos.add(i)
+        return bind_pos
