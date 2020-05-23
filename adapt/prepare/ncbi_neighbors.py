@@ -8,6 +8,7 @@ import http.client
 import logging
 import random
 import re
+import socket
 import tempfile
 import time
 import urllib.parse
@@ -24,7 +25,7 @@ ncbi_api_key = None
 
 
 def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
-        max_num_tries=10, read=False):
+        max_num_tries=10, timeout=60, read=False):
     """
     Open a URL via urllib with repeated tries.
 
@@ -43,6 +44,7 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
             If multiple processes are started simultaneously, this helps to
             avoid them waiting on the same cycle
         max_num_tries: maximum number of requests to attempt to make
+        timeout: timeout in sec before retrying
         read: also try to read the opened URL, and return the results;
             if this raises an HTTPException, the call will be retried
 
@@ -62,12 +64,12 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
             else:
                 return r
         except (urllib.error.HTTPError, http.client.HTTPException,
-                urllib.error.URLError):
+                urllib.error.URLError, socket.timeout):
             if num_tries == max_num_tries:
                 # This was the last allowed try
                 logger.warning(("Encountered HTTPError or HTTPException or "
-                    "URLError %d times (the maximum allowed) when opening "
-                    "url: %s"),
+                    "URLError or timeout %d times (the maximum allowed) when "
+                    "opening url: %s"),
                     num_tries, url)
                 raise
             else:
@@ -75,9 +77,9 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
                 wait = initial_wait * 2**(num_tries - 1)
                 rand_wait = random.randint(*rand_wait_range)
                 total_wait = wait + rand_wait
-                logger.info(("Encountered HTTPError or HTTPException when "
-                    "opening url; sleeping for %d seconds, and then trying "
-                    "again"), total_wait)
+                logger.info(("Encountered HTTPError or HTTPException or "
+                    "URLError or timeout when opening url; sleeping for %d "
+                    "seconds, and then trying again"), total_wait)
                 time.sleep(total_wait)
         except:
             logger.warning(("Encountered unexpected error while opening "
