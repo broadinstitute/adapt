@@ -7,6 +7,7 @@ import logging
 from adapt import coverage_analysis
 from adapt.prepare import ncbi_neighbors
 from adapt.utils import log
+from adapt.utils import predict_activity
 from adapt.utils import seq_io
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -132,9 +133,32 @@ def main(args):
     # is read as unaligned sequences
     seqs = seq_io.read_fasta(seqs_fn, skip_gaps=True)
 
-    analyzer = coverage_analysis.CoverageAnalyzer(
-            seqs, designs, args.guide_mismatches, args.primer_mismatches,
-            allow_gu_pairs)
+    if args.guide_mismatches and args.predict_activity_model_path:
+        raise Exception(("Cannot set both --guide-mismatches and "
+            "--predict-activity-model-path. Choose --guide-mismatches "
+            "for a model based on mismatches, and --predict-activity-model-"
+            "path to make determinations based on whether predicted "
+            "activity is high."))
+    elif args.guide_mismatches:
+        analyzer = coverage_analysis.CoverageAnalyzerWithMismatchModel(
+                seqs, designs, args.guide_mismatches, args.primer_mismatches,
+                allow_gu_pairs)
+    elif args.predict_activity_model_path:
+        cla_path, reg_path = args.predict_activity_model_path
+        if args.predict_activity_thres:
+            # Use specified thresholds on classification and regression
+            cla_thres, reg_thres = args.predict_activity_thres
+        else:
+            # Use default thresholds specified with the model
+            cla_thres, reg_thres = None, None
+        predictor = predict_activity.Predictor(cla_path, reg_path,
+                classification_threshold=cla_thres,
+                regression_threshold=reg_thres)
+        analyzer = coverage_analysis.CoverageAnalyzerWithPredictedActivity(
+                seqs, designs, predictor, args.primer_mismatches)
+    else:
+        raise Exception(("One of --guide-mismatches or "
+            "--predict-activity-model-path must be set"))
 
     # Perform analyses
     performed_analysis = False
@@ -172,16 +196,20 @@ if __name__ == "__main__":
               "the first design). The provided argument is a path to "
               "a TSV file at which to the write the table."))
 
-    # Parameters determining whether a sequence binds to target
-    parser.add_argument('-gm', '--guide-mismatches',
-        type=int, default=0,
-        help=("allow for this number of mismatches when "
-              "determining whether a guide covers a sequence"))
+    # Parameter determining whether a primer binds to target
     parser.add_argument('-pm', '--primer-mismatches',
         type=int, default=0,
         help=("Allow for this number of mismatches when determining "
               "whether a primer covers a sequence (ignore this if "
               "the targets only consist of guides)"))
+
+    # Parameters determining whether a guide binds to target based on
+    # mismatch model
+    parser.add_argument('-gm', '--guide-mismatches',
+        type=int,
+        help=("Allow for this number of mismatches when "
+              "determining whether a guide covers a sequence; either this "
+              "or --predict-activity-model-path should be set"))
     parser.add_argument('--do-not-allow-gu-pairing',
         action='store_true',
         help=("When determining whether a guide binds to a region of "
@@ -191,6 +219,32 @@ if __name__ == "__main__":
               "target and C in an output guide sequence matches T "
               "in the target (since the synthesized guide is the reverse "
               "complement of the output guide sequence)"))
+
+    # Parameters determining whether a guide binds to target based on
+    # trained model
+    parser.add_argument('--predict-activity-model-path',
+        nargs=2,
+        help=("Paths to directories containing serialized models in "
+              "TensorFlow's SavedModel format for predicting guide-target "
+              "activity. There are two arguments: (1) classification "
+              "model to determine which guides are active; (2) regression "
+              "model, which is used to determine which guides (among "
+              "active ones) are highly active. The models/ directory "
+              "contains example models. Either this or --guide-mismatches "
+              "should be set."))
+    parser.add_argument('--predict-activity-thres',
+        type=float,
+        nargs=2,
+        help=("Thresholds to use for decisions on output of predictive "
+            "models. There are two arguments: (1) classification threshold "
+            "for deciding which guide-target pairs are active (in [0,1], "
+            "where higher values have higher precision but less recall); "
+            "(2) regression threshold for deciding which guide-target pairs "
+            "are highly active (>= 0, where higher values limit the number "
+            "determined to be highly active). If not set but --predict-"
+            "activity-model-path is set, then this uses default thresholds "
+            "stored with the models. To 'bind to' or 'cover' a target, "
+            "the guide-target pair must be highly active."))
 
     # Miscellaneous
     parser.add_argument('--use-accessions',
