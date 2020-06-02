@@ -9,8 +9,8 @@ from adapt import coverage_analysis
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-class TestCoverageAnalysis(unittest.TestCase):
-    """Tests methods in the CoverageAnalysis class.
+class TestCoverageAnalysisWithMismatchModel(unittest.TestCase):
+    """Tests methods in the CoverageAnalysisWithMismatchModel class.
     """
 
     def setUp(self):
@@ -32,7 +32,7 @@ class TestCoverageAnalysis(unittest.TestCase):
                 'design2': self.design2,
                 'design3': self.design3
         }
-        self.ca = coverage_analysis.CoverageAnalyzer(self.seqs,
+        self.ca = coverage_analysis.CoverageAnalyzerWithMismatchModel(self.seqs,
                 designs, 1, 1, allow_gu_pairs=False)
 
         # Index sequences with a k-mer length of k=2 to ensure k-mers
@@ -40,24 +40,25 @@ class TestCoverageAnalysis(unittest.TestCase):
         self.ca._index_seqs(k=2, stride_by_k=False)
 
     def test_find_binding_pos(self):
+        bind_fn = self.ca.guide_bind_fn
         for allow_not_fully_sensitive in [False, True]:
             self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'TTCGAT', 1, False,
+                    self.ca.find_binding_pos('seq1', 'TTCGAT', bind_fn,
                         allow_not_fully_sensitive=allow_not_fully_sensitive),
                     {6}
             )
             self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'TTCC', 0, False,
+                    self.ca.find_binding_pos('seq1', 'TTCC', bind_fn,
+                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    {6}
+            )
+            self.assertEqual(
+                    self.ca.find_binding_pos('seq1', 'AAAA', bind_fn,
                         allow_not_fully_sensitive=allow_not_fully_sensitive),
                     set()
             )
             self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'AAAA', 1, False,
-                        allow_not_fully_sensitive=allow_not_fully_sensitive),
-                    set()
-            )
-            self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'AT', 0, False,
+                    self.ca.find_binding_pos('seq1', 'AT', bind_fn,
                         allow_not_fully_sensitive=allow_not_fully_sensitive),
                     {0,5,10}
             )
@@ -98,3 +99,66 @@ class TestCoverageAnalysis(unittest.TestCase):
     def tearDown(self):
         # Re-enable logging
         logging.disable(logging.NOTSET)
+
+
+class TestCoverageAnalysisWithPredictedActivity(unittest.TestCase):
+    """Tests methods in the CoverageAnalysisWithPredictedActivity class.
+    """
+
+    def setUp(self):
+        # Disable logging
+        logging.disable(logging.WARNING)
+
+        # Predict guides matching target to have activity 1, and
+        # starting with 'A' to have activity 2 (otherwise, 0)
+        # Predict guides to be highly active iff they start with A and
+        # and match target
+        class PredictorTest:
+            def __init__(self):
+                self.context_nt = 1
+            def determine_highly_active(self, start_pos, pairs):
+                y = []
+                for target, guide in pairs:
+                    target_without_context = target[self.context_nt:len(target)-self.context_nt]
+                    if guide == target_without_context:
+                        if guide[0] == 'A':
+                            y += [True]
+                        else:
+                            y += [False]
+                    else:
+                        y += [False]
+                return y
+            def cleanup_memoized(self, pos):
+                pass
+        predictor = PredictorTest()
+
+        self.seqs = {
+                'seq1': 'ATCGAATTCGATCGAA',
+                'seq2': 'GGATCGAATTCGAG',
+                'seq3': 'TGCAACCGATCCGT'
+        }
+        self.ca = coverage_analysis.CoverageAnalyzerWithPredictedActivity(
+                self.seqs, {}, predictor, 1)
+
+        # Index sequences with a k-mer length of k=2 to ensure k-mers
+        # will be found
+        self.ca._index_seqs(k=2, stride_by_k=False)
+
+    def test_seqs_where_guide_binds(self):
+        self.assertEqual(
+                self.ca.seqs_where_guides_bind({'TTCGA'}),
+                set()
+        )
+        self.assertEqual(
+                self.ca.seqs_where_guides_bind({'TTCGA', 'CCGA'}),
+                set()
+        )
+        self.assertEqual(
+                self.ca.seqs_where_guides_bind({'AATT'}),
+                {'seq1', 'seq2'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_guides_bind({'GGGCC'}),
+                set()
+        )
+
