@@ -57,7 +57,7 @@ def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
         try:
             num_tries += 1
             logger.debug(("Making request to open url: %s"), url)
-            r = urllib.request.urlopen(url)
+            r = urllib.request.urlopen(url, timeout=timeout)
             if read:
                 raw_data = r.read()
                 return raw_data
