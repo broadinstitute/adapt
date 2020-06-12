@@ -154,8 +154,10 @@ def main(args):
         predictor = predict_activity.Predictor(cla_path, reg_path,
                 classification_threshold=cla_thres,
                 regression_threshold=reg_thres)
+        highly_active = args.predict_activity_require_highly_active
         analyzer = coverage_analysis.CoverageAnalyzerWithPredictedActivity(
-                seqs, designs, predictor, args.primer_mismatches)
+                seqs, designs, predictor, args.primer_mismatches,
+                highly_active=highly_active)
     else:
         raise Exception(("One of --guide-mismatches or "
             "--predict-activity-model-path must be set"))
@@ -244,7 +246,13 @@ if __name__ == "__main__":
             "determined to be highly active). If not set but --predict-"
             "activity-model-path is set, then this uses default thresholds "
             "stored with the models. To 'bind to' or 'cover' a target, "
-            "the guide-target pair must be highly active."))
+            "the guide-target pair must be active or, if "
+            "--predict-activity-require-highly-active is set, highly active."))
+    parser.add_argument('--predict-activity-require-highly-active',
+        action='store_true',
+        help=("When determining whether a guide-target pair binds using an "
+              "activity model, require that the pair be predicted to be "
+              "highly active (not just active)"))
 
     # Miscellaneous
     parser.add_argument('--use-accessions',
