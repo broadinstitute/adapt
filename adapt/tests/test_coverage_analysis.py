@@ -128,6 +128,18 @@ class TestCoverageAnalysisWithPredictedActivity(unittest.TestCase):
                     else:
                         y += [False]
                 return y
+            def compute_activity(self, start_pos, pairs):
+                y = []
+                for target, guide in pairs:
+                    target_without_context = target[self.context_nt:len(target)-self.context_nt]
+                    if guide == target_without_context:
+                        if guide[0] == 'A':
+                            y += [2]
+                        else:
+                            y += [1]
+                    else:
+                        y += [0]
+                return y
             def cleanup_memoized(self, pos):
                 pass
         predictor = PredictorTest()
@@ -138,7 +150,7 @@ class TestCoverageAnalysisWithPredictedActivity(unittest.TestCase):
                 'seq3': 'TGCAACCGATCCGT'
         }
         self.ca = coverage_analysis.CoverageAnalyzerWithPredictedActivity(
-                self.seqs, {}, predictor, 1)
+                self.seqs, {}, predictor, 1, highly_active=True)
 
         # Index sequences with a k-mer length of k=2 to ensure k-mers
         # will be found

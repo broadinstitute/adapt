@@ -355,10 +355,12 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
 
 class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
     """Methods to analyze coverage of a design using model that determines
-    guide-target binding based on whether it is predicted to be highly active.
+    guide-target binding based on whether it is predicted to be active or
+    highly active.
     """
 
-    def __init__(self, seqs, designs, predictor, primer_mismatches=None):
+    def __init__(self, seqs, designs, predictor, primer_mismatches=None,
+            highly_active=False):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -366,13 +368,16 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
             designs: dict mapping an identifier for a design to Design object
             predictor: adapt.utils.predict_activity.Predictor object, used to
                 determine whether a guide-target pair is predicted to be
-                highly active
+                active
             primer_mismatches: number of mismatches to tolerate when determining
                 whether a primer hybridizes to a target sequence (if not
                 set, the designs are assumed to not contain primers)
+            highly_active: if True, determine a guide-target pair to bind if
+                 it is predicted to be highly active (not just active)
         """
         super().__init__(seqs, designs, primer_mismatches=primer_mismatches)
         self.predictor = predictor
+        self.highly_active = highly_active
 
     def guide_bind_fn(self, seq, target_seq, pos):
         """Evaluate binding with a predictor -- i.e., based on what is
@@ -405,11 +410,16 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
         # Do not bother memoizing predictions because target_seq are not
         # aligned; a position for one target_seq may not correspond to the
         # same position in another
-        predictions = self.predictor.determine_highly_active(-1,
-                pairs_to_evaluate)
+        if self.highly_active:
+            predictions = self.predictor.determine_highly_active(-1,
+                    pairs_to_evaluate)
+        else:
+            predictions = self.predictor.compute_activity(-1,
+                    pairs_to_evaluate)
+            predictions = [bool(p > 0) for p in predictions]
         bind_pos = set()
         for i, p in zip(pos_evaluating, predictions):
             if p is True:
-                # subsequence at i is highly active
+                # subsequence at i is active or highly active
                 bind_pos.add(i)
         return bind_pos
