@@ -41,27 +41,26 @@ class TestCoverageAnalysisWithMismatchModel(unittest.TestCase):
 
     def test_find_binding_pos(self):
         bind_fn = self.ca.guide_bind_fn
-        for allow_not_fully_sensitive in [False, True]:
+        for fully_sensitive in [False, True]:
+            self.ca.fully_sensitive = fully_sensitive
             self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'TTCGAT', bind_fn,
-                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    self.ca.find_binding_pos('seq1', 'TTCGAT', bind_fn),
                     {6}
             )
             self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'TTCC', bind_fn,
-                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    self.ca.find_binding_pos('seq1', 'TTCC', bind_fn),
                     {6}
             )
             self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'AAAA', bind_fn,
-                        allow_not_fully_sensitive=allow_not_fully_sensitive),
+                    self.ca.find_binding_pos('seq1', 'AAAA', bind_fn),
                     set()
             )
-            self.assertEqual(
-                    self.ca.find_binding_pos('seq1', 'AT', bind_fn,
-                        allow_not_fully_sensitive=allow_not_fully_sensitive),
-                    {0,5,10}
-            )
+            if fully_sensitive is True:
+                self.assertEqual(
+                        self.ca.find_binding_pos('seq1', 'AT', bind_fn),
+                        {0,4,5,6,10,14}
+                )
+        self.ca.fully_sensitive = False
 
     def test_seqs_where_guide_binds(self):
         self.assertEqual(

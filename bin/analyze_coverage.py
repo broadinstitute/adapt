@@ -142,7 +142,7 @@ def main(args):
     elif args.guide_mismatches is not None:
         analyzer = coverage_analysis.CoverageAnalyzerWithMismatchModel(
                 seqs, designs, args.guide_mismatches, args.primer_mismatches,
-                allow_gu_pairs)
+                allow_gu_pairs, fully_sensitive=args.fully_sensitive)
     elif args.predict_activity_model_path:
         cla_path, reg_path = args.predict_activity_model_path
         if args.predict_activity_thres:
@@ -157,7 +157,8 @@ def main(args):
         highly_active = args.predict_activity_require_highly_active
         analyzer = coverage_analysis.CoverageAnalyzerWithPredictedActivity(
                 seqs, designs, predictor, args.primer_mismatches,
-                highly_active=highly_active)
+                highly_active=highly_active,
+                fully_sensitive=args.fully_sensitive)
     else:
         raise Exception(("One of --guide-mismatches or "
             "--predict-activity-model-path must be set"))
@@ -261,6 +262,11 @@ if __name__ == "__main__":
               "than being a FASTA of sequences -- each line in the file gives "
               "an accession. This fetches the sequences of those accessions "
               "uses them as input."))
+    parser.add_argument('--fully-sensitive',
+        action='store_true',
+        help=("When set, use a naive, slow sliding approach to find binding "
+              "for primers and guides; otherwise, this uses an index to "
+              "more quickly identify binding sites"))
 
     # Log levels
     parser.add_argument("--debug",

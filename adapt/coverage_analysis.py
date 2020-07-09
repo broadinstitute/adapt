@@ -35,7 +35,8 @@ class CoverageAnalyzer:
     """Methods to analyze coverage of a design.
     """
 
-    def __init__(self, seqs, designs, primer_mismatches=None):
+    def __init__(self, seqs, designs, primer_mismatches=None,
+            fully_sensitive=False):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -44,12 +45,15 @@ class CoverageAnalyzer:
             primer_mismatches: number of mismatches to tolerate when determining
                 whether a primer hybridizes to a target sequence (if not
                 set, the designs are assumed to not contain primers)
+            fully_sensitive: if True, use a fully sensitive lookup of
+                primers and guides (slower)
         """
         self.seqs = seqs
         self.designs = designs
         self.primer_mismatches = primer_mismatches
         self.seqs_are_indexed = False
         self.seqs_index_k = None
+        self.fully_sensitive = fully_sensitive
 
     def _index_seqs(self, k=6, stride_by_k=False):
         """Construct index of seqs for faster lookups of binding positions.
@@ -113,9 +117,7 @@ class CoverageAnalyzer:
         """
         raise NotImplementedError()
 
-    def find_binding_pos(self, target_seq_name, seq, bind_fn,
-            allow_not_all_positions=True,
-            allow_not_fully_sensitive=True):
+    def find_binding_pos(self, target_seq_name, seq, bind_fn):
         """Find if and where a sequence binds to in a target sequence.
 
         This takes a naive (but fully sensitive) approach: it simply
@@ -134,17 +136,23 @@ class CoverageAnalyzer:
             seq: guide or primer sequence to lookup
             bind_fn: function accepting (seq, target_seq, pos) and outputs
                 positions in pos to which seq binds to target_seq
-            allow_not_all_positions: if set, the returned collection of
-                positions may not include *all* positions that seq
-                binds to; using this can significantly improve runtime
-            allow_not_fully_sensitive: if set, allow returning no positions
-                based only on k-mer lookups in the index (i.e., without
-                performing the naive, slow sliding approach)
 
         Returns:
             collection of start positions in target_seq to which seq binds;
             empty collection if seq does not bind anywhere in target_seq
         """
+        if self.fully_sensitive:
+            # Use a naive, slow sliding approach
+            allow_not_all_positions = False
+            allow_not_fully_sensitive = False
+        else:
+            # Allow the returned collection of positions to not include *all*
+            # positions that seq binds to
+            allow_not_all_positions = True
+            # Allow returning no positions based only on k-mer lookups in the
+            # index (i.e., without performing a slow sliding approach)
+            allow_not_fully_sensitive = True
+
         if not self.seqs_are_indexed:
             self._index_seqs()
 
@@ -319,7 +327,7 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
     """
 
     def __init__(self, seqs, designs, guide_mismatches, primer_mismatches=None,
-            allow_gu_pairs=True):
+            allow_gu_pairs=True, fully_sensitive=False):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -332,8 +340,11 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
                 set, the designs are assumed to not contain primers)
             allow_gu_pairs: if True, tolerate G-U base pairs between a guide
                 and target when computing whether a guide binds
+            fully_sensitive: if True, use a fully sensitive lookup of
+                primers and guides (slower)
         """
-        super().__init__(seqs, designs, primer_mismatches=primer_mismatches)
+        super().__init__(seqs, designs, primer_mismatches=primer_mismatches,
+                fully_sensitive=fully_sensitive)
         self.guide_mismatches = guide_mismatches
         self.allow_gu_pairs = allow_gu_pairs
 
@@ -360,7 +371,7 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
     """
 
     def __init__(self, seqs, designs, predictor, primer_mismatches=None,
-            highly_active=False):
+            highly_active=False, fully_sensitive=False):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -374,8 +385,11 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
                 set, the designs are assumed to not contain primers)
             highly_active: if True, determine a guide-target pair to bind if
                  it is predicted to be highly active (not just active)
+            fully_sensitive: if True, use a fully sensitive lookup of
+                primers and guides (slower)
         """
-        super().__init__(seqs, designs, primer_mismatches=primer_mismatches)
+        super().__init__(seqs, designs, primer_mismatches=primer_mismatches,
+                fully_sensitive=fully_sensitive)
         self.predictor = predictor
         self.highly_active = highly_active
 
