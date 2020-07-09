@@ -133,13 +133,13 @@ def main(args):
     # is read as unaligned sequences
     seqs = seq_io.read_fasta(seqs_fn, skip_gaps=True)
 
-    if args.guide_mismatches and args.predict_activity_model_path:
+    if (args.guide_mismatches is not None) and args.predict_activity_model_path:
         raise Exception(("Cannot set both --guide-mismatches and "
             "--predict-activity-model-path. Choose --guide-mismatches "
             "for a model based on mismatches, and --predict-activity-model-"
             "path to make determinations based on whether predicted "
             "activity is high."))
-    elif args.guide_mismatches:
+    elif args.guide_mismatches is not None:
         analyzer = coverage_analysis.CoverageAnalyzerWithMismatchModel(
                 seqs, designs, args.guide_mismatches, args.primer_mismatches,
                 allow_gu_pairs)
