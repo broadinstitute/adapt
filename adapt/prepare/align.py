@@ -111,7 +111,7 @@ class AlignmentMemoizer:
         p_tmp = p + '.' + ("%08x" % random.getrandbits(32))
 
         seq_io.write_fasta(seqs, p_tmp)
-        os.rename(p_tmp, p)
+        os.replace(p_tmp, p)
         
 
 class AlignmentStatMemoizer:
@@ -253,9 +253,10 @@ def align(seqs, am=None):
 
     # Write a fasta of these sequences to a named temp file, and
     # create one to write the output fasta to
-    in_fasta = tempfile.NamedTemporaryFile()
+    in_fasta = tempfile.NamedTemporaryFile(delete=False)
+    in_fasta.close()
     seq_io.write_fasta(seqs, in_fasta.name)
-    out_fasta = tempfile.NamedTemporaryFile()
+    out_fasta = tempfile.NamedTemporaryFile(delete=False)
 
     # Setup arguments to mafft
     params = ['--preservecase', '--thread', '-1']
@@ -276,13 +277,14 @@ def align(seqs, am=None):
     # Call mafft
     cmd = [_mafft_exec] + params + [in_fasta.name]
     subprocess.call(cmd, stdout=out_fasta, stderr=subprocess.DEVNULL)
+    out_fasta.close()
 
     # Read the output fasta into a dict
     seqs_aligned = seq_io.read_fasta(out_fasta.name)
 
     # Close temp files
-    in_fasta.close()
-    out_fasta.close()
+    os.unlink(in_fasta.name)
+    os.unlink(out_fasta.name)
 
     if len(seqs) > 0 and len(seqs_aligned) == 0:
         logger.critical(("The generated alignment contains no sequences; "

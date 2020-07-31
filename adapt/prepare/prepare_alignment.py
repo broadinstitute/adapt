@@ -161,7 +161,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 added_ref_accs_to_fetch += [ref_acc]
         seqs_unaligned_fp = ncbi_neighbors.fetch_fastas(acc_to_fetch)
         seqs_unaligned = align.read_unaligned_seqs(seqs_unaligned_fp)
-        seqs_unaligned_fp.close()
+        os.unlink(seqs_unaligned_fp.name)
 
         # Toss sequences that are too short
         seqs_too_short = set()

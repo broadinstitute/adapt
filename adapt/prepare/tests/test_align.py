@@ -3,6 +3,7 @@
 
 from collections import OrderedDict
 import tempfile
+from os import unlink
 import unittest
 
 from adapt.prepare import align
@@ -56,14 +57,14 @@ class TestIO(unittest.TestCase):
 
     def setUp(self):
         # Create a temporary file
-        self.fasta = tempfile.NamedTemporaryFile(mode='w')
+        self.fasta = tempfile.NamedTemporaryFile(mode='w', delete=False)
         self.fasta.write(">AB123.2 Name of the sequence\n")
         self.fasta.write("ATCG\n")
         self.fasta.write("\n")
         self.fasta.write(">KY456 Another sequence\n")
         self.fasta.write("AATTAA\n")
         self.fasta.write("\n")
-        self.fasta.seek(0)
+        self.fasta.close()
 
 
     def test_read_unaligned_seqs(self):
@@ -76,7 +77,7 @@ class TestIO(unittest.TestCase):
         self.assertEqual(seqs['KY456'], "AATTAA") 
 
     def tearDown(self):
-        self.fasta.close()
+        unlink(self.fasta.name)
 
 
 class TestMemoization(unittest.TestCase):

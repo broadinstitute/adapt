@@ -241,7 +241,7 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
         reqs_per_sec = 7
 
     # Make temp file
-    fp = tempfile.NamedTemporaryFile()
+    fp = tempfile.NamedTemporaryFile(delete=False)
 
     # Download sequences in batches
     for i in range(0, len(accessions), batch_size):
@@ -253,7 +253,7 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
         time.sleep(1.0/reqs_per_sec)
 
     # Set position to 0 so it can be re-read
-    fp.seek(0)
+    fp.close()
 
     return fp
 
