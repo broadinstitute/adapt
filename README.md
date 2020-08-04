@@ -1,4 +1,4 @@
-# ADAPT &nbsp;&middot;&nbsp; [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 #### Adaptive Design by Astutely Patrolling Targets
 
 ADAPT is a software package for designing optimal nucleic acid diagnostics.
@@ -38,10 +38,10 @@ However, the problems share some similarity with the problems solved by CATCH, w
 ## Dependencies
 
 ADAPT requires:
-* [Python](https://www.python.org) &gt;= 3.7
+* [Python](https://www.python.org) &gt;= 3.8
 * [NumPy](http://www.numpy.org) &gt;= 1.16.0
 * [SciPy](https://www.scipy.org) &gt;= 1.4.0
-* [TensorFlow](https://www.tensorflow.org) &gt;= 2.1.0
+* [TensorFlow](https://www.tensorflow.org) &gt;= 2.3.0
 
 Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed.
 
@@ -62,9 +62,9 @@ wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
 
-Once you have conda, you can [create](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands) an environment for ADAPT with Python 3.7:
+Once you have conda, you can [create](https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-with-commands) an environment for ADAPT with Python 3.8:
 ```bash
-conda create -n adapt python=3.7
+conda create -n adapt python=3.8
 ```
 Then, you can activate the `adapt` environment:
 ```bash
