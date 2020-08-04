@@ -253,6 +253,8 @@ def align(seqs, am=None):
 
     # Write a fasta of these sequences to a named temp file, and
     # create one to write the output fasta to
+    # Files closed for Windows, which will not allow files to be 
+    # opened twice (files opened again in write_fasta/read_fasta)
     in_fasta = tempfile.NamedTemporaryFile(delete=False)
     in_fasta.close()
     seq_io.write_fasta(seqs, in_fasta.name)
@@ -282,7 +284,7 @@ def align(seqs, am=None):
     # Read the output fasta into a dict
     seqs_aligned = seq_io.read_fasta(out_fasta.name)
 
-    # Close temp files
+    # Delete temp files
     os.unlink(in_fasta.name)
     os.unlink(out_fasta.name)
 

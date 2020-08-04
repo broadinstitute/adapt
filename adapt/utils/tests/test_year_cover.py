@@ -28,6 +28,7 @@ class TestReadYears(unittest.TestCase):
         fn.write("genome_4\t2016\n")
         fn.write("\n")
         fn.write("\n")
+        # Closes the file so that it can be reopened on Windows
         fn.close()
 
         expected = {2016: {"genome_1", "genome_2", "genome_4"},
@@ -36,6 +37,7 @@ class TestReadYears(unittest.TestCase):
         years = year_cover.read_years(fn.name)
         self.assertEqual(years, expected)        
 
+        # Delete temporary file
         unlink(fn.name)
 
     def test_read_fail_nonyear(self):
@@ -46,9 +48,11 @@ class TestReadYears(unittest.TestCase):
         fn.write("genome_4\t2016\n")
         fn.write("\n")
         fn.write("\n")
+        # Closes the file so that it can be reopened on Windows
         fn.close()
         with self.assertRaises(ValueError):
             years = year_cover.read_years(fn.name)
+        # Delete temporary file
         unlink(fn.name)
 
     def test_read_fail_duplicate_sequence(self):
@@ -59,9 +63,11 @@ class TestReadYears(unittest.TestCase):
         fn.write("genome_1\t2018\n")
         fn.write("\n")
         fn.write("\n")
+        # Closes the file so that it can be reopened on Windows
         fn.close()
         with self.assertRaises(ValueError):
             years = year_cover.read_years(fn.name)
+        # Delete temporary file
         unlink(fn.name)
 
     def tearDown(self):

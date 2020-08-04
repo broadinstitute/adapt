@@ -46,6 +46,7 @@ class TestFastaRead(unittest.TestCase):
         self.fasta.write("CAAT\n")
         self.fasta.write("\n")
         self.fasta.write("\n")
+        # Closes the file so that it can be reopened on Windows
         self.fasta.close()
 
         self.expected = OrderedDict()
@@ -60,6 +61,7 @@ class TestFastaRead(unittest.TestCase):
         self.assertEqual(seqs, self.expected)
 
     def tearDown(self):
+        # Delete temporary file
         unlink(self.fasta.name)
 
         # Re-enable logging
@@ -76,6 +78,7 @@ class TestFastaWrite(unittest.TestCase):
 
         # Create a temporary fasta file
         self.fasta = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        # Closes the file so that it can be reopened on Windows
         self.fasta.close()
 
         self.seqs = OrderedDict()
@@ -91,6 +94,7 @@ class TestFastaWrite(unittest.TestCase):
         self.assertEqual(self.seqs, seqs_read)
 
     def tearDown(self):
+        # Delete temporary file
         unlink(self.fasta.name)
 
         # Re-enable logging

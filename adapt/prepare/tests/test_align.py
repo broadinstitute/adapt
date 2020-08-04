@@ -64,6 +64,7 @@ class TestIO(unittest.TestCase):
         self.fasta.write(">KY456 Another sequence\n")
         self.fasta.write("AATTAA\n")
         self.fasta.write("\n")
+        # Closes the file so that it can be reopened on Windows
         self.fasta.close()
 
 
@@ -77,6 +78,7 @@ class TestIO(unittest.TestCase):
         self.assertEqual(seqs['KY456'], "AATTAA") 
 
     def tearDown(self):
+        # Delete temporary file
         unlink(self.fasta.name)
 
 
