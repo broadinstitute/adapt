@@ -39,8 +39,8 @@ However, the problems share some similarity with the problems solved by CATCH, w
 
 ADAPT requires:
 * [Python](https://www.python.org) &gt;= 3.8
-* [NumPy](http://www.numpy.org) &gt;= 1.16.0
-* [SciPy](https://www.scipy.org) &gt;= 1.4.0
+* [NumPy](http://www.numpy.org) &gt;= 1.16.0, &lt; 1.19.0
+* [SciPy](https://www.scipy.org) == 1.4.1
 * [TensorFlow](https://www.tensorflow.org) &gt;= 2.3.0
 
 Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed.
