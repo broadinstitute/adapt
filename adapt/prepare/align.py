@@ -9,6 +9,8 @@ import random
 import re
 import subprocess
 import tempfile
+import boto3
+import botocore
 
 from adapt.utils import seq_io
 
@@ -56,23 +58,34 @@ class AlignmentMemoizer:
         """
             Args:
                 path: path to directory in which to read and store
-                    memoized alignments
+                    memoized alignments; if path begins with "s3://",
+                    stores bucket
         """
-        self.path = path
+        if path[:5] == "s3://":
+            # Store path as an S3 Bucket Object
+            s3 = boto3.resource("s3")
+            folders = path.split("/")
+            self.bucket = s3.Bucket(folders[2])
+            self.path = "/".join(folders[3:])
 
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
+        else:
+            self.path = path
+            self.bucket = None
+            if not os.path.exists(self.path):
+                os.makedirs(self.path)
 
     def _hash_accvers_filepath(self, accvers):
-        """Generate a path to use as the filename for an alignment.
+        """Generate a path or S3 key to use as the filename for an alignment.
 
         Args:
             accvers: collection of accession.version in an alignment
 
         Returns:
-            path to file that should store accvers
+            path to file or S3 key that should store accvers
         """
         h = hashlib.md5(str(sorted(set(accvers))).encode('utf-8')).hexdigest()
+        if self.bucket:
+            return "/".join([self.path, h])
         return os.path.join(self.path, h)
 
     def get(self, accvers):
@@ -86,11 +99,33 @@ class AlignmentMemoizer:
             if accvers is not memoized
         """
         p = self._hash_accvers_filepath(accvers)
+        seqs = None
 
-        if os.path.exists(p):
+        if self.bucket:
+            # Create a temporary file to put FASTA file into
+            p_tmp = tempfile.NamedTemporaryFile(delete=False)
+            p_tmp.close()
+            # Download file from source if it exists,
+            # otherwise return None
+            try:
+                self.bucket.download_file(p, p_tmp.name)
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == "404":
+                    return None
+                else:
+                    raise
+            else:
+                seqs = seq_io.read_fasta(p_tmp.name)
+            finally:
+                # Delete temporary file after FASTA has been read
+                os.unlink(p_tmp.name)
+
+        elif os.path.exists(p):
             # Read the fasta, and verify that the accessions in it
             # match accs (i.e., that there is not a collision)
             seqs = seq_io.read_fasta(p)
+
+        if seqs:
             if set(accvers) == set(seqs.keys()):
                 return seqs
             else:
@@ -106,12 +141,20 @@ class AlignmentMemoizer:
         """
         p = self._hash_accvers_filepath(seqs.keys())
 
-        # Generate a random 8-digit hex to append to p temporarily, so that
-        # two files don't write to p at the same time
-        p_tmp = p + '.' + ("%08x" % random.getrandbits(32))
+        if self.bucket:
+            # Make temporary file to store FASTA, then upload to S3
+            p_tmp = tempfile.NamedTemporaryFile(delete=False)
+            p_tmp.close()
+            seq_io.write_fasta(seqs, p_tmp.name)
+            self.bucket.upload_file(p_tmp.name, p)
+            os.unlink(p_tmp.name)
+        else:
+            # Generate a random 8-digit hex to append to p temporarily, so that
+            # two files don't write to p at the same time
+            p_tmp = "%s.%08x" % (p, random.getrandbits(32))
 
-        seq_io.write_fasta(seqs, p_tmp)
-        os.replace(p_tmp, p)
+            seq_io.write_fasta(seqs, p_tmp)
+            os.replace(p_tmp, p)
         
 
 class AlignmentStatMemoizer:
@@ -127,15 +170,23 @@ class AlignmentStatMemoizer:
         """
             Args:
                 path: path to directory in which to read and store memoized
-                    stats
+                    stats; if path begins with "s3://", stores bucket
         """
-        self.path = path
+        if path[:5] == "s3://":
+            # Store path as an S3 Bucket Object
+            s3 = boto3.resource("s3")
+            folders = path.split("/")
+            self.bucket = s3.Bucket(folders[2])
+            self.path = "/".join(folders[3:])
 
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
+        else:
+            self.path = path
+            self.bucket = None
+            if not os.path.exists(self.path):
+                os.makedirs(self.path)
 
     def _hash_accvers_filepath(self, accvers):
-        """Generate a path to use as the filename for an alignment.
+        """Generate a path or S3 key to use as the filename for an alignment.
 
         Let h be the hash of accers and and h_2 be the first two
         (hexadecimal) digits of h. This stores h in a directory
@@ -146,11 +197,15 @@ class AlignmentStatMemoizer:
             accvers: collection of accession.version in an alignment
 
         Returns:
-            path to file that should store stats on accvers
+            path to file or S3 key that should store stats on accvers
         """
         h = hashlib.md5(str(sorted(set(accvers))).encode('utf-8')).hexdigest()
 
         h_2 = h[:2]
+
+        if self.bucket:
+            return "/".join([self.path, h_2, h])
+
         h_dir = os.path.join(self.path, h_2)
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
@@ -168,14 +223,37 @@ class AlignmentStatMemoizer:
             accvers; or None if accvers is not memoized
         """
         p = self._hash_accvers_filepath(accvers)
+        lines = None
 
-        if os.path.exists(p):
+        if self.bucket:
+            # Create a temporary file to put the file into
+            p_tmp = tempfile.NamedTemporaryFile(delete=False)
+            p_tmp.close()
+            # Download file from source if it exists,
+            # otherwise return None
+            try:
+                self.bucket.download_file(p, p_tmp.name)
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == "404":
+                    return None
+                else:
+                    raise
+            else:
+                with open(p_tmp.name, "r") as f:
+                    lines = [line.rstrip() for line in f]
+            finally:
+                # Delete temporary file after file has been read
+                os.unlink(p_tmp.name)
+
+        elif os.path.exists(p):
             # Read the file, and verify that the accessions in it
             # match accvers (i.e., that there is not a collision)
             with open(p) as f:
                 lines = [line.rstrip() for line in f]
-                assert len(lines) == 1  # should be just 1 line
-                ls = lines[0].split('\t')
+        
+        if lines:
+            assert len(lines) == 1  # should be just 1 line
+            ls = lines[0].split('\t')
             accvers_in_p = ls[0].split(',')
             if set(accvers) == set(accvers_in_p):
                 stats = (float(ls[1]), float(ls[2]))
@@ -193,17 +271,22 @@ class AlignmentStatMemoizer:
             stats: tuple (aln_identity, aln_identity_ccg)
         """
         p = self._hash_accvers_filepath(accvers)
-
-        # Generate a random 8-digit hex to append to p temporarily, so that
-        # two files don't write to p at the same time
-        p_tmp = p + '.' + ("%08x" % random.getrandbits(32))
-
         accvers_str = ','.join(accvers)
-        with open(p_tmp, 'w') as fw:
-            fw.write(('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
-                '\n'))
 
-        os.rename(p_tmp, p)
+        if self.bucket:
+            with tempfile.NamedTemporaryFile(mode="w", delete=False) as p_tmp:
+                p_tmp.write('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
+                        '\n')
+                p_tmp.seek(0)
+                self.bucket.upload_file(p_tmp.name, p)
+        else:
+            # Generate a random 8-digit hex to append to p temporarily, so that
+            # two files don't write to p at the same time
+            p_tmp = "%s.%08x" % (p, random.getrandbits(32))
+            with open(p_tmp, 'w') as fw:
+                fw.write(('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
+                    '\n'))
+            os.rename(p_tmp, p)
 
 
 _mafft_exec = None
