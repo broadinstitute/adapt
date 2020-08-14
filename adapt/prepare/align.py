@@ -9,8 +9,11 @@ import random
 import re
 import subprocess
 import tempfile
-import boto3
-import botocore
+try:
+    import boto3
+    import botocore
+except:
+    pass
 
 from adapt.utils import seq_io
 
