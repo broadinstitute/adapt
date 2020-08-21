@@ -3,6 +3,7 @@
 
 import logging
 import tempfile
+from os import unlink
 import unittest
 
 from adapt.utils import year_cover
@@ -20,14 +21,15 @@ class TestReadYears(unittest.TestCase):
 
     def test_read_success(self):
         # Write the temporary years file
-        fn = tempfile.NamedTemporaryFile(mode='w')
+        fn = tempfile.NamedTemporaryFile(mode='w', delete=False)
         fn.write("genome_1\t2016\n")
         fn.write("genome_2\t2016\n")
         fn.write("genome_3\t2018\n")
         fn.write("genome_4\t2016\n")
         fn.write("\n")
         fn.write("\n")
-        fn.seek(0)
+        # Closes the file so that it can be reopened on Windows
+        fn.close()
 
         expected = {2016: {"genome_1", "genome_2", "genome_4"},
                     2018: {"genome_3"}}
@@ -35,33 +37,38 @@ class TestReadYears(unittest.TestCase):
         years = year_cover.read_years(fn.name)
         self.assertEqual(years, expected)        
 
-        fn.close()
+        # Delete temporary file
+        unlink(fn.name)
 
     def test_read_fail_nonyear(self):
-        fn = tempfile.NamedTemporaryFile(mode='w')
+        fn = tempfile.NamedTemporaryFile(mode='w', delete=False)
         fn.write("genome_1\t2016\n")
         fn.write("genome_2\t16\n")
         fn.write("genome_3\t2018\n")
         fn.write("genome_4\t2016\n")
         fn.write("\n")
         fn.write("\n")
-        fn.seek(0)
+        # Closes the file so that it can be reopened on Windows
+        fn.close()
         with self.assertRaises(ValueError):
             years = year_cover.read_years(fn.name)
-        fn.close()
+        # Delete temporary file
+        unlink(fn.name)
 
     def test_read_fail_duplicate_sequence(self):
-        fn = tempfile.NamedTemporaryFile(mode='w')
+        fn = tempfile.NamedTemporaryFile(mode='w', delete=False)
         fn.write("genome_1\t2016\n")
         fn.write("genome_2\t2016\n")
         fn.write("genome_3\t2018\n")
         fn.write("genome_1\t2018\n")
         fn.write("\n")
         fn.write("\n")
-        fn.seek(0)
+        # Closes the file so that it can be reopened on Windows
+        fn.close()
         with self.assertRaises(ValueError):
             years = year_cover.read_years(fn.name)
-        fn.close()
+        # Delete temporary file
+        unlink(fn.name)
 
     def tearDown(self):
         # Re-enable logging

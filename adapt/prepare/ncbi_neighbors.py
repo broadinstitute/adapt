@@ -14,6 +14,7 @@ import time
 import urllib.parse
 import urllib.request
 from xml.dom import minidom
+from os import unlink
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -241,7 +242,7 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
         reqs_per_sec = 7
 
     # Make temp file
-    fp = tempfile.NamedTemporaryFile()
+    fp = tempfile.NamedTemporaryFile(delete=False)
 
     # Download sequences in batches
     for i in range(0, len(accessions), batch_size):
@@ -252,8 +253,8 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
             fp.write((line + '\n').encode())
         time.sleep(1.0/reqs_per_sec)
 
-    # Set position to 0 so it can be re-read
-    fp.seek(0)
+    # Closes the file so that it can be reopened on Windows
+    fp.close()
 
     return fp
 
@@ -294,7 +295,7 @@ def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
         tempfile object containing the downloaded XML data
     """
     # Make temp file
-    fp = tempfile.NamedTemporaryFile()
+    fp = tempfile.NamedTemporaryFile(delete=False)
 
     # Only write the header once; otherwise, it will be written for each
     # beach, and then the file will not be able to be parsed
@@ -322,8 +323,8 @@ def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
     # Write the GBSet close
     fp.write(('</GBSet>' + '\n').encode())
 
-    # Set position to 0 so it can be re-read
-    fp.seek(0)
+    # Closes the file so that it can be reopened on Windows
+    fp.close()
 
     return fp
 
@@ -667,8 +668,8 @@ def fetch_metadata(accessions):
         metadata[accession] = {'country': country, 'year': year,
                 'entry_create_year': entry_create_year}
 
-    # Close the tempfile
-    xml_tf.close()
+    # Delete the tempfile
+    unlink(xml_tf.name)
 
     return metadata
 
