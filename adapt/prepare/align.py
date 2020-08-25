@@ -119,11 +119,12 @@ class AlignmentMemoizer:
                 seqs = seq_io.process_fasta(lines)
 
         elif os.path.exists(p):
-            # Read the fasta, and verify that the accessions in it
-            # match accs (i.e., that there is not a collision)
+            # Read the fasta
             seqs = seq_io.read_fasta(p)
 
         if seqs:
+            # Verify that the accessions in the file match accs 
+            # (i.e., that there is not a collision)
             if set(accvers) == set(seqs.keys()):
                 return seqs
             else:
@@ -209,6 +210,64 @@ class AlignmentStatMemoizer:
 
         return os.path.join(h_dir, h)
 
+    def batch_get(self, all_accvers):
+        """Get memoized stats for all alignments.
+
+        Args:
+            all_accvers: collection of collections of accession.version in
+            each alignment
+
+        Returns:
+            dictionary of keys tuple(accvers), items (aln_identity, aln_identity_ccg) 
+            for alignment of accvers; or None if accvers is not memoized
+        """
+        # Get paths for every accvers
+        ps = {self._hash_accvers_filepath(accvers): tuple(accvers) for accvers in all_accvers}
+        all_stats = {}
+
+        # For each accvers, download file from source if it exists,
+        # otherwise return None
+        if self.bucket:
+            for p in ps:
+                try:
+                    f = S3.get_object(Bucket = self.bucket, Key = p)
+                except ClientError as e:
+                    if e.response['Error']['Code'] == 'NoSuchKey':
+                        all_stats[ps[p]] = None
+                    else:
+                        raise e
+                else:
+                    # Read the file, and verify that the accessions in it
+                    # match accvers (ps[p]) (i.e., that there is not a collision)
+                    lines = f["Body"].read().decode('utf-8').rstrip()
+                    ls = lines.split('\t')
+                    accvers_in_p = ls[0].split(',')
+                    if set(ps[p]) == set(accvers_in_p):
+                        stats = (float(ls[1]), float(ls[2]))
+                        all_stats[ps[p]] = stats
+                    else:
+                        all_stats[ps[p]] =  None
+
+        else:
+            for p in ps:
+                if os.path.exists(p):
+                    # Read the file, and verify that the accessions in it
+                    # match accvers (ps[p]) (i.e., that there is not a collision)
+                    with open(p) as f:
+                        lines = [line.rstrip() for line in f]
+                    assert len(lines) == 1  # should be just 1 line
+                    ls = lines[0].split('\t')
+                    accvers_in_p = ls[0].split(',')
+                    if set(ps[p]) == set(accvers_in_p):
+                        stats = (float(ls[1]), float(ls[2]))
+                        all_stats[ps[p]] = stats
+                    else:
+                        all_stats[ps[p]] =  None
+                else:
+                    all_stats[ps[p]] = None
+
+        return all_stats
+
     def get(self, accvers):
         """Get memoized stats for alignment.
 
@@ -237,14 +296,15 @@ class AlignmentStatMemoizer:
                 ls = lines.split('\t')
 
         elif os.path.exists(p):
-            # Read the file, and verify that the accessions in it
-            # match accvers (i.e., that there is not a collision)
+            # Read the file
             with open(p) as f:
                 lines = [line.rstrip() for line in f]
-                assert len(lines) == 1  # should be just 1 line
-                ls = lines[0].split('\t')
+            assert len(lines) == 1  # should be just 1 line
+            ls = lines[0].split('\t')
         
         if ls:
+            # Verify that the accessions in file match accvers
+            # (i.e., that there is not a collision)
             accvers_in_p = ls[0].split(',')
             if set(accvers) == set(accvers_in_p):
                 stats = (float(ls[1]), float(ls[2]))
@@ -506,6 +566,8 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             aln_identity_ccf_thres = b
 
     seqs_filtered = OrderedDict()
+    refs_and_accvers = [(ref_acc_to_key[ref_acc], accver) for ref_acc in ref_accs for accver, _ in seqs.items()]
+    memo_stats = asm.batch_get(refs_and_accvers) if asm is not None else {}
     for accver, seq in seqs.items():
         for ref_acc in ref_accs:
             ref_acc_key = ref_acc_to_key[ref_acc]
@@ -515,7 +577,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 seqs_filtered[accver] = seq
                 break
 
-            stats = asm.get((ref_acc_key, accver)) if asm is not None else None
+            stats = memo_stats[(ref_acc_key, accver)]
             if stats is not None:
                 aln_identity, aln_identity_ccg = stats
             else:
