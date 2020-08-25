@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None,
-        sample_seqs=None, filter_warn=0.25, min_seq_len=200,
+        sample_seqs=None, seed=None, filter_warn=0.25, min_seq_len=200,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         cluster_threshold=0.1, accessions_to_use=None,
         sequences_to_use=None):
@@ -133,6 +133,8 @@ def prepare_for(taxid, segment, ref_accs, out,
             # show up multiple times in neighbors due to having multiple RefSeq
             # entries
             acc_to_sample = list(set([n.acc for n in neighbors]))
+            acc_to_sample.sort()
+            random.seed(seed)
             acc_to_fetch = random.choices(acc_to_sample, k=sample_seqs)
             neighbors = [n for n in neighbors if n.acc in acc_to_fetch]
             # Because this is sampling with replacement, an accession may
@@ -254,6 +256,8 @@ def prepare_for(taxid, segment, ref_accs, out,
         # Align the sequences in this cluster
         seqs_aligned = align.align(seqs_unaligned_curated_in_cluster,
             am=aln_memoizer)
+
+        a = b/0
 
         # Write a fasta file of aligned sequences
         fasta_file = os.path.join(out, str(cluster_idx) + '.fasta')
