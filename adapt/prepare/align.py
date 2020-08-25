@@ -567,7 +567,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
 
     seqs_filtered = OrderedDict()
     refs_and_accvers = [(ref_acc_to_key[ref_acc], accver) for ref_acc in ref_accs for accver, _ in seqs.items()]
-    memo_stats = asm.batch_get(refs_and_accvers) if asm is not None else {}
+    memo_stats = asm.batch_get(refs_and_accvers) if asm else None
     for accver, seq in seqs.items():
         for ref_acc in ref_accs:
             ref_acc_key = ref_acc_to_key[ref_acc]
@@ -577,7 +577,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 seqs_filtered[accver] = seq
                 break
 
-            stats = memo_stats[(ref_acc_key, accver)]
+            stats = memo_stats[(ref_acc_key, accver)] if memo_stats else None
             if stats is not None:
                 aln_identity, aln_identity_ccg = stats
             else:

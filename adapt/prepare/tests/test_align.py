@@ -213,8 +213,9 @@ class TestMemoization(unittest.TestCase):
 
     def tearDown(self):
         self.tempdir.cleanup()
-        self.bucket.objects.delete()
-        self.bucket.delete()
+        if cloud:
+            self.bucket.objects.delete()
+            self.bucket.delete()
 
 
 class TestCurateAgainstRef(unittest.TestCase):
