@@ -257,8 +257,6 @@ def prepare_for(taxid, segment, ref_accs, out,
         seqs_aligned = align.align(seqs_unaligned_curated_in_cluster,
             am=aln_memoizer)
 
-        a = b/0
-
         # Write a fasta file of aligned sequences
         fasta_file = os.path.join(out, str(cluster_idx) + '.fasta')
         seq_io.write_fasta(seqs_aligned, fasta_file)
