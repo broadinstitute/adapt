@@ -214,15 +214,19 @@ def prepare_alignments(args):
 
     # Setup alignment and alignment stat memoizers
     if args.prep_memoize_dir:
-        if not os.path.isdir(args.prep_memoize_dir):
-            raise Exception(("Path '%s' does not exist") %
-                args.prep_memoize_dir)
-        align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
-        if not os.path.exists(align_memoize_dir):
-            os.makedirs(align_memoize_dir)
-        align_stat_memoize_dir = os.path.join(args.prep_memoize_dir, 'stats')
-        if not os.path.exists(align_stat_memoize_dir):
-            os.makedirs(align_stat_memoize_dir)
+        if args.prep_memoize_dir[:5] == "s3://":
+            align_memoize_dir = "/".join([args.prep_memoize_dir, 'aln'])
+            align_stat_memoize_dir = "/".join([args.prep_memoize_dir, 'stats'])
+        else:
+            if not os.path.isdir(args.prep_memoize_dir):
+                raise Exception(("Path '%s' does not exist") %
+                    args.prep_memoize_dir)
+            align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
+            if not os.path.exists(align_memoize_dir):
+                os.makedirs(align_memoize_dir)
+            align_stat_memoize_dir = os.path.join(args.prep_memoize_dir, 'stats')
+            if not os.path.exists(align_stat_memoize_dir):
+                os.makedirs(align_stat_memoize_dir)
 
         am = align.AlignmentMemoizer(align_memoize_dir)
         asm = align.AlignmentStatMemoizer(align_stat_memoize_dir)

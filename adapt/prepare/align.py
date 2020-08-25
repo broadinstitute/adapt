@@ -11,7 +11,8 @@ import subprocess
 import tempfile
 try:
     import boto3
-    import botocore
+    from botocore.exceptions import ClientError
+    S3 = boto3.client("s3")
 except:
     pass
 
@@ -66,10 +67,9 @@ class AlignmentMemoizer:
         """
         if path[:5] == "s3://":
             # Store path as an S3 Bucket Object
-            s3 = boto3.resource("s3")
             folders = path.split("/")
-            self.bucket = s3.Bucket(folders[2])
             self.path = "/".join(folders[3:])
+            self.bucket = folders[2]
 
         else:
             self.path = path
@@ -105,23 +105,18 @@ class AlignmentMemoizer:
         seqs = None
 
         if self.bucket:
-            # Create a temporary file to put FASTA file into
-            p_tmp = tempfile.NamedTemporaryFile(delete=False)
-            p_tmp.close()
             # Download file from source if it exists,
             # otherwise return None
             try:
-                self.bucket.download_file(p, p_tmp.name)
-            except botocore.exceptions.ClientError as e:
-                if e.response['Error']['Code'] == "404":
+                f = S3.get_object(Bucket = self.bucket, Key = p)
+            except ClientError as e:
+                if e.response['Error']['Code'] == "NoSuchKey":
                     return None
                 else:
                     raise
             else:
-                seqs = seq_io.read_fasta(p_tmp.name)
-            finally:
-                # Delete temporary file after FASTA has been read
-                os.unlink(p_tmp.name)
+                lines = [line.decode('utf-8') for line in f["Body"].iter_lines()]
+                seqs = seq_io.process_fasta(lines)
 
         elif os.path.exists(p):
             # Read the fasta, and verify that the accessions in it
@@ -149,13 +144,13 @@ class AlignmentMemoizer:
             p_tmp = tempfile.NamedTemporaryFile(delete=False)
             p_tmp.close()
             seq_io.write_fasta(seqs, p_tmp.name)
-            self.bucket.upload_file(p_tmp.name, p)
+            with open(p_tmp.name, 'rb') as f:
+                S3.put_object(Bucket=self.bucket, Key=p, Body=f)
             os.unlink(p_tmp.name)
         else:
             # Generate a random 8-digit hex to append to p temporarily, so that
             # two files don't write to p at the same time
             p_tmp = "%s.%08x" % (p, random.getrandbits(32))
-
             seq_io.write_fasta(seqs, p_tmp)
             os.replace(p_tmp, p)
         
@@ -177,10 +172,9 @@ class AlignmentStatMemoizer:
         """
         if path[:5] == "s3://":
             # Store path as an S3 Bucket Object
-            s3 = boto3.resource("s3")
             folders = path.split("/")
-            self.bucket = s3.Bucket(folders[2])
             self.path = "/".join(folders[3:])
+            self.bucket = folders[2]
 
         else:
             self.path = path
@@ -226,37 +220,31 @@ class AlignmentStatMemoizer:
             accvers; or None if accvers is not memoized
         """
         p = self._hash_accvers_filepath(accvers)
-        lines = None
+        ls = None
 
         if self.bucket:
-            # Create a temporary file to put the file into
-            p_tmp = tempfile.NamedTemporaryFile(delete=False)
-            p_tmp.close()
             # Download file from source if it exists,
             # otherwise return None
             try:
-                self.bucket.download_file(p, p_tmp.name)
-            except botocore.exceptions.ClientError as e:
-                if e.response['Error']['Code'] == "404":
+                f = S3.get_object(Bucket = self.bucket, Key = p)
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
                     return None
                 else:
-                    raise
+                    raise e
             else:
-                with open(p_tmp.name, "r") as f:
-                    lines = [line.rstrip() for line in f]
-            finally:
-                # Delete temporary file after file has been read
-                os.unlink(p_tmp.name)
+                lines = f["Body"].read().decode('utf-8').rstrip()
+                ls = lines.split('\t')
 
         elif os.path.exists(p):
             # Read the file, and verify that the accessions in it
             # match accvers (i.e., that there is not a collision)
             with open(p) as f:
                 lines = [line.rstrip() for line in f]
+                assert len(lines) == 1  # should be just 1 line
+                ls = lines[0].split('\t')
         
-        if lines:
-            assert len(lines) == 1  # should be just 1 line
-            ls = lines[0].split('\t')
+        if ls:
             accvers_in_p = ls[0].split(',')
             if set(accvers) == set(accvers_in_p):
                 stats = (float(ls[1]), float(ls[2]))
@@ -277,11 +265,9 @@ class AlignmentStatMemoizer:
         accvers_str = ','.join(accvers)
 
         if self.bucket:
-            with tempfile.NamedTemporaryFile(mode="w", delete=False) as p_tmp:
-                p_tmp.write('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
-                        '\n')
-                p_tmp.seek(0)
-                self.bucket.upload_file(p_tmp.name, p)
+            body = '\t'.join([accvers_str, str(stats[0]), str(stats[1])]) + '\n'
+            S3.put_object(Bucket=self.bucket, Key=p,
+                Body=body.encode('utf-8'))
         else:
             # Generate a random 8-digit hex to append to p temporarily, so that
             # two files don't write to p at the same time
