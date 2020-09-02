@@ -227,7 +227,7 @@ Below are some additional arguments when INPUT-TYPE is `auto-from-{file,args}`:
 
 * `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
 * `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments in PREP_MEMOIZE_DIR.
-If not set (default), do not memoize this information.
+If not set (default), do not memoize this information. This can save the memo to an S3 bucket by using the syntax "s3://BUCKET/PATH", though this requires the package boto3 &gt;= 1.14.41 to run and botocore &gt;= 1.17.41 to be tested.
 If repeatedly re-running on the same taxonomies, using this can significantly improve runtime.
 * `--prep-influenza`: If set, use NCBI's influenza database for fetching data.
 This must be specified if design is for influenza A/B/C viruses.

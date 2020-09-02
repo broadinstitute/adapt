@@ -167,7 +167,6 @@ class TestMemoization(unittest.TestCase):
             test_on_dir(self.cloudtempdir)
 
     def test_alignment_stat_memoizer(self):
-
         def test_on_dir(directory):
             # Create some fake stats
             asm = align.AlignmentStatMemoizer(directory)

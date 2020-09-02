@@ -1076,7 +1076,8 @@ if __name__ == "__main__":
     input_auto_common_subparser.add_argument('--prep-memoize-dir',
         help=("Path to directory in which to memoize alignments and "
               "statistics on them; if not set, this does not memoize "
-              "this information"))
+              "this information. If set to \"s3://BUCKET/PATH\", it "
+              "will save to the S3 bucket if boto3 is installed."))
     input_auto_common_subparser.add_argument('--sample-seqs', type=int,
         help=("After fetching accessions, randomly select SAMPLE_SEQS of them "
               "with replacement from each taxonomy any move forward "
