@@ -233,6 +233,8 @@ If repeatedly re-running on the same taxonomies, using this can significantly im
 This must be specified if design is for influenza A/B/C viruses.
 * `--sample-seqs SAMPLE_SEQS`: Randomly sample SAMPLE_SEQS accessions with replacement from each taxonomy, and move forward with the design using this sample.
 This can be useful for measuring various properties of the design.
+* `--seed SEED`: Set the random seed for the sample sequences chosen to SEED, allowing the same random sample to be tested multiple times.
+This is only functional if SAMPLE_SEQS is set.
 * `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
 The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
 (Default: 0.2.)
