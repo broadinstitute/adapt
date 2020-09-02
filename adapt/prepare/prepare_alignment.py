@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_for(taxid, segment, ref_accs, out,
-        aln_memoizer=None, aln_stat_memoizer=None,
-        sample_seqs=None, seed=None, filter_warn=0.25, min_seq_len=200,
+        aln_memoizer=None, aln_stat_memoizer=None, sample_seqs=None, 
+        seed=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         cluster_threshold=0.1, accessions_to_use=None,
         sequences_to_use=None):
@@ -214,10 +214,22 @@ def prepare_for(taxid, segment, ref_accs, out,
                 "during curation for tax %d (segment: %s) using references %s") %
                 (frac_filtered, taxid, segment, ref_accs))
 
-        # Check if there are no sequences left; if that's the case, don't
-        # proceed
+        # Check if there are no sequences left; if that's the case, warn
+        # and try just a reference sequence
         if len(seqs_unaligned_curated) == 0:
-            raise Exception("No sequences remain after curation")
+            # Find a reference genome that was downloaded
+            ref_accver_used = None
+            for accver, seq in seqs_unaligned.items():
+                if accver.split('.')[0] in ref_accs:
+                    seqs_unaligned_curated[accver] = seq
+                    ref_accver_used = accver
+                    break
+            if len(seqs_unaligned_curated) > 0:
+                logger.critical(("No sequences remained after curation, so "
+                    "proceeding with design from a single reference sequence "
+                    "(%s)") % (ref_accver_used))
+            else:
+                raise Exception("No sequences are available for design")
 
     # Produce clusters of unaligned sequences
     logger.info(("Clustering %d sequences"), len(seqs_unaligned_curated))
