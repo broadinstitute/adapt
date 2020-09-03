@@ -12,9 +12,11 @@ import tempfile
 try:
     import boto3
     from botocore.exceptions import ClientError
-    S3 = boto3.client("s3")
 except:
-    pass
+    cloud = False
+else:
+    S3 = boto3.client("s3")
+    cloud = True
 
 from adapt.utils import seq_io
 
@@ -68,8 +70,6 @@ class AlignmentMemoizer:
         if path[:5] == "s3://":
             # Store path as an S3 Bucket Object
             folders = path.split("/")
-            if folders[-1] == "":
-                folders = folders[:-1]
 
             self.path = "/".join(folders[3:])
             self.bucket = folders[2]
@@ -116,7 +116,7 @@ class AlignmentMemoizer:
                 if e.response['Error']['Code'] == "NoSuchKey":
                     return None
                 else:
-                    raise
+                    raise e
             else:
                 lines = [line.decode('utf-8') for line in f["Body"].iter_lines()]
                 seqs = seq_io.process_fasta(lines)
@@ -212,64 +212,6 @@ class AlignmentStatMemoizer:
             os.makedirs(h_dir)
 
         return os.path.join(h_dir, h)
-
-    def batch_get(self, all_accvers):
-        """Get memoized stats for all alignments.
-
-        Args:
-            all_accvers: collection of collections of accession.version in
-            each alignment
-
-        Returns:
-            dictionary of keys tuple(accvers), items (aln_identity, aln_identity_ccg) 
-            for alignment of accvers; or None if accvers is not memoized
-        """
-        # Get paths for every accvers
-        ps = {self._hash_accvers_filepath(accvers): tuple(accvers) for accvers in all_accvers}
-        all_stats = {}
-
-        # For each accvers, download file from source if it exists,
-        # otherwise return None
-        if self.bucket:
-            for p in ps:
-                try:
-                    f = S3.get_object(Bucket = self.bucket, Key = p)
-                except ClientError as e:
-                    if e.response['Error']['Code'] == 'NoSuchKey':
-                        all_stats[ps[p]] = None
-                    else:
-                        raise e
-                else:
-                    # Read the file, and verify that the accessions in it
-                    # match accvers (ps[p]) (i.e., that there is not a collision)
-                    lines = f["Body"].read().decode('utf-8').rstrip()
-                    ls = lines.split('\t')
-                    accvers_in_p = ls[0].split(',')
-                    if set(ps[p]) == set(accvers_in_p):
-                        stats = (float(ls[1]), float(ls[2]))
-                        all_stats[ps[p]] = stats
-                    else:
-                        all_stats[ps[p]] =  None
-
-        else:
-            for p in ps:
-                if os.path.exists(p):
-                    # Read the file, and verify that the accessions in it
-                    # match accvers (ps[p]) (i.e., that there is not a collision)
-                    with open(p) as f:
-                        lines = [line.rstrip() for line in f]
-                    assert len(lines) == 1  # should be just 1 line
-                    ls = lines[0].split('\t')
-                    accvers_in_p = ls[0].split(',')
-                    if set(ps[p]) == set(accvers_in_p):
-                        stats = (float(ls[1]), float(ls[2]))
-                        all_stats[ps[p]] = stats
-                    else:
-                        all_stats[ps[p]] =  None
-                else:
-                    all_stats[ps[p]] = None
-
-        return all_stats
 
     def get(self, accvers):
         """Get memoized stats for alignment.
