@@ -258,8 +258,12 @@ def prepare_alignments(args):
             if not os.path.exists(align_stat_memoize_dir):
                 os.makedirs(align_stat_memoize_dir)
 
-        am = align.AlignmentMemoizer(align_memoize_dir)
-        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir)
+        am = align.AlignmentMemoizer(align_memoize_dir, 
+            aws_access_key_id = args.aws_access_key_id,
+            aws_secret_access_key = args.aws_secret_access_key)
+        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir, 
+            aws_access_key_id = args.aws_access_key_id,
+            aws_secret_access_key = args.aws_secret_access_key)
     else:
         am = None
         asm = None

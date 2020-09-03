@@ -15,7 +15,6 @@ try:
 except:
     cloud = False
 else:
-    S3 = boto3.client("s3")
     cloud = True
 
 from adapt.utils import seq_io
@@ -60,7 +59,7 @@ class AlignmentMemoizer:
     This stores alignments as fasta files named by the hash.
     """
 
-    def __init__(self, path):
+    def __init__(self, path, aws_access_key_id=None, aws_secret_access_key=None):
         """
             Args:
                 path: path to directory in which to read and store
@@ -70,10 +69,14 @@ class AlignmentMemoizer:
         if path[:5] == "s3://":
             # Store path as an S3 Bucket Object
             folders = path.split("/")
-
             self.path = "/".join(folders[3:])
             self.bucket = folders[2]
-
+            if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
+                self.S3 = boto3.client("s3", 
+                    aws_access_key_id=aws_access_key_id, 
+                    aws_secret_access_key=aws_secret_access_key)
+            else:
+                self.S3 = boto3.client("s3")
         else:
             self.path = path
             self.bucket = None
@@ -111,12 +114,12 @@ class AlignmentMemoizer:
             # Download file from source if it exists,
             # otherwise return None
             try:
-                f = S3.get_object(Bucket = self.bucket, Key = p)
+                f = self.S3.get_object(Bucket = self.bucket, Key = p)
             except ClientError as e:
                 if e.response['Error']['Code'] == "NoSuchKey":
                     return None
                 else:
-                    raise e
+                    raise
             else:
                 lines = [line.decode('utf-8') for line in f["Body"].iter_lines()]
                 seqs = seq_io.process_fasta(lines)
@@ -149,7 +152,7 @@ class AlignmentMemoizer:
             p_tmp.close()
             seq_io.write_fasta(seqs, p_tmp.name)
             with open(p_tmp.name, 'rb') as f:
-                S3.put_object(Bucket=self.bucket, Key=p, Body=f)
+                self.S3.put_object(Bucket=self.bucket, Key=p, Body=f)
             os.unlink(p_tmp.name)
         else:
             # Generate a random 8-digit hex to append to p temporarily, so that
@@ -168,7 +171,7 @@ class AlignmentStatMemoizer:
     This stores, for each alignment, the tuple (aln_identity, aln_identity_ccg).
     """
 
-    def __init__(self, path):
+    def __init__(self, path, aws_access_key_id=None, aws_secret_access_key=None):
         """
             Args:
                 path: path to directory in which to read and store memoized
@@ -179,7 +182,12 @@ class AlignmentStatMemoizer:
             folders = path.split("/")
             self.path = "/".join(folders[3:])
             self.bucket = folders[2]
-
+            if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
+                self.S3 = boto3.client("s3", 
+                    aws_access_key_id=aws_access_key_id, 
+                    aws_secret_access_key=aws_secret_access_key)
+            else:
+                self.S3 = boto3.client("s3")
         else:
             self.path = path
             self.bucket = None
@@ -230,7 +238,7 @@ class AlignmentStatMemoizer:
             # Download file from source if it exists,
             # otherwise return None
             try:
-                f = S3.get_object(Bucket = self.bucket, Key = p)
+                f = self.S3.get_object(Bucket = self.bucket, Key = p)
             except ClientError as e:
                 if e.response['Error']['Code'] == 'NoSuchKey':
                     return None
@@ -271,7 +279,7 @@ class AlignmentStatMemoizer:
 
         if self.bucket:
             body = '\t'.join([accvers_str, str(stats[0]), str(stats[1])]) + '\n'
-            S3.put_object(Bucket=self.bucket, Key=p,
+            self.S3.put_object(Bucket=self.bucket, Key=p,
                 Body=body.encode('utf-8'))
         else:
             # Generate a random 8-digit hex to append to p temporarily, so that

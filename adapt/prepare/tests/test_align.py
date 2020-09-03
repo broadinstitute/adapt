@@ -7,6 +7,9 @@ from os import unlink
 import unittest
 try:
     import boto3
+    import botocore
+    S3 = boto3.client()
+    resource = S3.list_buckets()
 except:
     cloud = False
 else:
