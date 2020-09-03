@@ -197,13 +197,6 @@ class TestMemoization(unittest.TestCase):
             self.assertIsNone(asm_new2.get(['KY456.2', 'KY789.2']))
             self.assertEqual(asm_new2.get(['AB123.1', 'KY000.1']), (0.5, 0.6))
 
-            # Test batch_get
-            all_stats = { ('AB123.1', 'KY456.2'): (0.8, 0.9), 
-                          ('AB123.1', 'KY789.2'): (0.85, 0.95), 
-                          ('AB123.1', 'KY000.1'): (0.5, 0.6),
-                          ('KY456.2', 'KY789.2'): None }
-            self.assertEqual(asm_new2.batch_get(all_stats.keys()), all_stats)
-
         test_on_dir(self.tempdir.name)
 
         # If Boto3 is installed, test AWS cloud services
