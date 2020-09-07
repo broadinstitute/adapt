@@ -545,10 +545,18 @@ class TargetSearcher:
                 # Find expected activity for each guide
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
-                expected_activities_per_guide = \
-                        [self.gs.guide_activities_expected_value(
-                            window_start, window_end, gd_seq)
-                            for gd_seq in guides_seqs_sorted]
+                if self.gs.predictor is not None:
+                    expected_activities_per_guide = \
+                            [self.gs.guide_activities_expected_value(
+                                window_start, window_end, gd_seq)
+                                for gd_seq in guides_seqs_sorted]
+                else:
+                    # There is no predictor to predict activities
+                    # This should only be the case if self.obj_type is 'min',
+                    # and may not necessarily be the case if self.obj_type is
+                    # 'min'
+                    expected_activities_per_guide = \
+                            [math.nan for gd_seq in guides_seqs_sorted]
                 expected_activities_per_guide_str = ' '.join(
                         str(a) for a in expected_activities_per_guide)
 
