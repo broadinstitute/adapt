@@ -9,6 +9,7 @@ import re
 import shutil
 import tempfile
 import random
+import numpy as np
 
 from adapt import alignment
 from adapt import guide_search
@@ -680,6 +681,7 @@ def main(args):
 
     # Set random seed for entire program
     random.seed(args.seed)
+    np.random.seed(args.seed)
 
     check_obj_args(args)
 
