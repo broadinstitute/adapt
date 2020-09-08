@@ -71,7 +71,7 @@ class AlignmentMemoizer:
             folders = path.split("/")
             self.path = "/".join(folders[3:])
             self.bucket = folders[2]
-            if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
+            if aws_access_key_id is not None and aws_secret_access_key is not None:
                 self.S3 = boto3.client("s3", 
                     aws_access_key_id=aws_access_key_id, 
                     aws_secret_access_key=aws_secret_access_key)
@@ -182,7 +182,7 @@ class AlignmentStatMemoizer:
             folders = path.split("/")
             self.path = "/".join(folders[3:])
             self.bucket = folders[2]
-            if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
+            if aws_access_key_id is not None and aws_secret_access_key is not None:
                 self.S3 = boto3.client("s3", 
                     aws_access_key_id=aws_access_key_id, 
                     aws_secret_access_key=aws_secret_access_key)
