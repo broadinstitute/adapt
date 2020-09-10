@@ -5,6 +5,17 @@ from collections import OrderedDict
 import tempfile
 from os import unlink
 import unittest
+try:
+    import boto3
+    import botocore
+    S3 = boto3.client()
+    resource = S3.list_buckets()
+except:
+    cloud = False
+else:
+    cloud = True
+    import random
+    import warnings
 
 from adapt.prepare import align
 
@@ -86,103 +97,120 @@ class TestMemoization(unittest.TestCase):
     """Tests memoizers.
     """
 
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        if cloud:
+            cloudtempfold = random.getrandbits(32) 
+            s3 = boto3.resource("s3")
+            self.bucket = s3.Bucket("%08x" % cloudtempfold)
+            self.bucket.create()
+            self.cloudtempdir = "s3://%08x" % cloudtempfold
+
     def test_alignment_memoizer(self):
-        # Make a directory in which to save alignments
-        tempdir = tempfile.TemporaryDirectory()
+        def test_on_dir(directory):
+            # Create some fake alignments
+            seqs1 = OrderedDict([('AB123.1', 'ATCG--A'),
+                                 ('AB456.1', 'TTTTCCA')])
+            seqs2 = OrderedDict([('KY123.1', 'AAAACCA'),
+                                 ('AB456.1', 'TTTTCCA')])
+            seqs3 = OrderedDict([('AB123.1', 'ATCG--A'),
+                                 ('KY123.1', 'AAAACCA'),
+                                 ('AB456.1', 'TTTTCCA')])
+            seqs4 = OrderedDict([('AB123.1', 'ATCG--A'),
+                                 ('YZ123.1', 'GGGGCCA'),
+                                 ('DE456.1', 'CCCCCCA')])
+            am = align.AlignmentMemoizer(directory)
 
-        # Create some fake alignments
-        seqs1 = OrderedDict([('AB123.1', 'ATCG--A'),
-                             ('AB456.1', 'TTTTCCA')])
-        seqs2 = OrderedDict([('KY123.1', 'AAAACCA'),
-                             ('AB456.1', 'TTTTCCA')])
-        seqs3 = OrderedDict([('AB123.1', 'ATCG--A'),
-                             ('KY123.1', 'AAAACCA'),
-                             ('AB456.1', 'TTTTCCA')])
-        seqs4 = OrderedDict([('AB123.1', 'ATCG--A'),
-                             ('YZ123.1', 'GGGGCCA'),
-                             ('DE456.1', 'CCCCCCA')])
-        am = align.AlignmentMemoizer(tempdir.name)
+            # Progressively save these and check the results
+            am.save(seqs1)
+            am.save(seqs2)
+            self.assertEqual(am.get(seqs1.keys()), seqs1)
+            self.assertEqual(am.get(seqs2.keys()), seqs2)
+            self.assertIsNone(am.get(seqs3.keys()))
+            self.assertIsNone(am.get(seqs4.keys()))
 
-        # Progressively save these and check the results
-        am.save(seqs1)
-        am.save(seqs2)
-        self.assertEqual(am.get(seqs1.keys()), seqs1)
-        self.assertEqual(am.get(seqs2.keys()), seqs2)
-        self.assertIsNone(am.get(seqs3.keys()))
-        self.assertIsNone(am.get(seqs4.keys()))
+            am.save(seqs3)
+            self.assertEqual(am.get(seqs1.keys()), seqs1)
+            self.assertEqual(am.get(seqs2.keys()), seqs2)
+            self.assertEqual(am.get(seqs3.keys()), seqs3)
+            self.assertIsNone(am.get(seqs4.keys()))
 
-        am.save(seqs3)
-        self.assertEqual(am.get(seqs1.keys()), seqs1)
-        self.assertEqual(am.get(seqs2.keys()), seqs2)
-        self.assertEqual(am.get(seqs3.keys()), seqs3)
-        self.assertIsNone(am.get(seqs4.keys()))
+            am.save(seqs4)
+            self.assertEqual(am.get(seqs1.keys()), seqs1)
+            self.assertEqual(am.get(seqs2.keys()), seqs2)
+            self.assertEqual(am.get(seqs3.keys()), seqs3)
+            self.assertEqual(am.get(seqs4.keys()), seqs4)
 
-        am.save(seqs4)
-        self.assertEqual(am.get(seqs1.keys()), seqs1)
-        self.assertEqual(am.get(seqs2.keys()), seqs2)
-        self.assertEqual(am.get(seqs3.keys()), seqs3)
-        self.assertEqual(am.get(seqs4.keys()), seqs4)
+            seqs3 = OrderedDict([('AB123.1', 'ATCG--A'),
+                                 ('KY123.1', 'GGGGGGG'),
+                                 ('AB456.1', 'TTTTCCA')])
+            am.save(seqs3)
+            self.assertEqual(am.get(seqs1.keys()), seqs1)
+            self.assertEqual(am.get(seqs2.keys()), seqs2)
+            self.assertEqual(am.get(seqs3.keys()), seqs3)
+            self.assertEqual(am.get(seqs4.keys()), seqs4)
+            del am
 
-        seqs3 = OrderedDict([('AB123.1', 'ATCG--A'),
-                             ('KY123.1', 'GGGGGGG'),
-                             ('AB456.1', 'TTTTCCA')])
-        am.save(seqs3)
-        self.assertEqual(am.get(seqs1.keys()), seqs1)
-        self.assertEqual(am.get(seqs2.keys()), seqs2)
-        self.assertEqual(am.get(seqs3.keys()), seqs3)
-        self.assertEqual(am.get(seqs4.keys()), seqs4)
-        del am
+            # Try reading from a new AlignmentMemoizer at the same path
+            am_new = align.AlignmentMemoizer(directory)
+            self.assertEqual(am_new.get(seqs1.keys()), seqs1)
+            self.assertEqual(am_new.get(seqs2.keys()), seqs2)
+            self.assertEqual(am_new.get(seqs3.keys()), seqs3)
+            self.assertEqual(am_new.get(seqs4.keys()), seqs4)
 
-        # Try reading from a new AlignmentMemoizer at the same path
-        am_new = align.AlignmentMemoizer(tempdir.name)
-        self.assertEqual(am_new.get(seqs1.keys()), seqs1)
-        self.assertEqual(am_new.get(seqs2.keys()), seqs2)
-        self.assertEqual(am_new.get(seqs3.keys()), seqs3)
-        self.assertEqual(am_new.get(seqs4.keys()), seqs4)
-
-        # Reorder keys and check that output is the same
-        seqs4_keys = list(seqs4.keys())
-        self.assertEqual(am_new.get(seqs4_keys), seqs4)
-        self.assertEqual(am_new.get(seqs4_keys[::-1]), seqs4)
-
-        # Cleanup
-        tempdir.cleanup()
+            # Reorder keys and check that output is the same
+            seqs4_keys = list(seqs4.keys())
+            self.assertEqual(am_new.get(seqs4_keys), seqs4)
+            self.assertEqual(am_new.get(seqs4_keys[::-1]), seqs4)
+        
+        test_on_dir(self.tempdir.name)
+        
+        # If Boto3 is installed, test AWS cloud services
+        if cloud:
+            test_on_dir(self.cloudtempdir)
 
     def test_alignment_stat_memoizer(self):
-        # Create a new directory in which to store memoizations
-        tempdir = tempfile.TemporaryDirectory()
+        def test_on_dir(directory):
+            # Create some fake stats
+            asm = align.AlignmentStatMemoizer(directory)
+            asm.save(['AB123.1', 'KY456.2'], (0.8, 0.9))
+            asm.save(['AB123.1', 'KY789.2'], (0.85, 0.95))
+            self.assertEqual(asm.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
+            self.assertEqual(asm.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
+            self.assertEqual(asm.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
+            self.assertIsNone(asm.get(['KY456.2', 'KY789.2']))
+            del asm
 
-        # Create some fake stats
-        asm = align.AlignmentStatMemoizer(tempdir.name)
-        asm.save(['AB123.1', 'KY456.2'], (0.8, 0.9))
-        asm.save(['AB123.1', 'KY789.2'], (0.85, 0.95))
-        self.assertEqual(asm.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
-        self.assertEqual(asm.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
-        self.assertEqual(asm.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
-        self.assertIsNone(asm.get(['KY456.2', 'KY789.2']))
-        del asm
+            # Check that a new AlignmentStatMemoizer can read these
+            asm_new = align.AlignmentStatMemoizer(directory)
+            self.assertEqual(asm_new.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
+            self.assertEqual(asm_new.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
+            self.assertEqual(asm_new.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
+            self.assertIsNone(asm_new.get(['KY456.2', 'KY789.2']))
 
-        # Check that a new AlignmentStatMemoizer can read these
-        asm_new = align.AlignmentStatMemoizer(tempdir.name)
-        self.assertEqual(asm_new.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
-        self.assertEqual(asm_new.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
-        self.assertEqual(asm_new.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
-        self.assertIsNone(asm_new.get(['KY456.2', 'KY789.2']))
+            # Add a new stat to the memoizer
+            asm_new.save(['AB123.1', 'KY000.1'], (0.5, 0.6))
+            del asm_new
 
-        # Add a new stat to the memoizer
-        asm_new.save(['AB123.1', 'KY000.1'], (0.5, 0.6))
-        del asm_new
+            # Check that we can read all the stats
+            asm_new2 = align.AlignmentStatMemoizer(directory)
+            self.assertEqual(asm_new2.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
+            self.assertEqual(asm_new2.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
+            self.assertEqual(asm_new2.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
+            self.assertIsNone(asm_new2.get(['KY456.2', 'KY789.2']))
+            self.assertEqual(asm_new2.get(['AB123.1', 'KY000.1']), (0.5, 0.6))
 
-        # Check that we can read all the stats
-        asm_new2 = align.AlignmentStatMemoizer(tempdir.name)
-        self.assertEqual(asm_new2.get(['AB123.1', 'KY456.2']), (0.8, 0.9))
-        self.assertEqual(asm_new2.get(['AB123.1', 'KY789.2']), (0.85, 0.95))
-        self.assertEqual(asm_new2.get(['KY789.2', 'AB123.1']), (0.85, 0.95))
-        self.assertIsNone(asm_new2.get(['KY456.2', 'KY789.2']))
-        self.assertEqual(asm_new2.get(['AB123.1', 'KY000.1']), (0.5, 0.6))
+        test_on_dir(self.tempdir.name)
 
-        # Cleanup
-        tempdir.cleanup()
+        # If Boto3 is installed, test AWS cloud services
+        if cloud:
+            test_on_dir(self.cloudtempdir)
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+        if cloud:
+            self.bucket.objects.delete()
+            self.bucket.delete()
 
 
 class TestCurateAgainstRef(unittest.TestCase):

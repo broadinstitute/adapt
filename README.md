@@ -43,7 +43,11 @@ ADAPT requires:
 * [SciPy](https://www.scipy.org) == 1.4.1
 * [TensorFlow](https://www.tensorflow.org) &gt;= 2.3.0
 
-Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed.
+ADAPT with AWS cloud features requires:
+* [Boto3](https://aws.amazon.com/sdk-for-python/) &gt;= 1.14.54
+* [Botocore](https://botocore.amazonaws.com/v1/documentation/api/latest/index.html) &gt;= 1.17.54
+
+Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed. Installing ADAPT with `pip` using the AWS cloud features, as described below, will install Boto3 and Botocore if they are not already installed as well.
 
 If using alignment features in subcommands below, ADAPT also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
 
@@ -82,6 +86,11 @@ cd adapt
 pip install -e .
 ```
 Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
+
+If you want to be able to use AWS cloud features, replace the last line with the following:
+```bash
+pip install -e ".[AWS]"
+```
 
 ## Testing
 
@@ -227,7 +236,7 @@ Below are some additional arguments when INPUT-TYPE is `auto-from-{file,args}`:
 
 * `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
 * `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments in PREP_MEMOIZE_DIR.
-If not set (default), do not memoize this information.
+This can save the memo to an S3 bucket by using the syntax `s3://BUCKET/PATH`, though this requires the AWS cloud installation mentioned in [Downloading and installing](#downloading-and-installing) and setting access key information. Access key information can either be set using AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY or by installing and configuring [AWS CLI](https://aws.amazon.com/cli/). If not set (default), do not memoize this information.
 If repeatedly re-running on the same taxonomies, using this can significantly improve runtime.
 * `--prep-influenza`: If set, use NCBI's influenza database for fetching data.
 This must be specified if design is for influenza A/B/C viruses.
@@ -238,6 +247,8 @@ The distance is average nucleotide dissimilarity (1-ANI); higher values result i
 (Default: 0.2.)
 * `--use-accessions USE_ACCESSIONS`: Use the specified accessions, in a file at the path USE_ACCESSIONS, for generating input.
 This is performed instead of fetching neighbors from NCBI.
+* `--aws-access-key-id AWS_ACCESS_KEY_ID`: Use AWS_ACCESS_KEY_ID to log in to AWS Cloud Services. Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are necessary to log in. This is only necessary if saving the memo to an S3 bucket using PREP_MEMOIZE_DIR and AWS CLI has not been installed and configured. If AWS CLI has been installed and configured and this argument is passed in, AWS_ACCESS_KEY_ID will override the AWS CLI configuration.
+* `--aws-secret-access-key AWS_SECRET_ACCESS_KEY`: Use AWS_SECRET_ACCESS_KEY to log in to AWS Cloud Services. Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are necessary to log in. This is only necessary if saving the memo to an S3 bucket using PREP_MEMOIZE_DIR and AWS CLI has not been installed and configured. If AWS CLI has been installed and configured and this argument is passed in, AWS_ACCESS_KEY_ID will override the AWS CLI configuration.
 See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the format of the file.
 
 ## Output

@@ -13,6 +13,37 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 logger = logging.getLogger(__name__)
 
 
+def process_fasta(f, replace_degenerate=False,
+               skip_gaps=False, make_uppercase=True):
+    
+    degenerate_pattern = re.compile('[YRWSMKBDHV]')
+    m = OrderedDict()
+    curr_seq_name = ""
+    for line in f:
+        line = line.rstrip()
+        if len(line) == 0:
+            # Reset the sequence being read on an empty line
+            curr_seq_name = ""
+            continue
+        if curr_seq_name == "":
+            # Must encounter a new sequence
+            assert line.startswith('>')
+        if line.startswith('>'):
+            curr_seq_name = line[1:]
+            m[curr_seq_name] = ''
+        else:
+            # Append the sequence
+            if make_uppercase:
+                line = line.upper()
+            if replace_degenerate:
+                line = degenerate_pattern.sub('N', line)
+            if skip_gaps:
+                line = line.replace('-', '')
+            m[curr_seq_name] += line
+
+    return m
+
+
 def read_fasta(fn, replace_degenerate=False,
                skip_gaps=False, make_uppercase=True):
     """Read a FASTA file.
@@ -36,40 +67,14 @@ def read_fasta(fn, replace_degenerate=False,
     """
     logger.debug("Reading fasta file %s", fn)
 
-    degenerate_pattern = re.compile('[YRWSMKBDHV]')
-
-    def process(f):
-        m = OrderedDict()
-        curr_seq_name = ""
-        for line in f:
-            line = line.rstrip()
-            if len(line) == 0:
-                # Reset the sequence being read on an empty line
-                curr_seq_name = ""
-                continue
-            if curr_seq_name == "":
-                # Must encounter a new sequence
-                assert line.startswith('>')
-            if line.startswith('>'):
-                curr_seq_name = line[1:]
-                m[curr_seq_name] = ''
-            else:
-                # Append the sequence
-                if make_uppercase:
-                    line = line.upper()
-                if replace_degenerate:
-                    line = degenerate_pattern.sub('N', line)
-                if skip_gaps:
-                    line = line.replace('-', '')
-                m[curr_seq_name] += line
-        return m
-
     if fn.endswith('.gz'):
         with gzip.open(fn, 'rt') as f:
-            m = process(f)
+            m = process_fasta(f, replace_degenerate,
+               skip_gaps, make_uppercase)
     else:
         with open(fn, 'r') as f:
-            m = process(f)
+            m = process_fasta(f, replace_degenerate,
+               skip_gaps, make_uppercase)
 
     return m
 

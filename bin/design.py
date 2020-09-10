@@ -8,6 +8,8 @@ import os
 import re
 import shutil
 import tempfile
+import random
+import numpy as np
 
 from adapt import alignment
 from adapt import guide_search
@@ -22,6 +24,14 @@ from adapt.utils import log
 from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
+
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+except:
+    cloud = False
+else:
+    cloud = True
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -214,18 +224,47 @@ def prepare_alignments(args):
 
     # Setup alignment and alignment stat memoizers
     if args.prep_memoize_dir:
-        if not os.path.isdir(args.prep_memoize_dir):
-            raise Exception(("Path '%s' does not exist") %
-                args.prep_memoize_dir)
-        align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
-        if not os.path.exists(align_memoize_dir):
-            os.makedirs(align_memoize_dir)
-        align_stat_memoize_dir = os.path.join(args.prep_memoize_dir, 'stats')
-        if not os.path.exists(align_stat_memoize_dir):
-            os.makedirs(align_stat_memoize_dir)
+        if args.prep_memoize_dir[:5] == "s3://":
+            bucket = args.prep_memoize_dir.split("/")[2]
+            try:
+                if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
+                    S3 = boto3.client("s3", aws_access_key_id = args.aws_access_key_id,
+                        aws_secret_access_key = args.aws_secret_access_key)
+                else:
+                    S3 = boto3.client("s3")
+                S3.head_bucket(Bucket=bucket)
+            except ClientError as e:
+                if e.response['Error']['Code'] == "404":
+                    S3.create_bucket(Bucket=bucket)
+                elif e.response['Error']['Code'] == "403":
+                    raise Exception(("Incorrect AWS Access Key ID or Secret Access Key")) from e
+                else:
+                    raise
+            except ConnectionError as e:
+                raise Exception(("Cannot connect to Amazon S3")) from e
+            if args.prep_memoize_dir[-1] == "/":
+                align_memoize_dir = '%saln' %args.prep_memoize_dir
+                align_stat_memoize_dir = '%sstats' %args.prep_memoize_dir
+            else:
+                align_memoize_dir = '%s/aln' %args.prep_memoize_dir
+                align_stat_memoize_dir = '%s/stats' %args.prep_memoize_dir
+        else:
+            if not os.path.isdir(args.prep_memoize_dir):
+                raise Exception(("Path '%s' does not exist") %
+                    args.prep_memoize_dir)
+            align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
+            if not os.path.exists(align_memoize_dir):
+                os.makedirs(align_memoize_dir)
+            align_stat_memoize_dir = os.path.join(args.prep_memoize_dir, 'stats')
+            if not os.path.exists(align_stat_memoize_dir):
+                os.makedirs(align_stat_memoize_dir)
 
-        am = align.AlignmentMemoizer(align_memoize_dir)
-        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir)
+        am = align.AlignmentMemoizer(align_memoize_dir, 
+            aws_access_key_id = args.aws_access_key_id,
+            aws_secret_access_key = args.aws_secret_access_key)
+        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir, 
+            aws_access_key_id = args.aws_access_key_id,
+            aws_secret_access_key = args.aws_secret_access_key)
     else:
         am = None
         asm = None
@@ -301,7 +340,8 @@ def prepare_alignments(args):
         nc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
-            sample_seqs=args.sample_seqs, prep_influenza=args.prep_influenza,
+            sample_seqs=args.sample_seqs, 
+            prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name,
             cluster_threshold=args.cluster_threshold,
             accessions_to_use=accessions_to_use_for_tax,
@@ -639,6 +679,10 @@ def design_for_id(args):
 def main(args):
     logger = logging.getLogger(__name__)
 
+    # Set random seed for entire program
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+
     check_obj_args(args)
 
     logger.info("Running design.py with arguments: %s", args)
@@ -904,6 +948,10 @@ if __name__ == "__main__":
               "equivalently, avoids guides flanked by 'G'). Note that "
               "this is the 3' end in the target sequence (not the spacer "
               "sequence)."))
+    base_subparser.add_argument('--seed', type=int,
+        help=("SEED will set the random seed, guaranteeing the same output "
+              "given the same inputs. If SEED is not set to the same value, "
+              "output may vary across different runs."))
 
     # Use a model to predict activity
     base_subparser.add_argument('--predict-activity-model-path',
@@ -1070,8 +1118,11 @@ if __name__ == "__main__":
         help=("Path to mafft executable, used for generating alignments"))
     input_auto_common_subparser.add_argument('--prep-memoize-dir',
         help=("Path to directory in which to memoize alignments and "
-              "statistics on them; if not set, this does not memoize "
-              "this information"))
+              "statistics on them. If set to \"s3://BUCKET/PATH\", it "
+              "will save to the S3 bucket if boto3 and botocore are "
+              "installed and access key information exists via "
+              "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY or via AWS CLI. "
+              "If not set, this does not memoize this information."))
     input_auto_common_subparser.add_argument('--sample-seqs', type=int,
         help=("After fetching accessions, randomly select SAMPLE_SEQS of them "
               "with replacement from each taxonomy any move forward "
@@ -1129,6 +1180,14 @@ if __name__ == "__main__":
         help=("API key to use for NCBI e-utils. Using this increases the "
               "limit on requests/second and may prevent an IP address "
               "from being block due to too many requests"))
+    input_auto_common_subparser.add_argument('--aws-access-key-id',
+        help=("User Account Access Key for AWS. This is only necessary "
+            "if using S3 for memoization via PREP_MEMOIZE_DIR and AWS CLI "
+            "is not installed and configured."))
+    input_auto_common_subparser.add_argument('--aws-secret-access-key',
+        help=("User Account Secret Access Key for AWS. This is only "
+            "necessary if using S3 for memoization via PREP_MEMOIZE_DIR "
+            "and AWS CLI is not installed and configured."))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)
