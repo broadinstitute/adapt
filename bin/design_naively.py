@@ -144,15 +144,16 @@ def find_guide_in_each_window(guides, aln_length, args, obj_type='max'):
         # Check if any of the guides are no longer within the window
         # Keep track of which positions still have guides in the heap
         positions = set()
-        for guide in guide_in_window[i-1]:
-            if guide[2] >= window_start:
-                guide_in_window[i].append(guide)
-                positions.add(guide[2])
+        if i > 0:
+            for guide in guide_in_window[i-1]:
+                if guide[2] >= window_start:
+                    guide_in_window[i].append(guide)
+                    positions.add(guide[2])
         heapq.heapify(guide_in_window[i])
 
         if len(guide_in_window[i]) < args.best_n: 
-            # The best guide is no longer in the window; find
-            # a new one
+            # One of the previous args.best_n best guides is no longer in the 
+            # window; find a new one
             for j in range(window_start, last_guide_pos + 1):
                 # Skip if guide is already in the heap
                 if j in positions:
@@ -188,11 +189,23 @@ def find_guide_in_each_window(guides, aln_length, args, obj_type='max'):
 def main(args):
     # Allow G-U base pairing, unless it is explicitly disallowed
     args.allow_gu_pairs = not args.do_not_allow_gu_pairing
+    # Run the consensus method, unless it is explicitly disallowed
+    args.consensus = not args.no_consensus
+    # Run the mode method, unless it is explicitly disallowed
+    args.mode = not args.no_mode
+
+    if args.diversity:
+        if not args.ref_seq:
+            raise Exception('Must include a reference sequence label to run any diversity method')
 
     # Read the input alignment
     seqs = seq_io.read_fasta(args.in_fasta)
     aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
-    ref_seq = seqs[args.ref_seq] if args.ref_seq else None
+    try:
+        ref_seq = seqs[args.ref_seq] if args.ref_seq else None
+    except KeyError:
+        raise Exception('Reference sequence %s does not match any label of the sequences in the given FASTA' \
+                %args.ref_seq)
 
     # Construct a guide at each position of the alignment
     logger.info("Constructing guides naively at each position of alignment")
@@ -281,20 +294,24 @@ if __name__ == "__main__":
 
     # Reference sequence
     parser.add_argument('--ref-seq', type=str, default=None,
-            help=("The accession number of the reference sequence to design "
-                  "guides based on sequence diversity; required for diversity "
-                  "method"))
+            help=("The label used in the FASTA file of the reference sequence "
+                  "to design guides based on sequence diversity; required "
+                  "for diversity method"))
 
     # Guide sequence methods
-    parser.add_argument('--consensus', type=bool, default=True,
-            help=("True (default) to use the consensus method to determine guides; "
-                  "False otherwise"))
-    parser.add_argument('--mode', type=bool, default=True,
-            help=("True (default) to use the mode method to determine guides; "
-                  "False otherwise"))
-    parser.add_argument('--diversity', type=str, default=None,
+    parser.add_argument('--no-consensus', action='store_true',
+            help=("If set, do not use the consensus method to determine guides; "
+                  "otherwise, will use the consensus method"))
+    parser.add_argument('--no-mode', action='store_true',
+            help=("If set, do not use the mode method to determine guides; "
+                  "otherwise, will use the mode method"))
+    parser.add_argument('--diversity', type=str, default=None, choices=["entropy"],
             help=("A string of which diversity method to use to determine guides "
-                  "('entropy'); None (default) to not use a diversity method"))
+                  "('entropy'); None (default) to not use a diversity method. "
+                  "'entropy' will calculate the average per position entropy of "
+                  "each potential guide, then return the guides at the positions "
+                  "with the lowest entropy; nucleotides are determined by the "
+                  "reference sequence"))
 
     # Log levels
     parser.add_argument("--debug",
