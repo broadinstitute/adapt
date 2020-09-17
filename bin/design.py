@@ -1128,7 +1128,7 @@ if __name__ == "__main__":
     input_auto_common_subparser.add_argument('--ncbi-api-key',
         help=("API key to use for NCBI e-utils. Using this increases the "
               "limit on requests/second and may prevent an IP address "
-              "from being block due to too many requests"))
+              "from being blocked due to too many requests"))
 
     # Auto prepare from file
     input_autofile_subparser = argparse.ArgumentParser(add_help=False)
