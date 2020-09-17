@@ -3,6 +3,7 @@
 
 import random
 import unittest
+from math import log2
 
 from adapt import alignment
 from adapt.utils import lsh
@@ -563,6 +564,40 @@ class TestAlignment(unittest.TestCase):
                          'ATCNAA')
         self.assertEqual(aln.determine_most_common_sequence(skip_ambiguity=True),
                          'GGGCCC')
+
+    def test_position_entropy_simple(self):
+        seqs = ['ACCCC',
+                'AAGGC',
+                'AAATA',
+                'AAAAA']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        all_ps = [[1],
+                  [0.25, 0.75], 
+                  [0.25, 0.25, .5], 
+                  [0.25, 0.25, 0.25, 0.25],
+                  [0.5, 0.5]]
+
+        entropy = [sum([-p*log2(p) for p in ps]) for ps in all_ps]
+        self.assertEqual(aln.position_entropy(),
+                         entropy)
+
+    def test_position_entropy_with_ambiguity(self):
+        seqs = ['MRWSYKVHDBN']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        all_ps = [[0.5, 0.5],
+                  [0.5, 0.5],
+                  [0.5, 0.5],
+                  [0.5, 0.5],
+                  [0.5, 0.5],
+                  [0.5, 0.5],
+                  [1/3.0, 1/3.0, 1/3.0], 
+                  [1/3.0, 1/3.0, 1/3.0], 
+                  [1/3.0, 1/3.0, 1/3.0], 
+                  [1/3.0, 1/3.0, 1/3.0], 
+                  [0.25, 0.25, 0.25, 0.25]]
+        entropy = [sum([-p*log2(p) for p in ps]) for ps in all_ps]
+        self.assertEqual(aln.position_entropy(),
+                         entropy)
 
     def test_construct_from_0_seqs(self):
         with self.assertRaises(Exception):

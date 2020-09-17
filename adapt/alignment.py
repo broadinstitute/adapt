@@ -6,6 +6,7 @@ import logging
 import statistics
 
 import numpy as np
+from math import log2
 
 from adapt.utils import guide
 from adapt.utils import lsh
@@ -801,7 +802,7 @@ class Alignment(SequenceList):
         """Determine the sequences to which a guide hybridizes.
 
         Args:
-            gd_seq: seequence of the guide
+            gd_seq: sequence of the guide
             gd_start: start position of the guide in the alignment
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
@@ -831,6 +832,33 @@ class Alignment(SequenceList):
                     guide.guide_binds(gd_seq, seq, mismatches, allow_gu_pairs)):
                 binding_seqs += [seq_idx]
         return binding_seqs
+
+    def position_entropy(self):
+        """Determine the entropy at each position in the alignment.
+
+        Returns:
+            list with the entropy of position i listed at index i
+        """
+
+        position_entropy = []
+        for i in range(self.seq_length):
+            counts = {'A': 0, 'T': 0, 'C': 0, 'G': 0, '-': 0}
+            for b in [self.seqs[i][j] for j in range(self.num_sequences)]:
+                if b in counts:
+                    counts[b] += 1
+                elif b in guide.FASTA_CODES:
+                    for c in guide.FASTA_CODES[b]:
+                        counts[c] += 1.0 / len(guide.FASTA_CODES[b])
+                else:
+                    raise ValueError("Unknown base call %s" % b)
+
+            # Calculate entropy
+            probabilities = [counts[base]/self.num_sequences for base in counts]
+            this_position_entropy = sum([-p*log2(p) for p in probabilities if p > 0])
+
+            position_entropy.append(this_position_entropy)
+
+        return position_entropy
 
     @staticmethod
     def from_list_of_seqs(seqs):

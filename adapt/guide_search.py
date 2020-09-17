@@ -1504,7 +1504,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
 
     def _analyze_guides_memoized(self, start, curr_activities,
             use_last=False):
-        """Make a memoized call to self._analyze_gudes().
+        """Make a memoized call to self._analyze_guides().
 
         Args:
             start: start position in alignment at which to target

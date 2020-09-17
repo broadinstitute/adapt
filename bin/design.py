@@ -1179,7 +1179,7 @@ if __name__ == "__main__":
     input_auto_common_subparser.add_argument('--ncbi-api-key',
         help=("API key to use for NCBI e-utils. Using this increases the "
               "limit on requests/second and may prevent an IP address "
-              "from being block due to too many requests"))
+              "from being blocked due to too many requests"))
     input_auto_common_subparser.add_argument('--aws-access-key-id',
         help=("User Account Access Key for AWS. This is only necessary "
             "if using S3 for memoization via PREP_MEMOIZE_DIR and AWS CLI "

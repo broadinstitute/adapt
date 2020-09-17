@@ -325,7 +325,7 @@ class AlignmentQuerierWithKmerSharding(AlignmentQuerier):
         (up to ambiguity) to be non-specific. However, this alternative option
         does not make sense in the extreme case: for example, if a k-mer is all
         Ns, then every sequence would be deemed non-specific. Nevertheless,
-        ignoring k-mers with amguity entirely might not be the best choice so
+        ignoring k-mers with ambiguity entirely might not be the best choice so
         this should be revisited (TODO).
         """
         unambig_chars = set(['a', 'c', 'g', 't'])
