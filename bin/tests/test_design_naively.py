@@ -7,17 +7,7 @@ import unittest
 
 from argparse import Namespace
 from adapt import alignment
-from importlib.machinery import SourceFileLoader
-from importlib.util import spec_from_loader, module_from_spec
-import os.path
-import types
-
-file_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "design_naively.py"))
-
-loader = SourceFileLoader("design_naively", file_path)
-spec = spec_from_loader(loader.name, loader)
-design_naively = module_from_spec(spec)
-loader.exec_module(design_naively)
+from bin import design_naively
 
 __author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
 
