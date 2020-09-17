@@ -133,6 +133,7 @@ def prepare_for(taxid, segment, ref_accs, out,
             # show up multiple times in neighbors due to having multiple RefSeq
             # entries
             acc_to_sample = list(set([n.acc for n in neighbors]))
+            acc_to_sample.sort()
             acc_to_fetch = random.choices(acc_to_sample, k=sample_seqs)
             neighbors = [n for n in neighbors if n.acc in acc_to_fetch]
             # Because this is sampling with replacement, an accession may

@@ -9,6 +9,13 @@ import random
 import re
 import subprocess
 import tempfile
+try:
+    import boto3
+    from botocore.exceptions import ClientError
+except:
+    cloud = False
+else:
+    cloud = True
 
 from adapt.utils import seq_io
 
@@ -52,27 +59,42 @@ class AlignmentMemoizer:
     This stores alignments as fasta files named by the hash.
     """
 
-    def __init__(self, path):
+    def __init__(self, path, aws_access_key_id=None, aws_secret_access_key=None):
         """
             Args:
                 path: path to directory in which to read and store
-                    memoized alignments
+                    memoized alignments; if path begins with "s3://",
+                    stores bucket
         """
-        self.path = path
-
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
+        if path[:5] == "s3://":
+            # Store path as an S3 Bucket Object
+            folders = path.split("/")
+            self.path = "/".join(folders[3:])
+            self.bucket = folders[2]
+            if aws_access_key_id is not None and aws_secret_access_key is not None:
+                self.S3 = boto3.client("s3", 
+                    aws_access_key_id=aws_access_key_id, 
+                    aws_secret_access_key=aws_secret_access_key)
+            else:
+                self.S3 = boto3.client("s3")
+        else:
+            self.path = path
+            self.bucket = None
+            if not os.path.exists(self.path):
+                os.makedirs(self.path)
 
     def _hash_accvers_filepath(self, accvers):
-        """Generate a path to use as the filename for an alignment.
+        """Generate a path or S3 key to use as the filename for an alignment.
 
         Args:
             accvers: collection of accession.version in an alignment
 
         Returns:
-            path to file that should store accvers
+            path to file or S3 key that should store accvers
         """
         h = hashlib.md5(str(sorted(set(accvers))).encode('utf-8')).hexdigest()
+        if self.bucket:
+            return "/".join([self.path, h])
         return os.path.join(self.path, h)
 
     def get(self, accvers):
@@ -86,11 +108,29 @@ class AlignmentMemoizer:
             if accvers is not memoized
         """
         p = self._hash_accvers_filepath(accvers)
+        seqs = None
 
-        if os.path.exists(p):
-            # Read the fasta, and verify that the accessions in it
-            # match accs (i.e., that there is not a collision)
+        if self.bucket:
+            # Download file from source if it exists,
+            # otherwise return None
+            try:
+                f = self.S3.get_object(Bucket = self.bucket, Key = p)
+            except ClientError as e:
+                if e.response['Error']['Code'] == "NoSuchKey":
+                    return None
+                else:
+                    raise
+            else:
+                lines = [line.decode('utf-8') for line in f["Body"].iter_lines()]
+                seqs = seq_io.process_fasta(lines)
+
+        elif os.path.exists(p):
+            # Read the fasta
             seqs = seq_io.read_fasta(p)
+
+        if seqs:
+            # Verify that the accessions in the file match accs 
+            # (i.e., that there is not a collision)
             if set(accvers) == set(seqs.keys()):
                 return seqs
             else:
@@ -106,12 +146,20 @@ class AlignmentMemoizer:
         """
         p = self._hash_accvers_filepath(seqs.keys())
 
-        # Generate a random 8-digit hex to append to p temporarily, so that
-        # two files don't write to p at the same time
-        p_tmp = p + '.' + ("%08x" % random.getrandbits(32))
-
-        seq_io.write_fasta(seqs, p_tmp)
-        os.replace(p_tmp, p)
+        if self.bucket:
+            # Make temporary file to store FASTA, then upload to S3
+            p_tmp = tempfile.NamedTemporaryFile(delete=False)
+            p_tmp.close()
+            seq_io.write_fasta(seqs, p_tmp.name)
+            with open(p_tmp.name, 'rb') as f:
+                self.S3.put_object(Bucket=self.bucket, Key=p, Body=f)
+            os.unlink(p_tmp.name)
+        else:
+            # Generate a random 8-digit hex to append to p temporarily, so that
+            # two files don't write to p at the same time
+            p_tmp = "%s.%08x" % (p, random.getrandbits(32))
+            seq_io.write_fasta(seqs, p_tmp)
+            os.replace(p_tmp, p)
         
 
 class AlignmentStatMemoizer:
@@ -123,19 +171,31 @@ class AlignmentStatMemoizer:
     This stores, for each alignment, the tuple (aln_identity, aln_identity_ccg).
     """
 
-    def __init__(self, path):
+    def __init__(self, path, aws_access_key_id=None, aws_secret_access_key=None):
         """
             Args:
                 path: path to directory in which to read and store memoized
-                    stats
+                    stats; if path begins with "s3://", stores bucket
         """
-        self.path = path
-
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
+        if path[:5] == "s3://":
+            # Store path as an S3 Bucket Object
+            folders = path.split("/")
+            self.path = "/".join(folders[3:])
+            self.bucket = folders[2]
+            if aws_access_key_id is not None and aws_secret_access_key is not None:
+                self.S3 = boto3.client("s3", 
+                    aws_access_key_id=aws_access_key_id, 
+                    aws_secret_access_key=aws_secret_access_key)
+            else:
+                self.S3 = boto3.client("s3")
+        else:
+            self.path = path
+            self.bucket = None
+            if not os.path.exists(self.path):
+                os.makedirs(self.path)
 
     def _hash_accvers_filepath(self, accvers):
-        """Generate a path to use as the filename for an alignment.
+        """Generate a path or S3 key to use as the filename for an alignment.
 
         Let h be the hash of accers and and h_2 be the first two
         (hexadecimal) digits of h. This stores h in a directory
@@ -146,11 +206,15 @@ class AlignmentStatMemoizer:
             accvers: collection of accession.version in an alignment
 
         Returns:
-            path to file that should store stats on accvers
+            path to file or S3 key that should store stats on accvers
         """
         h = hashlib.md5(str(sorted(set(accvers))).encode('utf-8')).hexdigest()
 
         h_2 = h[:2]
+
+        if self.bucket:
+            return "/".join([self.path, h_2, h])
+
         h_dir = os.path.join(self.path, h_2)
         if not os.path.exists(h_dir):
             os.makedirs(h_dir)
@@ -168,14 +232,32 @@ class AlignmentStatMemoizer:
             accvers; or None if accvers is not memoized
         """
         p = self._hash_accvers_filepath(accvers)
+        ls = None
 
-        if os.path.exists(p):
-            # Read the file, and verify that the accessions in it
-            # match accvers (i.e., that there is not a collision)
+        if self.bucket:
+            # Download file from source if it exists,
+            # otherwise return None
+            try:
+                f = self.S3.get_object(Bucket = self.bucket, Key = p)
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
+                    return None
+                else:
+                    raise e
+            else:
+                lines = f["Body"].read().decode('utf-8').rstrip()
+                ls = lines.split('\t')
+
+        elif os.path.exists(p):
+            # Read the file
             with open(p) as f:
                 lines = [line.rstrip() for line in f]
-                assert len(lines) == 1  # should be just 1 line
-                ls = lines[0].split('\t')
+            assert len(lines) == 1  # should be just 1 line
+            ls = lines[0].split('\t')
+        
+        if ls:
+            # Verify that the accessions in file match accvers
+            # (i.e., that there is not a collision)
             accvers_in_p = ls[0].split(',')
             if set(accvers) == set(accvers_in_p):
                 stats = (float(ls[1]), float(ls[2]))
@@ -193,17 +275,20 @@ class AlignmentStatMemoizer:
             stats: tuple (aln_identity, aln_identity_ccg)
         """
         p = self._hash_accvers_filepath(accvers)
-
-        # Generate a random 8-digit hex to append to p temporarily, so that
-        # two files don't write to p at the same time
-        p_tmp = p + '.' + ("%08x" % random.getrandbits(32))
-
         accvers_str = ','.join(accvers)
-        with open(p_tmp, 'w') as fw:
-            fw.write(('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
-                '\n'))
 
-        os.rename(p_tmp, p)
+        if self.bucket:
+            body = '\t'.join([accvers_str, str(stats[0]), str(stats[1])]) + '\n'
+            self.S3.put_object(Bucket=self.bucket, Key=p,
+                Body=body.encode('utf-8'))
+        else:
+            # Generate a random 8-digit hex to append to p temporarily, so that
+            # two files don't write to p at the same time
+            p_tmp = "%s.%08x" % (p, random.getrandbits(32))
+            with open(p_tmp, 'w') as fw:
+                fw.write(('\t'.join([accvers_str, str(stats[0]), str(stats[1])]) +
+                    '\n'))
+            os.rename(p_tmp, p)
 
 
 _mafft_exec = None

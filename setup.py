@@ -15,6 +15,9 @@ setup(name='adapt',
       author_email='hayden@mit.edu',
       packages=find_packages(),
       install_requires=['numpy>=1.16.0,<1.19.0', 'scipy==1.4.1', 'tensorflow>=2.3.0'],
+      extras_require={
+        'AWS': ['boto3>=1.14.54', 'botocore>=1.17.54']
+      },
       scripts=[
         'bin/design.py',
         'bin/design_naively.py',
