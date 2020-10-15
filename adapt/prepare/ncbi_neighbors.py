@@ -105,7 +105,24 @@ def ncbi_neighbors_url(taxid):
     return url
 
 
-def read_taxid_from_ncbi_neighbors_url(url):
+def ncbi_reference_url(taxid):
+    """Construct URL for downloading list of genome references.
+
+    Args:
+        taxid: taxonomic ID to download references for
+
+    Returns:
+        str representing download URL
+    """
+    params = [('taxid', taxid), ('cmd', 'download1')]
+    if ncbi_api_key is not None:
+        params += [('api_key', ncbi_api_key)]
+    params_url = urllib.parse.urlencode(params)
+    url = 'https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup.cgi?%s' % params_url
+    return url
+
+
+def read_taxid_from_ncbi_url(url):
     """Read the taxid from a URL.
 
     Args:
@@ -143,12 +160,49 @@ def fetch_neighbors_table(taxid):
     # the response is different from what was requested; if it is,
     # then re-fetch the url with the new taxid (only try this once, otherwise
     # we could end up in a loop of redirects)
-    taxid_in_url = read_taxid_from_ncbi_neighbors_url(r.geturl())
+    taxid_in_url = read_taxid_from_ncbi_url(r.geturl())
     if taxid_in_url != taxid:
         logger.warning(("The neighbors table for taxid %d is being redirected "
             "to taxid %d"), taxid, taxid_in_url)
         new_taxid = taxid_in_url
         url = ncbi_neighbors_url(new_taxid)
+        r = urlopen_with_tries(url)
+
+    raw_data = r.read()
+    for line in raw_data.decode('utf-8').split('\n'):
+        line_rstrip = line.rstrip()
+        if line_rstrip != '':
+            yield line_rstrip
+
+
+def fetch_references(taxid):
+    """Fetch genome references list from NCBI.
+
+    Args:
+        taxid: taxonomic ID to download references for
+
+    Yields:
+        lines, where each line is from the genome references
+        list and each line is a str
+    """
+    logger.debug(("Fetching list of references for tax %d") % taxid)
+
+    url = ncbi_reference_url(taxid)
+    r = urlopen_with_tries(url)
+
+    # For some taxids, NCBI redirects to a different taxid and we are
+    # then unable to read the contents of the response (because it is
+    # HTML, and not the expected text format)
+    # Check if this occurred by seeing if the taxid in the url of
+    # the response is different from what was requested; if it is,
+    # then re-fetch the url with the new taxid (only try this once, otherwise
+    # we could end up in a loop of redirects)
+    taxid_in_url = read_taxid_from_ncbi_url(r.geturl())
+    if taxid_in_url != taxid:
+        logger.warning(("The references list for taxid %d is being redirected "
+            "to taxid %d"), taxid, taxid_in_url)
+        new_taxid = taxid_in_url
+        url = ncbi_reference_url(new_taxid)
         r = urlopen_with_tries(url)
 
     raw_data = r.read()
@@ -415,6 +469,26 @@ def construct_neighbors(taxid):
         neighbors += [neighbor]
 
     return neighbors
+
+def construct_references(taxid):
+    """Construct reference accession number list for a taxonomic ID.
+
+    Args:
+        taxid: taxonomic ID to download references for
+
+    Returns:
+        list of strings of reference accession numbers
+    """
+    logger.info(("Constructing a list of references for tax %d") % taxid)
+
+    references = []
+    for line in fetch_references(taxid):
+        ls = line.strip()
+        if len(ls) == 0:
+            continue
+        references += [ls]
+
+    return references
 
 
 def add_metadata_to_neighbors_and_filter(neighbors):

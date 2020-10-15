@@ -272,7 +272,8 @@ def prepare_alignments(args):
     # Read list of taxonomies
     if args.input_type == 'auto-from-args':
         s = None if args.segment == 'None' else args.segment
-        ref_accs = args.ref_accs.split(',')
+        ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
+            if args.auto_refs else args.ref_accs.split(',')
         taxs = [(None, args.tax_id, s, ref_accs)]
     elif args.input_type == 'auto-from-file':
         taxs = seq_io.read_taxonomies(args.in_tsv)
@@ -1221,12 +1222,15 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('segment',
         help=("Label of segment (e.g., 'S') if there is one, or 'None' if "
               "unsegmented"))
-    input_autoargs_subparser.add_argument('ref_accs',
-        help=("Accessions of reference sequences to use for curation (comma-"
-              "separated)"))
     input_autoargs_subparser.add_argument('out_tsv',
         help=("Path to output TSVs, with one per cluster; output TSVs are "
               "OUT_TSV.{cluster-number}"))
+    input_autoargs_subparser.add_argument('--auto-refs', action='store_true',
+        help=("If set, automatically get accession numbers for "
+              "reference sequences from NCBI"))
+    input_autoargs_subparser.add_argument('--ref-accs',
+        help=("Accessions of reference sequences to use for curation (comma-"
+              "separated). Required if AUTO_REFS is not set"))
     input_autoargs_subparser.add_argument('--write-input-seqs',
         help=("Path to a file to which to write the sequences "
               "(accession.version) being used as input for design"))
