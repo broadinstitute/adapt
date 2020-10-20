@@ -1,4 +1,3 @@
-# adaptcloud/Dockerfile
 FROM adapt
 
 # to build:

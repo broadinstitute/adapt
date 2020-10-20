@@ -1,4 +1,3 @@
-# adapt/Dockerfile
 FROM python:3.8.5-slim
 
 LABEL maintainer='Priya Pillai <ppillai@broadinstitute.org>'
@@ -12,6 +11,7 @@ LABEL maintainer='Priya Pillai <ppillai@broadinstitute.org>'
 # to run interactively:
 #   docker run --rm -it <image_ID>
 #
+
 ENV \
     WORK_DIR=/adapt \
     MEMO_DIR=/memo \
@@ -21,17 +21,15 @@ ENV OUTPUT_DIR=$WORK_DIR/output
 
 WORKDIR $WORK_DIR
 
-# VOLUME ["/memo", "/mafft", "/output"]
-
 RUN mkdir $MEMO_DIR
 RUN mkdir $OUTPUT_DIR
 
 RUN apt update \
     && apt-get install -y wget
 
-RUN wget https://mafft.cbrc.jp/alignment/software/mafft_7.471-1_amd64.deb 
-RUN dpkg -i mafft_7.471-1_amd64.deb
-RUN rm -rf mafft_7.471-1_amd64.deb
+RUN wget https://mafft.cbrc.jp/alignment/software/mafft_7.471-1_amd64.deb \
+    && dpkg -i mafft_7.471-1_amd64.deb \
+    && rm -rf mafft_7.471-1_amd64.deb
 
 COPY ./requirements.txt .
 RUN pip install -r requirements.txt
