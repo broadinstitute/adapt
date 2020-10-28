@@ -112,7 +112,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         if years_tsv is not None:
             # Fetch metadata (including year), add it to neighbors, and
             # filter out ones without a known year
-            neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors)
+            neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, {'year': True})
 
         if len(neighbors) == 0:
             if segment != None and segment != '':

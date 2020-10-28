@@ -491,15 +491,19 @@ def construct_references(taxid):
     return references
 
 
-def add_metadata_to_neighbors_and_filter(neighbors):
+def add_metadata_to_neighbors_and_filter(neighbors, filters={}):
     """Fetch and add metadata to neighbors.
 
     This only fetches for neighbors that do not have metadata set.
 
-    This also filters out neighbors without a known year.
+    This also filters out neighbors which do not match the filters in 
+    'filters'.
 
     Args:
         neighbors: collection of Neighbor objects
+        filters: dictionary where the keys are any of 'country', 'year',
+            'entry_create_year', 'taxid' and values are a collection of what 
+            to include or True to indicate that the metadata must exist
 
     Returns:
         neighbors, with metadata included (excluding the ones filtered out)
@@ -514,13 +518,17 @@ def add_metadata_to_neighbors_and_filter(neighbors):
     for neighbor in neighbors:
         if neighbor.acc in to_fetch:
             neighbor.metadata = metadata[neighbor.acc]
-        if neighbor.metadata['year'] is None:
-            acc_to_skip.add(neighbor.acc)
+        for key, value in filters.items():
+            if value is True:
+                if neighbor.metadata[key] is None:
+                    acc_to_skip.add(neighbor.acc)
+            elif neighbor.metadata[key] not in value:
+                acc_to_skip.add(neighbor.acc)
 
-    # Requiring year, so remove accessions that do not have a year
+    # Remove accessions that do not have match the filters
     if len(acc_to_skip) > 0:
-        logger.warning(("Leaving out %d accessions that do not contain "
-            "a year"), len(acc_to_skip))
+        logger.warning(("Leaving out %d accessions that do not match "
+            "filters"), len(acc_to_skip))
     neighbors = [n for n in neighbors if n.acc not in acc_to_skip]
 
     return neighbors
@@ -694,7 +702,8 @@ def fetch_metadata(accessions):
         accessions: collection of accessions to fetch for
 
     Returns:
-        dict {accession: {'country': country, 'year': collection-year}}
+        dict {accession: {'country': country, 'year': collection-year, 
+            'entry_create_year': create-year, 'taxid': taxonomic id}}
     """
     accessions = list(set(accessions))
     logger.info(("Fetching metadata for %d accessions"), len(accessions))
@@ -714,6 +723,7 @@ def fetch_metadata(accessions):
         year = None
         entry_create_year = None
         country = None
+        taxid = None
         for (name, value) in feats:
             if name == 'collection_date' or name == 'create_date':
                 # Parse the year
@@ -739,8 +749,11 @@ def fetch_metadata(accessions):
                     raise Exception(("Inconsistent country for "
                         "accession %s") % accession)
                 country = value
+            if name == 'db_xref':
+                # formatted as "taxon:####", so remove prefix
+                taxid = int(value[6:])
         metadata[accession] = {'country': country, 'year': year,
-                'entry_create_year': entry_create_year}
+                'entry_create_year': entry_create_year, 'taxid': taxid}
 
     # Delete the tempfile
     unlink(xml_tf.name)
