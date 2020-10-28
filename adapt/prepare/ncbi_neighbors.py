@@ -419,12 +419,11 @@ class Neighbor:
             self._list_of_attrs())
 
 
-def construct_neighbors(taxid, strain_sp = False):
+def construct_neighbors(taxid):
     """Construct Neighbor objects for all neighbors of a taxonomic ID.
 
     Args:
         taxid: taxonomic ID to download neighbors for
-        strain_sp: boolean; True to only get neighbors of the same strain, False otherwise
 
     Returns:
         list of Neighbor objects
@@ -436,7 +435,6 @@ def construct_neighbors(taxid, strain_sp = False):
 
     neighbors = []
     encountered_header = False
-    self_tax_name = None
     for line in fetch_neighbors_table(taxid):
         if len(line.strip()) == 0:
             continue
@@ -446,11 +444,6 @@ def construct_neighbors(taxid, strain_sp = False):
         if line.startswith('##'):
             # Header line
             encountered_header = True
-            if strain_sp:
-                if line.startswith('## Neighbors data for complete genomes: '):
-                    end = line.find(' (taxid')
-                    if end > 40:
-                        self_tax_name = line[40:end]
             if line.startswith('## Columns:'):
                 # Verify the columns are as expected
                 col_names = [n.replace('"', '') for n in ls[1:]]
@@ -473,12 +466,7 @@ def construct_neighbors(taxid, strain_sp = False):
         segment = ls[5].replace('segment', '').strip()
 
         neighbor = Neighbor(acc, refseq_acc, hosts, lineage, tax_name, segment)
-        if self_tax_name is None or self_tax_name == tax_name:
-            neighbors += [neighbor]
-
-    if self_tax_name is None and strain_sp:
-        logger.critical(("The strain could not be identified from the tax "
-            "%d; this may not be the taxonomy ID for a specific strain"), taxid)
+        neighbors += [neighbor]
 
     return neighbors
 
