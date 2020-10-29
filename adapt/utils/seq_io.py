@@ -262,7 +262,7 @@ def read_taxonomies(fn):
             if segment.lower() == 'none':
                 segment = None
             ref_accs = ls[3].split(',')
-            taxs += [(label, tax_id, segment, ref_accs)]
+            taxs += [(label, tax_id, segment, ref_accs, None, None)]
     return taxs
 
 
@@ -412,4 +412,31 @@ def read_taxonomy_specificity_ignore(fn):
 
             tax_ignore[tax_id_a].add(tax_id_b)
     return tax_ignore
+
+
+def read_filters(filters):
+    """Create dictionary of filters from a list.
+    
+    Args:
+        filters: list of filters in the format 'key=value,value' with an
+            arbitrary number of values
+
+    Returns:
+        dict where each key is any of ['taxid', 'year', 'country'] 
+            and each value is a list
+    """
+    dict_filters = {}
+    for filt in filters:
+        filt_split = filt.split('=')
+        if len(filt_split) != 2:
+            raise Exception("Incorrect format for include filter '%s'; should be "
+                "'metadata=value'" %filt)
+        if filt_split[0] not in ['taxid', 'year', 'country']:
+            raise Exception("Incorrect include filter key '%s'; should be one of "
+                "['taxid', 'year', 'country']" %filt_split[0])
+        if filt_split[0] in ['taxid', 'year']:
+            dict_filters[filt_split[0]] = [int(i) for i in filt_split[1].split(",")]
+        else:
+            dict_filters[filt_split[0]] = filt_split[1].split(",")
+    return dict_filters
 

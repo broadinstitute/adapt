@@ -274,7 +274,13 @@ def prepare_alignments(args):
         s = None if args.segment == 'None' else args.segment
         ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
             if args.auto_refs else args.ref_accs.split(',')
-        taxs = [(None, args.tax_id, s, ref_accs)]
+        infilters = {}
+        outfilters = {}
+        if args.include:
+            infilters = seq_io.read_filters(args.include)
+        if args.exclude:
+            outfilters = seq_io.read_filters(args.exclude)
+        taxs = [(None, args.tax_id, s, ref_accs, infilters, outfilters)]
     elif args.input_type == 'auto-from-file':
         taxs = seq_io.read_taxonomies(args.in_tsv)
     else:
@@ -308,7 +314,7 @@ def prepare_alignments(args):
     aln_tmp_dirs = []
     out_tsv = []
     design_for = []
-    for label, tax_id, segment, ref_accs in taxs:
+    for label, tax_id, segment, ref_accs, infilter, outfilter in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
             years_tsv_tmp = tempfile.NamedTemporaryFile()
@@ -346,7 +352,8 @@ def prepare_alignments(args):
             years_tsv=years_tsv_tmp_name,
             cluster_threshold=args.cluster_threshold,
             accessions_to_use=accessions_to_use_for_tax,
-            sequences_to_use=sequences_to_use_for_tax)
+            sequences_to_use=sequences_to_use_for_tax,
+            filters=[infilter, outfilter])
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -1166,7 +1173,7 @@ if __name__ == "__main__":
               "or 'None' if unsegmented; (3) path to FASTA."))
     input_auto_common_subparser.add_argument('--only-design-for',
         help=("If set, only design for given taxonomies. This provides a "
-              "path to a TSV file with 2 columns: (1) a taxonomid ID; (2) "
+              "path to a TSV file with 2 columns: (1) a taxonomic id ID; (2) "
               "segment label, or 'None' if unsegmented"))
     input_auto_common_subparser.add_argument('--taxa-to-ignore-for-specificity',
         help=("If set, specificity which taxa should be ignored when "
@@ -1175,7 +1182,7 @@ if __name__ == "__main__":
               "(1) a taxonomic ID A; (2) a taxonomic ID B such that "
               "B should be ignored when determining specificity for A. "
               "When designing for A, this masks taxonomy B from all "
-              "specificity queries. This is useul, e.g., if B is a "
+              "specificity queries. This is useful, e.g., if B is a "
               "subset of A."))
     input_auto_common_subparser.add_argument('--ncbi-api-key',
         help=("API key to use for NCBI e-utils. Using this increases the "
@@ -1231,6 +1238,18 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('--ref-accs',
         help=("Accessions of reference sequences to use for curation (comma-"
               "separated). Required if AUTO_REFS is not set"))
+    input_autoargs_subparser.add_argument('--include', nargs='+',
+        help=("Filter accessions to include only ones that match the metadata "
+            "specified in this argument. Metadata options are year, taxid, and "
+            "country. Format as 'metadata=value' (e.g. 'taxid=11060'). Separate "
+            "multiple values with commas ('year=2019,2020') and different "
+            "metadata filters with spaces ('year=2020 taxid=11060')"))
+    input_autoargs_subparser.add_argument('--exclude', nargs='+',
+        help=("Filter accessions to exclude any that match the metadata "
+            "specified in this argument. Metadata options are year, taxid, and "
+            "country. Format as 'metadata=value' (e.g. 'taxid=11060'). Separate "
+            "multiple values with commas ('year=2019,2020') and different "
+            "metadata filters with spaces ('year=2020 taxid=11060')"))
     input_autoargs_subparser.add_argument('--write-input-seqs',
         help=("Path to a file to which to write the sequences "
               "(accession.version) being used as input for design"))

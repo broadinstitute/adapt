@@ -491,7 +491,7 @@ def construct_references(taxid):
     return references
 
 
-def add_metadata_to_neighbors_and_filter(neighbors, filters={}):
+def add_metadata_to_neighbors_and_filter(neighbors, infilter={}, outfilter={}):
     """Fetch and add metadata to neighbors.
 
     This only fetches for neighbors that do not have metadata set.
@@ -501,9 +501,12 @@ def add_metadata_to_neighbors_and_filter(neighbors, filters={}):
 
     Args:
         neighbors: collection of Neighbor objects
-        filters: dictionary where the keys are any of 'country', 'year',
+        infilter: dictionary where the keys are any of 'country', 'year',
             'entry_create_year', 'taxid' and values are a collection of what 
             to include or True to indicate that the metadata must exist
+        outfilter: dictionary where the keys are any of 'country', 'year',
+            'entry_create_year', 'taxid' and values are a collection of what 
+            to exclude
 
     Returns:
         neighbors, with metadata included (excluding the ones filtered out)
@@ -516,14 +519,21 @@ def add_metadata_to_neighbors_and_filter(neighbors, filters={}):
         metadata = {}
     acc_to_skip = set()
     for neighbor in neighbors:
+        skipped = False
         if neighbor.acc in to_fetch:
             neighbor.metadata = metadata[neighbor.acc]
-        for key, value in filters.items():
+        for key, value in infilter.items():
             if value is True:
                 if neighbor.metadata[key] is None:
                     acc_to_skip.add(neighbor.acc)
             elif neighbor.metadata[key] not in value:
                 acc_to_skip.add(neighbor.acc)
+                skipped = True
+        if not skipped:
+            for key, value in outfilter.items():
+                if neighbor.metadata[key] in value:
+                    acc_to_skip.add(neighbor.acc)
+                    skipped = True
 
     # Remove accessions that do not have match the filters
     if len(acc_to_skip) > 0:

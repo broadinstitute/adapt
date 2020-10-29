@@ -24,7 +24,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         cluster_threshold=0.1, accessions_to_use=None,
-        sequences_to_use=None):
+        sequences_to_use=None, filters=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -76,6 +76,9 @@ def prepare_for(taxid, segment, ref_accs, out,
         sequences_to_use: if set, a dict of sequences to use instead of
             fetching them for taxid; note that this does not perform
             curation on these sequences
+        filters: a list of two dictionaries, the first filters of metadata to
+            include in the design, the second filters of metadata to exclude from 
+            the design
 
     Returns:
         number of clusters
@@ -109,7 +112,13 @@ def prepare_for(taxid, segment, ref_accs, out,
         logger.info(("There are %d neighbors (%d with unique accessions)"),
                 len(neighbors), num_unique_acc)
 
-        if years_tsv is not None:
+        # Filter neighbors by include/exclude filters
+        if filters:
+            if 'year' not in filters[0] and years_tsv is not None:
+                filters[0]['year'] = True
+            neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, filters[0], filters[1])
+
+        elif years_tsv is not None:
             # Fetch metadata (including year), add it to neighbors, and
             # filter out ones without a known year
             neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, {'year': True})
