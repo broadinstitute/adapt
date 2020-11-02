@@ -24,7 +24,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         cluster_threshold=0.1, accessions_to_use=None,
-        sequences_to_use=None, filters=None):
+        sequences_to_use=None, filters=[None, None]):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -86,6 +86,8 @@ def prepare_for(taxid, segment, ref_accs, out,
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
         "references %s") % (taxid, segment, ref_accs))
 
+    filtered_accs = set()
+
     if taxid in [11320, 11520, 11552]:
         # Represents influenza
         prep_influenza = True
@@ -112,16 +114,14 @@ def prepare_for(taxid, segment, ref_accs, out,
         logger.info(("There are %d neighbors (%d with unique accessions)"),
                 len(neighbors), num_unique_acc)
 
-        # Filter neighbors by include/exclude filters
-        if filters:
-            if 'year' not in filters[0] and years_tsv is not None:
-                filters[0]['year'] = True
-            neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, filters[0], filters[1])
+        # Filter neighboring accessions
+        if filters != [None, None]:
+            neighbors, filtered_accs = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, filters[0], filters[1])
 
-        elif years_tsv is not None:
+        if years_tsv is not None:
             # Fetch metadata (including year), add it to neighbors, and
             # filter out ones without a known year
-            neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, {'year': True})
+            neighbors, _ = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, [{'year': True}, None])
 
         if len(neighbors) == 0:
             if segment != None and segment != '':
@@ -293,7 +293,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 acc = name.split('.')[0]
                 fw.write('\t'.join([name, str(year_for_acc[acc])]) + '\n')
 
-    return len(clusters)
+    return len(clusters), filtered_accs
 
 
 def fetch_sequences_for_taxonomy(taxid, segment):
@@ -331,6 +331,12 @@ def fetch_sequences_for_taxonomy(taxid, segment):
         logger.critical(("There are 0 accessions for tax %d (segment: %s)"),
                 taxid, segment)
 
+    seqs_unaligned = fetch_sequences_for_acc_list(acc_to_fetch)
+
+    return seqs_unaligned
+
+
+def fetch_sequences_for_acc_list(acc_to_fetch):
     seqs_unaligned_fp = ncbi_neighbors.fetch_fastas(acc_to_fetch)
     seqs_unaligned = align.read_unaligned_seqs(seqs_unaligned_fp)
     # Delete temporary file

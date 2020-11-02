@@ -274,13 +274,13 @@ def prepare_alignments(args):
         s = None if args.segment == 'None' else args.segment
         ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
             if args.auto_refs else args.ref_accs.split(',')
-        infilters = {}
-        outfilters = {}
-        if args.include:
-            infilters = seq_io.read_filters(args.include)
-        if args.exclude:
-            outfilters = seq_io.read_filters(args.exclude)
-        taxs = [(None, args.tax_id, s, ref_accs, infilters, outfilters)]
+        infilter = None
+        outfilter = None
+        if args.filter_accs:
+            infilter = seq_io.read_filters(args.filter_accs)
+        if args.filter_accs_against:
+            outfilter = seq_io.read_filters(args.filter_accs_against)
+        taxs = [(None, args.tax_id, s, ref_accs, infilter, outfilter)]
     elif args.input_type == 'auto-from-file':
         taxs = seq_io.read_taxonomies(args.in_tsv)
     else:
@@ -314,6 +314,7 @@ def prepare_alignments(args):
     aln_tmp_dirs = []
     out_tsv = []
     design_for = []
+    filtered_accs = []
     for label, tax_id, segment, ref_accs, infilter, outfilter in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -344,7 +345,7 @@ def prepare_alignments(args):
             raise Exception(("Cannot use both --use-accessions and "
                 "--use-fasta for the same taxonomy"))
 
-        nc = prepare_alignment.prepare_for(
+        nc, filtered_acc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             sample_seqs=args.sample_seqs, 
@@ -364,6 +365,7 @@ def prepare_alignments(args):
                 design_for += [(tax_id, segment) in taxs_to_design_for]
         years_tsv_per_aln += [years_tsv_tmp]
         aln_tmp_dirs += [aln_file_dir]
+        filtered_accs.append(filtered_acc)
 
         if label is None:
             out_tsv += [args.out_tsv + '.' + str(i) for i in range(nc)]
@@ -421,7 +423,7 @@ def prepare_alignments(args):
     else:
         years_tsv = None
 
-    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for
+    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, filtered_accs
 
 
 def design_for_id(args):
@@ -480,8 +482,17 @@ def design_for_id(args):
                     taxid, segment)
             seqs_list = alignment.SequenceList(list(seqs.values()))
             alns += [seqs_list]
-    specific_against_exists = (len(args.specific_against_fastas) > 0 or
-            args.specific_against_taxa is not None)
+    # If filter-accs-against is specified, also add filtered sequences to alns
+    if args.filter_accs_against:
+        for i in range(num_aln_for_design):
+            logger.info(("Fetching %d sequences within taxon %d to be specific against"), 
+                len(args.filtered_accs[i]), args.taxid_for_fasta[i])
+            seqs = prepare_alignment.fetch_sequences_for_acc_list(list(args.filtered_accs[i]))
+            seqs_list = alignment.SequenceList(list(seqs.values()))
+            alns += [seqs_list]
+
+    specific_against_exists = ((len(args.specific_against_fastas) > 0 or
+            args.specific_against_taxa is not None) or args.filter_accs_against)
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
@@ -707,11 +718,12 @@ def main(args):
                     args.out_tsv_dir)
 
         # Prepare input alignments, stored in temp fasta files
-        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for = prepare_alignments(args)
+        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, filtered_accs = prepare_alignments(args)
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
         args.out_tsv = out_tsv
         args.design_for = design_for
+        args.filtered_accs = filtered_accs
 
         if args.cover_by_year_decay:
             # args.cover_by_year_decay contains two parameters: the year
@@ -1238,18 +1250,18 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('--ref-accs',
         help=("Accessions of reference sequences to use for curation (comma-"
               "separated). Required if AUTO_REFS is not set"))
-    input_autoargs_subparser.add_argument('--include', nargs='+',
+    input_autoargs_subparser.add_argument('--filter-accs', nargs='+',
         help=("Filter accessions to include only ones that match the metadata "
             "specified in this argument. Metadata options are year, taxid, and "
-            "country. Format as 'metadata=value' (e.g. 'taxid=11060'). Separate "
-            "multiple values with commas ('year=2019,2020') and different "
-            "metadata filters with spaces ('year=2020 taxid=11060')"))
-    input_autoargs_subparser.add_argument('--exclude', nargs='+',
-        help=("Filter accessions to exclude any that match the metadata "
+            "country. Format as 'metadata=value' or 'metadata!=value'. Separate "
+            "multiple values with commas and different metadata filters with "
+            "spaces (e.g. 'year!=2020,2019 taxid=11060')"))
+    input_autoargs_subparser.add_argument('--filter-accs-against', nargs='+',
+        help=("Filter accessions to be specific against any that match the metadata "
             "specified in this argument. Metadata options are year, taxid, and "
-            "country. Format as 'metadata=value' (e.g. 'taxid=11060'). Separate "
-            "multiple values with commas ('year=2019,2020') and different "
-            "metadata filters with spaces ('year=2020 taxid=11060')"))
+            "country. Format as 'metadata=value' or 'metadata!=value'. Separate "
+            "multiple values with commas and different metadata filters with "
+            "spaces (e.g. 'year!=2020,2019 taxid=11060')"))
     input_autoargs_subparser.add_argument('--write-input-seqs',
         help=("Path to a file to which to write the sequences "
               "(accession.version) being used as input for design"))

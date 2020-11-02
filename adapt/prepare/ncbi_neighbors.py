@@ -491,7 +491,7 @@ def construct_references(taxid):
     return references
 
 
-def add_metadata_to_neighbors_and_filter(neighbors, infilter={}, outfilter={}):
+def add_metadata_to_neighbors_and_filter(neighbors, infilter=None, outfilter=None):
     """Fetch and add metadata to neighbors.
 
     This only fetches for neighbors that do not have metadata set.
@@ -501,47 +501,64 @@ def add_metadata_to_neighbors_and_filter(neighbors, infilter={}, outfilter={}):
 
     Args:
         neighbors: collection of Neighbor objects
-        infilter: dictionary where the keys are any of 'country', 'year',
-            'entry_create_year', 'taxid' and values are a collection of what 
-            to include or True to indicate that the metadata must exist
-        outfilter: dictionary where the keys are any of 'country', 'year',
-            'entry_create_year', 'taxid' and values are a collection of what 
-            to exclude
+        infilter: list of 2 dictionaries where the keys are any of 'country', 'year',
+            'entry_create_year', 'taxid' and values for the first are a collection 
+            of what to include or True to indicate that the metadata must exist and
+            the second are what to exclude.
+        outfilter: list of 2 dictionaries where the keys are any of 'country', 'year',
+            'entry_create_year', 'taxid' and values for the first are a collection 
+            of what to include in accessions to be specific against and
+            the second are what to exclude.
 
     Returns:
-        neighbors, with metadata included (excluding the ones filtered out)
+        neighbors, with metadata included (excluding the ones filtered out), 
     """
     # Fetch metadata for each neighbor without metadata
     to_fetch = set(n.acc for n in neighbors if n.metadata == {})
+    out_not_in = 0
     if len(to_fetch) > 0:
         metadata = fetch_metadata(to_fetch)
     else:
         metadata = {}
     acc_to_skip = set()
+    specific_against_accs = set()
     for neighbor in neighbors:
-        skipped = False
         if neighbor.acc in to_fetch:
             neighbor.metadata = metadata[neighbor.acc]
-        for key, value in infilter.items():
-            if value is True:
-                if neighbor.metadata[key] is None:
+
+        if infilter:
+            for key, value in infilter[0].items():
+                if value is True and neighbor.metadata[key] is None:
                     acc_to_skip.add(neighbor.acc)
-            elif neighbor.metadata[key] not in value:
-                acc_to_skip.add(neighbor.acc)
-                skipped = True
-        if not skipped:
-            for key, value in outfilter.items():
+                elif neighbor.metadata[key] not in value:
+                    acc_to_skip.add(neighbor.acc)
+            for key, value in infilter[1].items():
                 if neighbor.metadata[key] in value:
                     acc_to_skip.add(neighbor.acc)
-                    skipped = True
 
-    # Remove accessions that do not have match the filters
+        if outfilter:
+            for key, value in outfilter[0].items():
+                if neighbor.metadata[key] in value:
+                    if neighbor.acc not in acc_to_skip:
+                        acc_to_skip.add(neighbor.acc)
+                        out_not_in += 1
+                    specific_against_accs.add(neighbor.acc)
+            for key, value in outfilter[1].items():
+                if neighbor.metadata[key] not in value:
+                    if neighbor.acc not in acc_to_skip:
+                        acc_to_skip.add(neighbor.acc)
+                        out_not_in += 1
+                    acc_to_skip.add(neighbor.acc)
+                    specific_against_accs.add(neighbor.acc)
+
+    # Remove accessions that do not match the filters
     if len(acc_to_skip) > 0:
-        logger.warning(("Leaving out %d accessions that do not match "
-            "filters"), len(acc_to_skip))
+        logger.info(("Leaving out %d accessions that do not match "
+            "filters, %d of which were only identified by filter-accs-against"), 
+            len(acc_to_skip), out_not_in)
     neighbors = [n for n in neighbors if n.acc not in acc_to_skip]
 
-    return neighbors
+    return neighbors, specific_against_accs
 
 
 def construct_influenza_genome_neighbors(taxid):

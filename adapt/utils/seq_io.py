@@ -422,21 +422,27 @@ def read_filters(filters):
             arbitrary number of values
 
     Returns:
-        dict where each key is any of ['taxid', 'year', 'country'] 
-            and each value is a list
+        list of 2 dicts where each key is any of ['taxid', 'year', 'country']
+            and each value is what to include for the first dict and exclude for
+            the second dict
     """
-    dict_filters = {}
+    dict_filters = [{}, {}]
     for filt in filters:
-        filt_split = filt.split('=')
+        dict_to_use = 0
+        filt_split = filt.split('!=')
+        if len(filt_split) == 2:
+            dict_to_use = 1
+        else:
+            filt_split = filt.split('=')
         if len(filt_split) != 2:
-            raise Exception("Incorrect format for include filter '%s'; should be "
-                "'metadata=value'" %filt)
+            raise Exception("Incorrect format for filter '%s'; should be "
+                "'metadata=value or metadata!=value'" %filt)
         if filt_split[0] not in ['taxid', 'year', 'country']:
-            raise Exception("Incorrect include filter key '%s'; should be one of "
+            raise Exception("Incorrect filter key '%s'; should be one of "
                 "['taxid', 'year', 'country']" %filt_split[0])
         if filt_split[0] in ['taxid', 'year']:
-            dict_filters[filt_split[0]] = [int(i) for i in filt_split[1].split(",")]
+            dict_filters[dict_to_use][filt_split[0]] = [int(i) for i in filt_split[1].split(",")]
         else:
-            dict_filters[filt_split[0]] = filt_split[1].split(",")
+            dict_filters[dict_to_use][filt_split[0]] = filt_split[1].split(",")
     return dict_filters
 
