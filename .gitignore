@@ -58,3 +58,6 @@ target/
 
 # start.sh script
 start.sh
+
+# MacOS DS_Store files
+.DS_Store
