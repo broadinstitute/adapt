@@ -414,11 +414,11 @@ def read_taxonomy_specificity_ignore(fn):
     return tax_ignore
 
 
-def read_filters(filters):
-    """Create dictionary of filters from a list.
+def read_metadata_filters(meta_filts):
+    """Create dictionaries of metadata filters from a list.
     
     Args:
-        filters: list of filters in the format 'key=value,value' with an
+        meta_filts: list of filters in the format 'key=value,value' with an
             arbitrary number of values
 
     Returns:
@@ -427,7 +427,7 @@ def read_filters(filters):
             the second dict
     """
     dict_filters = [{}, {}]
-    for filt in filters:
+    for filt in meta_filts:
         dict_to_use = 0
         filt_split = filt.split('!=')
         if len(filt_split) == 2:

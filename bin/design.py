@@ -274,13 +274,13 @@ def prepare_alignments(args):
         s = None if args.segment == 'None' else args.segment
         ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
             if args.auto_refs else args.ref_accs.split(',')
-        infilter = None
-        outfilter = None
-        if args.filter_accs:
-            infilter = seq_io.read_filters(args.filter_accs)
-        if args.filter_accs_against:
-            outfilter = seq_io.read_filters(args.filter_accs_against)
-        taxs = [(None, args.tax_id, s, ref_accs, infilter, outfilter)]
+        meta_filt_in = None
+        meta_filt_out = None
+        if args.metadata_filter:
+            meta_filt_in = seq_io.read_metadata_filters(args.metadata_filter)
+        if args.specific_against_metadata_filter:
+            meta_filt_out = seq_io.read_metadata_filters(args.specific_against_metadata_filter)
+        taxs = [(None, args.tax_id, s, ref_accs, meta_filt_in, meta_filt_out)]
     elif args.input_type == 'auto-from-file':
         taxs = seq_io.read_taxonomies(args.in_tsv)
     else:
@@ -314,8 +314,8 @@ def prepare_alignments(args):
     aln_tmp_dirs = []
     out_tsv = []
     design_for = []
-    filtered_accs = []
-    for label, tax_id, segment, ref_accs, infilter, outfilter in taxs:
+    specific_against_metadata_accs = []
+    for label, tax_id, segment, ref_accs, meta_filt_in, meta_filt_out in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
             years_tsv_tmp = tempfile.NamedTemporaryFile()
@@ -345,7 +345,7 @@ def prepare_alignments(args):
             raise Exception(("Cannot use both --use-accessions and "
                 "--use-fasta for the same taxonomy"))
 
-        nc, filtered_acc = prepare_alignment.prepare_for(
+        nc, specific_against_metadata_acc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             sample_seqs=args.sample_seqs, 
@@ -354,7 +354,8 @@ def prepare_alignments(args):
             cluster_threshold=args.cluster_threshold,
             accessions_to_use=accessions_to_use_for_tax,
             sequences_to_use=sequences_to_use_for_tax,
-            filters=[infilter, outfilter])
+            meta_filt_in=meta_filt_in, 
+            meta_filt_out=meta_filt_out)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -365,7 +366,7 @@ def prepare_alignments(args):
                 design_for += [(tax_id, segment) in taxs_to_design_for]
         years_tsv_per_aln += [years_tsv_tmp]
         aln_tmp_dirs += [aln_file_dir]
-        filtered_accs.append(filtered_acc)
+        specific_against_metadata_accs.append(specific_against_metadata_acc)
 
         if label is None:
             out_tsv += [args.out_tsv + '.' + str(i) for i in range(nc)]
@@ -423,7 +424,7 @@ def prepare_alignments(args):
     else:
         years_tsv = None
 
-    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, filtered_accs
+    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, specific_against_metadata_accs
 
 
 def design_for_id(args):
@@ -482,17 +483,17 @@ def design_for_id(args):
                     taxid, segment)
             seqs_list = alignment.SequenceList(list(seqs.values()))
             alns += [seqs_list]
-    # If filter-accs-against is specified, also add filtered sequences to alns
-    if args.filter_accs_against:
+    # If specific-against-metadata-filter is specified, also add metadata filtered accessions to alns
+    if args.specific_against_metadata_filter:
         for i in range(num_aln_for_design):
             logger.info(("Fetching %d sequences within taxon %d to be specific against"), 
-                len(args.filtered_accs[i]), args.taxid_for_fasta[i])
-            seqs = prepare_alignment.fetch_sequences_for_acc_list(list(args.filtered_accs[i]))
+                len(args.specific_against_metadata_accs[i]), args.taxid_for_fasta[i])
+            seqs = prepare_alignment.fetch_sequences_for_acc_list(list(args.specific_against_metadata_accs[i]))
             seqs_list = alignment.SequenceList(list(seqs.values()))
             alns += [seqs_list]
 
     specific_against_exists = ((len(args.specific_against_fastas) > 0 or
-            args.specific_against_taxa is not None) or args.filter_accs_against)
+            args.specific_against_taxa is not None) or args.specific_against_metadata_filter)
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
@@ -718,12 +719,12 @@ def main(args):
                     args.out_tsv_dir)
 
         # Prepare input alignments, stored in temp fasta files
-        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, filtered_accs = prepare_alignments(args)
+        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, specific_against_metadata_accs = prepare_alignments(args)
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
         args.out_tsv = out_tsv
         args.design_for = design_for
-        args.filtered_accs = filtered_accs
+        args.specific_against_metadata_accs = specific_against_metadata_accs
 
         if args.cover_by_year_decay:
             # args.cover_by_year_decay contains two parameters: the year
@@ -1188,7 +1189,7 @@ if __name__ == "__main__":
               "path to a TSV file with 2 columns: (1) a taxonomic id ID; (2) "
               "segment label, or 'None' if unsegmented"))
     input_auto_common_subparser.add_argument('--taxa-to-ignore-for-specificity',
-        help=("If set, specificity which taxa should be ignored when "
+        help=("If set, specify which taxa should be ignored when "
               "enforcing specificity while designing for other taxa. "
               "This provides a path to a TSV file with 2 columns: "
               "(1) a taxonomic ID A; (2) a taxonomic ID B such that "
@@ -1250,18 +1251,18 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('--ref-accs',
         help=("Accessions of reference sequences to use for curation (comma-"
               "separated). Required if AUTO_REFS is not set"))
-    input_autoargs_subparser.add_argument('--filter-accs', nargs='+',
-        help=("Filter accessions to include only ones that match the metadata "
-            "specified in this argument. Metadata options are year, taxid, and "
-            "country. Format as 'metadata=value' or 'metadata!=value'. Separate "
-            "multiple values with commas and different metadata filters with "
+    input_autoargs_subparser.add_argument('--metadata-filter', nargs='+',
+        help=("Filter accessions within the taxa being designed for to include only "
+            "ones that match the metadata  specified in this argument. Metadata options "
+            "are year, taxid, and country. Format as 'metadata=value' or 'metadata!=value'. "
+            "Separate multiple values with commas and different metadata filters with "
             "spaces (e.g. 'year!=2020,2019 taxid=11060')"))
-    input_autoargs_subparser.add_argument('--filter-accs-against', nargs='+',
-        help=("Filter accessions to be specific against any that match the metadata "
-            "specified in this argument. Metadata options are year, taxid, and "
-            "country. Format as 'metadata=value' or 'metadata!=value'. Separate "
-            "multiple values with commas and different metadata filters with "
-            "spaces (e.g. 'year!=2020,2019 taxid=11060')"))
+    input_autoargs_subparser.add_argument('--specific-against-metadata-filter', nargs='+',
+        help=("Filter out accessions within the taxa being designed for and be specific "
+            "against any that match the metadata specified in this argument. Metadata "
+            "options are year, taxid, and country. Format as 'metadata=value' or "
+            "'metadata!=value'. Separate multiple values with commas and different "
+            "metadata filters with spaces (e.g. 'year!=2020,2019 taxid=11060')"))
     input_autoargs_subparser.add_argument('--write-input-seqs',
         help=("Path to a file to which to write the sequences "
               "(accession.version) being used as input for design"))

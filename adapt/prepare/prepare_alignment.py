@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_for(taxid, segment, ref_accs, out,
-        aln_memoizer=None, aln_stat_memoizer=None,
+        aln_memoizer=None, aln_stat_memoizer=None, 
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
-        cluster_threshold=0.1, accessions_to_use=None,
-        sequences_to_use=None, filters=[None, None]):
+        cluster_threshold=0.1, accessions_to_use=None, 
+        sequences_to_use=None, meta_filt_in=None, meta_filt_out=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -76,17 +76,18 @@ def prepare_for(taxid, segment, ref_accs, out,
         sequences_to_use: if set, a dict of sequences to use instead of
             fetching them for taxid; note that this does not perform
             curation on these sequences
-        filters: a list of two dictionaries, the first filters of metadata to
-            include in the design, the second filters of metadata to exclude from 
+        meta_filt_in: a dictionary of filters of metadata to
+            include in the design
+        meta_filt_out: a dictionary of filters of metadata to exclude from 
             the design
 
     Returns:
-        number of clusters
+        number of clusters, set of accessions filtered out by meta_filt_out
     """
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
         "references %s") % (taxid, segment, ref_accs))
 
-    filtered_accs = set()
+    specific_against_metadata_acc = set()
 
     if taxid in [11320, 11520, 11552]:
         # Represents influenza
@@ -115,8 +116,8 @@ def prepare_for(taxid, segment, ref_accs, out,
                 len(neighbors), num_unique_acc)
 
         # Filter neighboring accessions
-        if filters != [None, None]:
-            neighbors, filtered_accs = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, filters[0], filters[1])
+        if meta_filt_in is not None or meta_filt_out is not None:
+            neighbors, specific_against_metadata_acc = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, meta_filt_in, meta_filt_out)
 
         if years_tsv is not None:
             # Fetch metadata (including year), add it to neighbors, and
@@ -293,7 +294,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 acc = name.split('.')[0]
                 fw.write('\t'.join([name, str(year_for_acc[acc])]) + '\n')
 
-    return len(clusters), filtered_accs
+    return len(clusters), specific_against_metadata_acc
 
 
 def fetch_sequences_for_taxonomy(taxid, segment):
