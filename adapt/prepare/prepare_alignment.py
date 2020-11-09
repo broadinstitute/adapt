@@ -24,7 +24,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         cluster_threshold=0.1, accessions_to_use=None, 
-        sequences_to_use=None, meta_filt_in=None, meta_filt_out=None):
+        sequences_to_use=None, meta_filt=None, meta_filt_against=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -76,13 +76,12 @@ def prepare_for(taxid, segment, ref_accs, out,
         sequences_to_use: if set, a dict of sequences to use instead of
             fetching them for taxid; note that this does not perform
             curation on these sequences
-        meta_filt_in: a dictionary of filters of metadata to
-            include in the design
-        meta_filt_out: a dictionary of filters of metadata to exclude from 
+        meta_filt: a dictionary of filters of metadata to include in the design
+        meta_filt_against: a dictionary of filters of metadata to exclude from 
             the design
 
     Returns:
-        number of clusters, set of accessions filtered out by meta_filt_out
+        number of clusters, set of accessions filtered out by meta_filt_against
     """
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
         "references %s") % (taxid, segment, ref_accs))
@@ -115,14 +114,19 @@ def prepare_for(taxid, segment, ref_accs, out,
         logger.info(("There are %d neighbors (%d with unique accessions)"),
                 len(neighbors), num_unique_acc)
 
-        # Filter neighboring accessions
-        if meta_filt_in is not None or meta_filt_out is not None:
-            neighbors, specific_against_metadata_acc = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, meta_filt_in, meta_filt_out)
-
+        # Filter out anything that does not have a year if years_tsv is defined
         if years_tsv is not None:
-            # Fetch metadata (including year), add it to neighbors, and
-            # filter out ones without a known year
-            neighbors, _ = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors, [{'year': True}, None])
+            if meta_filt:
+                if 'year' not in meta_filt[0]:
+                    meta_filt[0]['year'] = True
+            else:
+                meta_filt = ({'year': True}, None)
+        
+        # Fetch metadata, add it to neighbors, and filter out ones that do
+        # not fit the filters
+        if meta_filt is not None or meta_filt_against is not None:
+            neighbors, specific_against_metadata_acc = ncbi_neighbors.add_metadata_to_neighbors_and_filter(
+                neighbors, meta_filt, meta_filt_against)
 
         if len(neighbors) == 0:
             if segment != None and segment != '':
