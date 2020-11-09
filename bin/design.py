@@ -273,14 +273,14 @@ def prepare_alignments(args):
     if args.input_type == 'auto-from-args':
         s = None if args.segment == 'None' else args.segment
         ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
-            if args.auto_refs else args.ref_accs.split(',')
-        meta_filt_in = None
-        meta_filt_out = None
+            if args.auto_refs else args.ref_accs
+        meta_filt = None
+        meta_filt_against = None
         if args.metadata_filter:
-            meta_filt_in = seq_io.read_metadata_filters(args.metadata_filter)
+            meta_filt = seq_io.read_metadata_filters(args.metadata_filter)
         if args.specific_against_metadata_filter:
-            meta_filt_out = seq_io.read_metadata_filters(args.specific_against_metadata_filter)
-        taxs = [(None, args.tax_id, s, ref_accs, meta_filt_in, meta_filt_out)]
+            meta_filt_against = seq_io.read_metadata_filters(args.specific_against_metadata_filter)
+        taxs = [(None, args.tax_id, s, ref_accs, meta_filt, meta_filt_against)]
     elif args.input_type == 'auto-from-file':
         taxs = seq_io.read_taxonomies(args.in_tsv)
     else:
@@ -315,7 +315,7 @@ def prepare_alignments(args):
     out_tsv = []
     design_for = []
     specific_against_metadata_accs = []
-    for label, tax_id, segment, ref_accs, meta_filt_in, meta_filt_out in taxs:
+    for label, tax_id, segment, ref_accs, meta_filt, meta_filt_against in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
             years_tsv_tmp = tempfile.NamedTemporaryFile()
@@ -354,8 +354,8 @@ def prepare_alignments(args):
             cluster_threshold=args.cluster_threshold,
             accessions_to_use=accessions_to_use_for_tax,
             sequences_to_use=sequences_to_use_for_tax,
-            meta_filt_in=meta_filt_in, 
-            meta_filt_out=meta_filt_out)
+            meta_filt=meta_filt, 
+            meta_filt_against=meta_filt_against)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -1186,7 +1186,7 @@ if __name__ == "__main__":
               "or 'None' if unsegmented; (3) path to FASTA."))
     input_auto_common_subparser.add_argument('--only-design-for',
         help=("If set, only design for given taxonomies. This provides a "
-              "path to a TSV file with 2 columns: (1) a taxonomic id ID; (2) "
+              "path to a TSV file with 2 columns: (1) a taxonomic ID; (2) "
               "segment label, or 'None' if unsegmented"))
     input_auto_common_subparser.add_argument('--taxa-to-ignore-for-specificity',
         help=("If set, specify which taxa should be ignored when "
@@ -1248,8 +1248,8 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('--auto-refs', action='store_true',
         help=("If set, automatically get accession numbers for "
               "reference sequences from NCBI"))
-    input_autoargs_subparser.add_argument('--ref-accs',
-        help=("Accessions of reference sequences to use for curation (comma-"
+    input_autoargs_subparser.add_argument('--ref-accs', nargs='+',
+        help=("Accession(s) of reference sequence(s) to use for curation (comma-"
               "separated). Required if AUTO_REFS is not set"))
     input_autoargs_subparser.add_argument('--metadata-filter', nargs='+',
         help=("Filter accessions within the taxa being designed for to include only "

@@ -199,7 +199,7 @@ Allow for up to ID_M mismatches when determining whether a guide hits a sequence
 ADAPT does not output guides that hit group/taxons other than the one for which they are being designed.
 Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
 (Default: 2 for ID_M, 0.05 for ID_FRAC.)
-* `--ref-accs`: Curate sequences based on the sequence identified by this accession number
+* `--ref-accs`: Curate sequences based on the sequence(s) identified by this accession number(s)
 * `--specific-against-fastas [fasta] [fasta ...]`: Design guides to be specific against the provided sequences (in FASTA format; do not need to be aligned).
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
 * `--specific-against-taxa SPECIFIC_TSV`: Design guides to be specific against the provided taxa.
