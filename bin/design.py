@@ -540,7 +540,8 @@ def design_for_id(args):
 
         if aq is not None:
             guide_is_specific = aq.guide_is_specific_to_alns_fn(
-                    alns_in_same_taxon, args.diff_id_frac)
+                    alns_in_same_taxon, args.diff_id_frac,
+                    do_not_memoize=args.do_not_memoize_guide_computations)
         else:
             # No specificity to check
             guide_is_specific = lambda guide: True
@@ -617,7 +618,8 @@ def design_for_id(args):
                     blacklisted_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
-                    predictor=predictor)
+                    predictor=predictor,
+                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
         elif args.obj == 'maximize-activity':
             gs = guide_search.GuideSearcherMaximizeActivity(
                     aln,
@@ -632,7 +634,8 @@ def design_for_id(args):
                     blacklisted_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
-                    predictor=predictor)
+                    predictor=predictor,
+                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -985,6 +988,12 @@ if __name__ == "__main__":
               "does not use a serialized model for predicting activity, so "
               "--predict-activity-model-path should not be set when this "
               "is set."))
+
+    # Technical options
+    base_subparser.add_argument('--do-not-memoize-guide-computations',
+        action='store_true',
+        help=("If set, do not memoize computations in GuideSearcher or "
+              "for specificity queries"))
 
     # Log levels
     base_subparser.add_argument("--debug",

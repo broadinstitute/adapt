@@ -66,9 +66,10 @@ class GuideSearcher:
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
             do_not_memoize_guides: if True, never memoize the results of
-                compute guides at a site and always compute the guide (this can
-                be useful if we know the memoized result will never be used
-                and memoizing it may be slow)
+                computed guides at a site and always compute the guides (this
+                can be useful if we know the memoized result will never be used
+                and memoizing it may be slow, or if we want to benchmark
+                performance with/without memoization)
             predictor: adapt.utils.predict_activity.Predictor object. If
                 None, do not predict activities.
         """
@@ -1427,6 +1428,10 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                     continue
 
             ground_set_with_activities[gd_seq] = activities
+
+        if self.do_not_memoize_guides:
+            # Return the ground set and do *not* memoize it
+            return ground_set_with_activities
 
         # Memoize it
         self._memoized_ground_sets[start] = ground_set_with_activities
