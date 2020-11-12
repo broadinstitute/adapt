@@ -315,6 +315,8 @@ def prepare_alignments(args):
     out_tsv = []
     design_for = []
     specific_against_metadata_accs = []
+    # Keep track of what taxa have been used how many times
+    tax_used = {}
     for label, tax_id, segment, ref_accs, meta_filt, meta_filt_against in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -357,16 +359,22 @@ def prepare_alignments(args):
             meta_filt=meta_filt, 
             meta_filt_against=meta_filt_against)
 
+        if tax_id in tax_used:
+            tax_used[tax_id] += 1
+        else:
+            tax_used[tax_id] = 0
+        tax_id_label = str(tax_id) + '.' + str(tax_used[tax_id])
+
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
-            taxid_for_fasta += [tax_id]
+            taxid_for_fasta += [tax_id_label]
+            specific_against_metadata_accs.append(specific_against_metadata_acc)
             if taxs_to_design_for is None:
                 design_for += [True]
             else:
                 design_for += [(tax_id, segment) in taxs_to_design_for]
         years_tsv_per_aln += [years_tsv_tmp]
         aln_tmp_dirs += [aln_file_dir]
-        specific_against_metadata_accs.append(specific_against_metadata_acc)
 
         if label is None:
             out_tsv += [args.out_tsv + '.' + str(i) for i in range(nc)]
@@ -462,16 +470,27 @@ def design_for_id(args):
         guide_cover_frac_per_input += [guide_cover_frac]
         primer_cover_frac_per_input += [primer_cover_frac]
 
-    # Also add the specific_against_fastas sequences into alns, but keep
-    # track of how many items in alns to use for design (the first N of them)
+    # Keep track of how many items in alns to use for design (the first N of them)
+    num_aln_for_design = len(args.in_fasta)
+
+    # Add sequence lists to alns to be specific against
     # Note that although these are being place in alns, they may not
     # be actual alignments (they can be unaligned sequences)
-    num_aln_for_design = len(args.in_fasta)
+    # If specific-against-metadata-filter is specified, add metadata filtered accessions to alns
+    if args.specific_against_metadata_accs is not None:
+        for i in range(num_aln_for_design):
+            logger.info(("Fetching %d sequences within taxon %s to be specific against"), 
+                len(args.specific_against_metadata_accs[i]), args.taxid_for_fasta[i])
+            seqs = prepare_alignment.fetch_sequences_for_acc_list(list(
+                args.specific_against_metadata_accs[i]))
+            seqs_list = alignment.SequenceList(list(seqs.values()))
+            alns += [seqs_list]
+    # Also add the specific_against_fastas sequences into alns 
     for specific_against_fasta in args.specific_against_fastas:
         seqs = seq_io.read_fasta(specific_against_fasta)
         seqs_list = alignment.SequenceList(list(seqs.values()))
         alns += [seqs_list]
-    # Similarly, add specific_against_taxa sequences into alns after
+    # Finally, add specific_against_taxa sequences into alns after
     # downloading them
     if args.specific_against_taxa:
         taxs_to_be_specific_against = seq_io.read_taxonomies_to_design_for(
@@ -483,17 +502,10 @@ def design_for_id(args):
                     taxid, segment)
             seqs_list = alignment.SequenceList(list(seqs.values()))
             alns += [seqs_list]
-    # If specific-against-metadata-filter is specified, also add metadata filtered accessions to alns
-    if args.specific_against_metadata_filter:
-        for i in range(num_aln_for_design):
-            logger.info(("Fetching %d sequences within taxon %d to be specific against"), 
-                len(args.specific_against_metadata_accs[i]), args.taxid_for_fasta[i])
-            seqs = prepare_alignment.fetch_sequences_for_acc_list(list(args.specific_against_metadata_accs[i]))
-            seqs_list = alignment.SequenceList(list(seqs.values()))
-            alns += [seqs_list]
 
     specific_against_exists = ((len(args.specific_against_fastas) > 0 or
-            args.specific_against_taxa is not None) or args.specific_against_metadata_filter)
+            args.specific_against_taxa is not None) or 
+            args.specific_against_metadata_accs is not None)
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
@@ -544,7 +556,7 @@ def design_for_id(args):
     for i in range(num_aln_for_design):
         taxid = args.taxid_for_fasta[i]
         logger.info(("Finding guides for alignment %d (of %d), which is in "
-            "taxon %d"), i + 1, num_aln_for_design, taxid)
+            "taxon %s"), i + 1, num_aln_for_design, taxid)
 
         if args.design_for is not None and args.design_for[i] is False:
             logger.info("Skipping design for this alignment")
@@ -582,8 +594,11 @@ def design_for_id(args):
         # because we will likely get many guide sequences that hit its
         # alignments, but we do not care about these for checking specificity
         if aq is not None:
-            for j in alns_in_same_taxon:
-                aq.mask_aln(j)
+            for j in range(num_aln_for_design):
+                if j in alns_in_same_taxon:
+                    aq.mask_aln(j)
+                elif args.specific_against_metadata_accs is not None:
+                    aq.mask_aln(j + num_aln_for_design)
             # Also mask taxonomies to ignore when determining specificity
             # of taxid
             if taxid in tax_ignore:
@@ -708,7 +723,7 @@ def main(args):
     logger.info("Running design.py with arguments: %s", args)
 
     # Set NCBI API key
-    if args.input_type in ['auto_from_file', 'auto-from-args']:
+    if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.ncbi_api_key:
             ncbi_neighbors.ncbi_api_key = args.ncbi_api_key
 
@@ -1252,17 +1267,16 @@ if __name__ == "__main__":
         help=("Accession(s) of reference sequence(s) to use for curation (comma-"
               "separated). Required if AUTO_REFS is not set"))
     input_autoargs_subparser.add_argument('--metadata-filter', nargs='+',
-        help=("Filter accessions within the taxa being designed for to include only "
-            "ones that match the metadata  specified in this argument. Metadata options "
-            "are year, taxid, and country. Format as 'metadata=value' or 'metadata!=value'. "
-            "Separate multiple values with commas and different metadata filters with "
-            "spaces (e.g. 'year!=2020,2019 taxid=11060')"))
+        help=("Only include accessions of specified taxonomic ID that match this metadata "
+            "in the design. Metadata options are year, taxid, and country. Format as "
+            "'metadata=value' or 'metadata!=value'. Separate multiple values with commas "
+            "and different metadata filters with spaces (e.g. 'year!=2020,2019 taxid=11060')"))
     input_autoargs_subparser.add_argument('--specific-against-metadata-filter', nargs='+',
-        help=("Filter out accessions within the taxa being designed for and be specific "
-            "against any that match the metadata specified in this argument. Metadata "
-            "options are year, taxid, and country. Format as 'metadata=value' or "
-            "'metadata!=value'. Separate multiple values with commas and different "
-            "metadata filters with spaces (e.g. 'year!=2020,2019 taxid=11060')"))
+        help=("Only include accessions of the specified taxonomic ID that do not match this "
+            "metadata in the design, and be specific against any accession that does match "
+            "this metadata. Metadata options are year, taxid, and country. Format as "
+            "'metadata=value' or 'metadata!=value'. Separate multiple values with commas "
+            "and different metadata filters with spaces (e.g. 'year!=2020,2019 taxid=11060')"))
     input_autoargs_subparser.add_argument('--write-input-seqs',
         help=("Path to a file to which to write the sequences "
               "(accession.version) being used as input for design"))

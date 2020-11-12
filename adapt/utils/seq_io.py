@@ -237,6 +237,7 @@ def read_taxonomies(fn):
                     commas to separate values, semicolons to separate filters
 
         6) (optional) metadata filters to exclude from a taxa and be specific against,
+            column 5 must be included to include this column,
             format: 'metadata=value' or 'metadata!=value', 
                     commas to separate values, semicolons to separate filters
 
@@ -254,7 +255,7 @@ def read_taxonomies(fn):
             ls = line.rstrip().split('\t')
             if len(ls) < 4 or len(ls) > 6:
                 raise Exception(("Input taxonomy TSV must have between 4 and 6 columns"))
-            print(ls)
+
             label = ls[0]
             if label in labels:
                 raise Exception(("Taxonomy label '%s' is not unique") % label)
@@ -273,11 +274,11 @@ def read_taxonomies(fn):
 
             meta_filt = None
             if len(ls) > 4 and ls[4].lower() not in none_strings:
-                meta_filt = seq_io.read_metadata_filters(ls[4].split(';'))
+                meta_filt = read_metadata_filters(ls[4].split(';'))
 
             meta_filt_against = None
             if len(ls) > 5 and ls[5].lower() not in none_strings:
-                meta_filt_against = seq_io.read_metadata_filters(ls[5].split(';'))
+                meta_filt_against = read_metadata_filters(ls[5].split(';'))
 
             taxs += [(label, tax_id, segment, ref_accs, meta_filt, meta_filt_against)]
     return taxs

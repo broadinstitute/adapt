@@ -313,7 +313,7 @@ See [Output](#output) above for a description of this file.
 ADAPT can automatically download and curate sequences during design, and search efficiently over the space of genomic regions to find primers/amplicons as well as guides.
 For example:
 ```bash
-design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj minimize-guides -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --ref-accs NC_035889 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
+design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj minimize-guides -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --auto-refs --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
 ```
 downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable.

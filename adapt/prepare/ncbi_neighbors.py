@@ -492,13 +492,12 @@ def construct_references(taxid):
 
 
 def add_metadata_to_neighbors_and_filter(neighbors, meta_filt=None, meta_filt_against=None):
-    """Fetch and add metadata to neighbors.
+    """Fetch and add metadata to neighbors, and filter them based on metadata
 
     This only fetches for neighbors that do not have metadata set.
 
-    This also filters out neighbors which do not match the filters in 
-    meta_filt or match a filter in meta_filt_against. It returns the accession 
-    numbers of the neighbors that are filtered out by meta_filt_against.
+    This also filters out neighbors which do not match the filters in meta_filt or 
+    match a filter in meta_filt_against.
 
     Args:
         neighbors: collection of Neighbor objects
@@ -506,62 +505,89 @@ def add_metadata_to_neighbors_and_filter(neighbors, meta_filt=None, meta_filt_ag
             'entry_create_year', 'taxid' and values for the first are a collection 
             of what to include or True to indicate that the metadata must exist and
             the second are what to exclude.
-        meta_filt_against: list of 2 dictionaries where the keys are any of 'country', 'year',
-            'entry_create_year', 'taxid' and values for the first are a collection 
-            of what to include in accessions to be specific against and
+        meta_filt_against: list of 2 dictionaries where the keys are any of 'country', 
+            'year', 'entry_create_year', 'taxid' and values for the first are a 
+            collection of what to include in accessions to be specific against and
             the second are what to exclude.
 
     Returns:
-        neighbors, with metadata included (excluding the ones filtered out), 
+        neighbors with metadata included (excluding the ones filtered out), and
+            accession numbers of neighbors that are filtered out by meta_filt_against
     """
     # Fetch metadata for each neighbor without metadata
     to_fetch = set(n.acc for n in neighbors if n.metadata == {})
-    out_not_in = 0
     if len(to_fetch) > 0:
         metadata = fetch_metadata(to_fetch)
     else:
         metadata = {}
-    acc_to_skip = set()
 
+    # Keep track of the number of neighbors filtered out by meta_filt_against and not 
+    # meta_filt, as these may or may not be unintentional
+    only_in_against = 0
+    # Keep track of which neighbors don't match meta_filt or match meta_filt_against,
+    # as these should not be included in the design
+    acc_to_exclude = set()
+    # Keep track of which neighbors match meta_filt_against, as the design should
+    # be specific against these accessions
     specific_against_metadata_acc = set()
+
+    # The first value of the filter is what the metadata should equal; the second is
+    # what the metadata should not equal
+    if meta_filt:
+        meta_filt_eq, meta_filt_neq = meta_filt
+    if meta_filt_against:
+        meta_filt_against_eq, meta_filt_against_neq = meta_filt_against
     for neighbor in neighbors:
+        # Set metadata for neighbor if it was not previously set
         if neighbor.acc in to_fetch:
             neighbor.metadata = metadata[neighbor.acc]
 
+        # If there is a filter for metadata, exclude any neighbors that don't match it 
+        # in the design
         if meta_filt:
-            for key, value in meta_filt[0].items():
+            for key, value in meta_filt_eq.items():
                 if value is True and neighbor.metadata[key] is None:
-                    acc_to_skip.add(neighbor.acc)
+                    # Filter says that the metadata must exist, and it doesn't for this 
+                    # neighbor, so exclude
+                    acc_to_exclude.add(neighbor.acc)
                 elif neighbor.metadata[key] not in value:
-                    acc_to_skip.add(neighbor.acc)
-            for key, value in meta_filt[1].items():
+                    # Metadata doesn't match the list of what it should equal, so exclude
+                    acc_to_exclude.add(neighbor.acc)
+            for key, value in meta_filt_neq.items():
                 if neighbor.metadata[key] in value:
-                    acc_to_skip.add(neighbor.acc)
+                    # Metadata matches the list of what it shouldn't equal, so exclude
+                    acc_to_exclude.add(neighbor.acc)
 
+        # If there is a filter to be specific against metadata, add any neighbors that
+        # match it to specific_against_metadata_acc and exclude them from the design
         if meta_filt_against:
-            for key, value in meta_filt_against[0].items():
+            for key, value in meta_filt_against_eq.items():
                 if neighbor.metadata[key] in value:
-                    if neighbor.acc not in acc_to_skip:
-                        acc_to_skip.add(neighbor.acc)
-                        out_not_in += 1
+                    # Metadata matches the list of what should be designed against,
+                    # so exclude if not already excluded & add to list to be specific against
+                    if neighbor.acc not in acc_to_exclude:
+                        acc_to_exclude.add(neighbor.acc)
+                        only_in_against += 1
                     specific_against_metadata_acc.add(neighbor.acc)
-            for key, value in meta_filt_against[1].items():
+            for key, value in meta_filt_against_neq.items():
                 if neighbor.metadata[key] not in value:
-                    if neighbor.acc not in acc_to_skip:
-                        acc_to_skip.add(neighbor.acc)
-                        out_not_in += 1
-                    acc_to_skip.add(neighbor.acc)
+                    # Metadata doesn't match the list of what shouldn't be designed against,
+                    # so exclude if not already excluded & add to list to be specific against
+                    if neighbor.acc not in acc_to_exclude:
+                        acc_to_exclude.add(neighbor.acc)
+                        only_in_against += 1
+                    acc_to_exclude.add(neighbor.acc)
                     specific_against_metadata_acc.add(neighbor.acc)
 
     # Remove accessions that do not match the filters
-    if len(acc_to_skip) > 0:
+    if len(acc_to_exclude) > 0:
         logger.info(("Leaving out %d accessions that do not match "
             "metadata filters, %d of which were only identified by "
-            "specific_against_metadata_acc"), 
-            len(acc_to_skip), out_not_in)
-    neighbors = [n for n in neighbors if n.acc not in acc_to_skip]
+            "specific_against_metadata_filter"), 
+            len(acc_to_exclude), only_in_against)
+    included_neighbors = [n for n in neighbors if n.acc not in acc_to_exclude]
 
-    return neighbors, specific_against_metadata_acc
+    return included_neighbors, specific_against_metadata_acc
 
 
 def construct_influenza_genome_neighbors(taxid):
@@ -780,8 +806,8 @@ def fetch_metadata(accessions):
                         "accession %s") % accession)
                 country = value
             if name == 'db_xref':
-                # formatted as "taxon:####", so remove prefix
-                taxid = int(value[6:])
+                # Find a string of digits that represents the taxonomic ID
+                taxid = int(re.search(r"\d+", value)[0])
         metadata[accession] = {'country': country, 'year': year,
                 'entry_create_year': entry_create_year, 'taxid': taxid}
 
