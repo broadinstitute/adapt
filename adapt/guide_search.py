@@ -957,7 +957,11 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                     logger.warning(("Guide '%s' at position %d does not cover "
                         "any sequences but is being required in the cover") %
                         (gd, gd_pos))
-                self._memoized_seqs_covered_by_required_guides[r] = gd_covered_seqs
+                if args.do_not_memoize_guides:
+                    # Skip memoization
+                    continue
+                else:
+                    self._memoized_seqs_covered_by_required_guides[r] = gd_covered_seqs
             if only_consider is not None:
                 # Only cover the sequences that should be considered
                 gd_covered_seqs = gd_covered_seqs & only_consider
