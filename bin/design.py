@@ -997,7 +997,8 @@ if __name__ == "__main__":
               "specificity queries. This can be helpful for benchmarking "
               "the improvement of memoization, or if there is reason "
               "to believe memoization will slow the search (e.g., "
-              "if possible amplicons rarely overlap)"))
+              "if possible amplicons rarely overlap). Note that activity "
+              "predictions are still memoized.))
 
     # Log levels
     base_subparser.add_argument("--debug",
