@@ -992,8 +992,12 @@ if __name__ == "__main__":
     # Technical options
     base_subparser.add_argument('--do-not-memoize-guide-computations',
         action='store_true',
-        help=("If set, do not memoize computations in GuideSearcher or "
-              "for specificity queries"))
+        help=("If set, do not memoize computations during the search, "
+              "including of guides identified at each site and of "
+              "specificity queries. This can be helpful for benchmarking "
+              "the improvement of memoization, or if there is reason "
+              "to believe memoization will slow the search (e.g., "
+              "if possible amplicons rarely overlap)"))
 
     # Log levels
     base_subparser.add_argument("--debug",
