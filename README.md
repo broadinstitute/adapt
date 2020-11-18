@@ -1,5 +1,5 @@
 # ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-#### Adaptive Design by Astutely Patrolling Targets
+#### Activity-informed Design with All-inclusive Patrolling of Targets
 
 ADAPT is a software package for designing optimal nucleic acid diagnostics.
 
