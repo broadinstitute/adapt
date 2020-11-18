@@ -8,8 +8,6 @@ ADAPT is a software package for designing optimal nucleic acid diagnostics.
 * **Sensitive**: ADAPT can incorporate a predictive model of activity, so designs are predicted to be highly active against targets.
 * **Specific**: ADAPT enforces high specificity against set non-targeted taxa, so designs are more likely to be accurate in distinguishing between related taxa.
 
-The methods and software are not yet published.
-However, the problems share some similarity with the problems solved by CATCH, which is described in [_Nature Biotechnology_](https://www.nature.com/articles/s41587-018-0006-x) and available publicly on [GitHub](https://github.com/broadinstitute/catch).
 <br/>
 <br/>
 
@@ -342,8 +340,9 @@ If you have questions about ADAPT, please create an [issue](https://github.com/b
 
 # Citation
 
-ADAPT is not yet published.
-If you find it useful to your work, please let us know and inquire about how to cite it.
+For details on how ADAPT works, please refer to our preprint on bioRxiv.
+If you find ADAPT useful to your work, please cite our preprint as:
+  * **[CITATION HERE]**
 
 # License
 
