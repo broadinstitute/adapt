@@ -335,7 +335,10 @@ To find guide sets that maximize expected activity, use `--obj maximize-activity
 
 We welcome contributions to ADAPT.
 This can be in the form of an [issue](https://github.com/broadinstitute/adapt/issues) or [pull request](https://github.com/broadinstitute/adapt/pulls).
-If you have questions, please create an [issue](https://github.com/broadinstitute/adapt/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
+
+# Questions
+
+If you have questions about ADAPT, please create an [issue](https://github.com/broadinstitute/adapt/issues).
 
 # Citation
 
