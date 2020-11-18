@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def process_fasta(f, replace_degenerate=False,
-               skip_gaps=False, make_uppercase=True):
+               skip_gaps=False, make_uppercase=True,
+               replace_U=True):
     
     degenerate_pattern = re.compile('[YRWSMKBDHV]')
     m = OrderedDict()
@@ -39,13 +40,16 @@ def process_fasta(f, replace_degenerate=False,
                 line = degenerate_pattern.sub('N', line)
             if skip_gaps:
                 line = line.replace('-', '')
+            if replace_U:
+                line = line.replace('u', 't').replace('U', 'T')
             m[curr_seq_name] += line
 
     return m
 
 
 def read_fasta(fn, replace_degenerate=False,
-               skip_gaps=False, make_uppercase=True):
+               skip_gaps=False, make_uppercase=True,
+               replace_U=True):
     """Read a FASTA file.
 
     Args:
@@ -57,6 +61,7 @@ def read_fasta(fn, replace_degenerate=False,
             represent gaps
         make_uppercase: when True, change all bases to be
             uppercase
+        replace_U: when True, change all 'U' bases to 'T'
 
     Returns:
         dict mapping the name of each sequence to the sequence
