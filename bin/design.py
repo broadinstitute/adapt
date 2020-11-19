@@ -5,10 +5,12 @@ import argparse
 from collections import defaultdict
 import logging
 import os
+import random
 import re
 import shutil
+import sys
 import tempfile
-import random
+
 import numpy as np
 
 from adapt import alignment
@@ -1274,5 +1276,20 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Handle missing positional arguments by printing a help message
+    if len(sys.argv) == 1:
+        # No arguments
+        parser.print_help()
+        sys.exit(1)
+    if len(sys.argv) == 2:
+        # Only one position argument (missing input type)
+        if args.search_cmd == 'sliding-window':
+            parser_sw.print_help()
+        if args.search_cmd == 'complete-targets':
+            parser_ct.print_help()
+        sys.exit(1)
+
+    # Setup the logger
     log.configure_logging(args.log_level)
+
     main(args)
