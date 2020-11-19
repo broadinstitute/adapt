@@ -10,7 +10,7 @@ ADAPT is a software package for designing sensitive and specific nucleic acid vi
 
 <br/>
 
-ADAPT's main objective is to design assays that maximize predicted detection activity, in expectation across a taxon's genomic diversity, subject to soft and hard constraints on the assay's complexity and specificity.
+ADAPT's main objective is to design assays that maximize predicted detection activity, in expectation over a taxon's genomic diversity, subject to soft and hard constraints on the assay's complexity and specificity.
 The output is a list of design options, ranked according to anticipated performance.
 ADAPT also supports a simpler objective function that minimizes a number of probes subject to detecting a specified fraction of known diversity.
 
@@ -36,8 +36,8 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
   * [Common options](#common-options)
   * [Output](#output)
 * [Examples](#examples)
-  * [Designing with sliding window against a single target](#designing-with-sliding-window-against-a-single-target)
-  * [Designing end-to-end against a single target](#designing-end-to-end-against-a-single-target)
+  * [Basic: designing with sliding window](#basic-designing-with-sliding-window)
+  * [Designing end-to-end with predictive model](#designing-end-to-end-with-predictive-model)
 * [Contributing](#contributing)
 * [Citation](#citation)
 * [License](#license)
@@ -299,47 +299,54 @@ Likewise, synthesized primer sequences should account for this.
 
 # Examples
 
-## Designing with sliding window against a single target
+## Basic: designing with sliding window
 
 This is the most simple example.
-The package includes an alignment of LASV sequences (S segment) from Sierra Leone.
-For example:
-```bash
-design.py sliding-window fasta examples/SLE_S.aligned.fasta -o guides.tsv -w 200 -gl 28 -gm 1 -gp 0.95
-```
-reads an alignment from `examples/SLE_S.aligned.fasta`.
+It does not download genomes, search for genomic regions to target, or use a predictive model; for these features, see the next example.
 
-From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest collection of guides that:
+The repository includes an alignment of Lassa virus sequences (S segment) from Sierra Leone.
+Run:
+```bash
+design.py sliding-window fasta examples/SLE_S.aligned.fasta -o probes.tsv -w 200 -gl 28 -gm 1 -gp 0.95
+```
+This uses the alignment in `examples/SLE_S.aligned.fasta`.
+
+From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest collection of probes that:
 * are all within the window
 * are 28 nt long (`-gl 28`)
-* capture 95% of all input sequences (`-gp 0.95`) tolerating up to 1 mismatch (`-gm 1`)
+* detect 95% of all input sequences (`-gp 0.95`), tolerating up to 1 mismatch (`-gm 1`)
 
-It outputs a file, `guides.tsv`, that contains constructed guide sequences.
+It outputs a file, `probes.tsv`, that contains the probe sequences for each window.
 See [Output](#output) above for a description of this file.
 
-## Designing end-to-end against a single target
+## Designing end-to-end with predictive model
 
-ADAPT can automatically download and curate sequences during design, and search efficiently over the space of genomic regions to find primers/amplicons as well as guides.
-For example:
+ADAPT can automatically download and curate sequences for its design, and search efficiently over possible genomic regions to find primers/amplicons as well as Cas13a guides.
+It identifies Cas13a guides using the pre-trained predictive model.
+
+Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 --obj minimize-guides -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
+design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
-downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
+This downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable.
 
-This designs primers and a minimal collection of guides within the amplicons they bind, such that:
+This designs primers and Cas13a guides within the amplicons they detect, such that:
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
-* guides detect 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`), and only counting as detecting a target if predicted to be highly active against the target (`--predict-activity-model-path`)
+* guides have maximal predicted detection activity, in expectation over genomic diversity (`--obj maximize-activity`) 
+* primers capture 95% of sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-pm 1`)
 
-It outputs a file, `guides.tsv.0`, that contains the best 10 design choices (`--best-n-targets 10`) as measured by a cost function.
+It outputs a file, `guides.tsv.0`, that contains the best 5 design choices (`--best-n-targets 5`) as measured by the objective function.
 See [Output](#output) above for a description of this file.
 
-This randomly selects 100 sequences (`--sample-seqs 100`) prior to design to speed the process for this example; the command should take about 10 minutes to run in full.
-You can set `--verbose` to obtain more detailed output.
+This example randomly selects 50 sequences (`--sample-seqs 50`) prior to design to speed the runtime in this example; the command should take about 20 minutes to run in full.
+Using `--verbose` provides detailed output and is usually recommended, but the output can be extensive.
 
 Note that this example does not account for taxon-specificity.
 
-To find guide sets that maximize expected activity, use `--obj maximize-activity` instead and remove `-gm` and `-gp`.
+To find minimal guide sets, use `--obj minimize-guides` instead and set `-gm` and `-gp`.
+With this objective, Cas13a guides are determined to detect a sequence if they (i) satisfy the number of mismatches specified with `-gm`; and (ii) are predicted by the model to be highly active in detecting the sequence; `-gm` can be sufficiently high to rely entirely on the predictive model.
+The output guides will detect a desired fraction of all genomes, as specified by `-gp`.
 
 # Contributing
 
