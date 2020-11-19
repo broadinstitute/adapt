@@ -1,12 +1,24 @@
 # ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 #### Activity-informed Design with All-inclusive Patrolling of Targets
 
-ADAPT is a software package for designing optimal nucleic acid diagnostics.
+ADAPT is a software package for designing sensitive and specific nucleic acid viral diagnostics.
 
-* **End-to-end**: ADAPT connects directly with publicly available genome databases, downloading and curating their data, so designs can be made rapidly and always account for the latest known microbial diversity.
-* **Comprehensive**: ADAPT optimally accounts for the full scope of known sequence diversity across input taxa, so designs are both minimal in size and effective against variable targets.
-* **Sensitive**: ADAPT can incorporate a predictive model of activity, so designs are predicted to be highly active against targets.
-* **Specific**: ADAPT enforces high specificity against set non-targeted taxa, so designs are more likely to be accurate in distinguishing between related taxa.
+* **Comprehensive**: ADAPT considers the full spectrum of known genomic diversity for targeted taxa, so designs are effective against variable targets. This is critical for many viral species.
+* **Sensitive**: ADAPT accepts predictive models of detection activity, so designs are predicted to be highly active against targets. It includes a pre-trained model of CRISPR-Cas13a detection activity, trained from ~19,000 guide-target pairs.
+* **Specific**: ADAPT enforces strict specificity, so designs can distinguish related species or lineages within a species. The approach accommodates G-U pairing, which greatly increases the chance of off-target hits in some applications.
+* **End-to-end**: ADAPT automatically downloads and curates data from genome databases, so it provides designs rapidly at scale. The input can be as simple as a species or other taxonomy in the form of an NCBI taxonomy identifier.
+
+<br/>
+
+ADAPT's main objective is to design assays that maximize predicted detection activity, in expectation across a taxon's genomic diversity, subject to soft and hard constraints on the assay's complexity and specificity.
+The output is a list of design options, ranked according to anticipated performance.
+ADAPT also supports a simpler objective function that minimizes a number of probes subject to detecting a specified fraction of known diversity.
+
+The software package includes a pre-trained model of CRISPR-Cas13a detection activity, and therefore it is directly suited to detection with Cas13a.
+ADAPT's output includes amplification primers, e.g., for use with the SHERLOCK platform.
+However, the framework and software are compatible with other diagnostic technologies given appropriate models.
+
+For more information, see the bioRxiv preprint describing and evaluating ADAPT.
 
 <br/>
 <br/>
