@@ -21,7 +21,6 @@ However, the framework and software are compatible with other diagnostic technol
 For more information, see the bioRxiv preprint describing and evaluating ADAPT.
 
 <br/>
-<br/>
 
 ### Table of contents
 
@@ -43,6 +42,7 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
   * [Contributing](#contributing)
   * [Citation](#citation)
   * [License](#license)
+  * [Related repositories](#related-repositories)
 <br/>
 
 # Setting up ADAPT
@@ -371,3 +371,10 @@ If you find ADAPT useful to your work, please cite our preprint as:
 ## License
 
 ADAPT is licensed under the terms of the [MIT license](./LICENSE).
+
+## Related repositories
+
+There are other repositories on GitHub associated with ADAPT:
+  * [adapt-seq-design](https://github.com/broadinstitute/adapt-seq-design): Predictive modeling library, datasets, training, and evaluation (applied to CRISPR-Cas13a).
+  * [adapt-analysis](https://github.com/broadinstitute/adapt-analysis): Analysis of ADAPT's designs and benchmarking its computational performance, as well as miscellaneous analyses for the ADAPT paper.
+  * [adapt-designs](https://github.com/broadinstitute/adapt-designs): Designs output by ADAPT, including all experimentally tested designs.
