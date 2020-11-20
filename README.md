@@ -38,9 +38,11 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
 * [Examples](#examples)
   * [Basic: designing with sliding window](#basic-designing-with-sliding-window)
   * [Designing end-to-end with predictive model](#designing-end-to-end-with-predictive-model)
-* [Contributing](#contributing)
-* [Citation](#citation)
-* [License](#license)
+* [Support and contributing](#support-and-contributing)
+  * [Questions](#questions)
+  * [Contributing](#contributing)
+  * [Citation](#citation)
+  * [License](#license)
 <br/>
 
 # Setting up ADAPT
@@ -348,21 +350,24 @@ To find minimal guide sets, use `--obj minimize-guides` instead and set `-gm` an
 With this objective, Cas13a guides are determined to detect a sequence if they (i) satisfy the number of mismatches specified with `-gm`; and (ii) are predicted by the model to be highly active in detecting the sequence; `-gm` can be sufficiently high to rely entirely on the predictive model.
 The output guides will detect a desired fraction of all genomes, as specified by `-gp`.
 
-# Contributing
+# Support and contributing
+
+## Questions
+
+If you have questions about ADAPT, please create an [issue](https://github.com/broadinstitute/adapt/issues).
+
+## Contributing
 
 We welcome contributions to ADAPT.
 This can be in the form of an [issue](https://github.com/broadinstitute/adapt/issues) or [pull request](https://github.com/broadinstitute/adapt/pulls).
 
-# Questions
+## Citation
 
-If you have questions about ADAPT, please create an [issue](https://github.com/broadinstitute/adapt/issues).
+ADAPT was started by Hayden Metsky, and is developed by Priya Pillai and Hayden.
 
-# Citation
-
-For details on how ADAPT works, please refer to our preprint on bioRxiv.
 If you find ADAPT useful to your work, please cite our preprint as:
   * **[CITATION HERE]**
 
-# License
+## License
 
 ADAPT is licensed under the terms of the [MIT license](./LICENSE).
