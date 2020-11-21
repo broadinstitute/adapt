@@ -29,6 +29,7 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
   * [Setting up a conda environment](#setting-up-a-conda-environment)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
+  * [Building a Docker Image](#running-on-docker)
 * [Using ADAPT](#using-adapt)
   * [Designing guides](#designing-guides)
   * [Objective](#objective)
@@ -99,7 +100,7 @@ pip install -e .
 ```
 Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
 
-If you want to be able to use AWS cloud features, replace the last line with the following:
+If you want to be able to use AWS Cloud features, replace the last line with the following:
 ```bash
 pip install -e ".[AWS]"
 ```
@@ -111,6 +112,19 @@ To execute all unit tests, run:
 ```bash
 python -m unittest discover
 ```
+
+## Building a Docker Image
+_Note: This section is optional, but may be useful for more advanced users or developers._
+
+If you would like to run ADAPT using a Docker container, you will need to install [Docker Desktop](https://docs.docker.com/get-docker/), then, to build a Docker image with ADAPT installed, run:
+```bash
+docker build . -t adapt
+```
+If you would like to build a Docker image with ADAPT's AWS Cloud features, also run:
+```bash
+docker build . -t adaptcloud -f ./cloud.Dockerfile
+```
+More details about running ADAPT in a Docker container can be found in `Dockerfile` and `cloud.Dockerfile`.
 
 # Using ADAPT
 
@@ -378,3 +392,4 @@ There are other repositories on GitHub associated with ADAPT:
   * [adapt-seq-design](https://github.com/broadinstitute/adapt-seq-design): Predictive modeling library, datasets, training, and evaluation (applied to CRISPR-Cas13a).
   * [adapt-analysis](https://github.com/broadinstitute/adapt-analysis): Analysis of ADAPT's designs and benchmarking its computational performance, as well as miscellaneous analyses for the ADAPT paper.
   * [adapt-designs](https://github.com/broadinstitute/adapt-designs): Designs output by ADAPT, including all experimentally tested designs.
+  * [adapt-pipes](https://github.com/broadinstitute/adapt-pipes): Workflows for running ADAPT on the cloud, tailored for AWS.
