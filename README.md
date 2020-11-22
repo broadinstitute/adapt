@@ -237,10 +237,6 @@ That is, the guides should not hit sequences in these taxonomies, as measured by
 * `--require-flanking5 REQUIRE_FLANKING5` / `--require-flanking3 REQUIRE_FLANKING3`: Require the given sequence on the 5' (REQUIRE_FLANKING5) and/or 3' (REQUIRE_FLANKING3) protospacer flanking site (PFS) for each designed guide.
 This tolerates ambiguity in the sequence (e.g., 'H' requires 'A', 'C', or 'T').
 Note that this is the 5'/3' end in the target sequence (not the spacer sequence).
-* `--required-guides REQUIRED_GUIDES`: Ensure that the guides provided in REQUIRED_GUIDES are included in the design, and perform the design with them already included.
-See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GUIDES file format.
-* `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
-* `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
 
 When SEARCH-TYPE is `complete-targets`, ADAPT performs a brand and bound search to find a diverse collection of design options, each containing primers and guides.
 Below are some additional arguments when SEARCH-TYPE is `complete-targets`.
