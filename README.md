@@ -31,7 +31,7 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
   * [Testing](#testing)
   * [Building a Docker Image](#running-on-docker)
 * [Using ADAPT](#using-adapt)
-  * [Designing guides](#designing-guides)
+  * [Designing assays](#designing-assays)
   * [Objective](#objective)
   * [Common options](#common-options)
   * [Output](#output)
@@ -56,7 +56,7 @@ ADAPT requires:
 * [SciPy](https://www.scipy.org) == 1.4.1
 * [TensorFlow](https://www.tensorflow.org) &gt;= 2.3.0
 
-ADAPT with AWS cloud features requires:
+Using ADAPT with AWS cloud features additionally requires:
 * [Boto3](https://aws.amazon.com/sdk-for-python/) &gt;= 1.14.54
 * [Botocore](https://botocore.amazonaws.com/v1/documentation/api/latest/index.html) &gt;= 1.17.54
 
@@ -128,9 +128,12 @@ More details about running ADAPT in a Docker container can be found in `Dockerfi
 
 # Using ADAPT
 
-## Designing guides
+## Designing assays
 
-The main program to design guides is [`design.py`](./bin/design.py).
+The main program for designing assays is [`design.py`](./bin/design.py).
+
+Below, we refer to *guides* in reference to our pre-trained model and testing for CRISPR-Cas13a guides.
+However, more generally, they can be thought of as *probes* to encompass other diagnostic technologies.
 
 [`design.py`](./bin/design.py) requires two subcommands:
 ```bash
@@ -143,7 +146,7 @@ SEARCH-TYPE is one of:
 Output the best _N_ design options, where each option contains primers and guides.
 The _N_ options should represent a diverse selection of genomic regions.
 There is no set length for the region.
-ADAPT uses a beam search to prune options.
+ADAPT uses a branch and bound search to prune options.
 * `sliding-window`: Search for guides within a sliding window of a fixed size, and output an optimal guide set for each window.
 
 INPUT-TYPE is one of:
@@ -239,7 +242,7 @@ See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GU
 * `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
 * `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
 
-When SEARCH-TYPE is `complete-targets`, ADAPT performs a beam search to find a diverse collection of design options, each containing primers and guides.
+When SEARCH-TYPE is `complete-targets`, ADAPT performs a brand and bound search to find a diverse collection of design options, each containing primers and guides.
 Below are some additional arguments when SEARCH-TYPE is `complete-targets`.
 
 * `-pl PRIMER_LENGTH`: Design primers to be PRIMER_LENGTH nt long.
