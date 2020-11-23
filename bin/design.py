@@ -315,8 +315,6 @@ def prepare_alignments(args):
     out_tsv = []
     design_for = []
     specific_against_metadata_accs = []
-    # Keep track of what taxa have been used how many times
-    tax_used = {}
     for label, tax_id, segment, ref_accs, meta_filt, meta_filt_against in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -359,15 +357,9 @@ def prepare_alignments(args):
             meta_filt=meta_filt, 
             meta_filt_against=meta_filt_against)
 
-        if tax_id in tax_used:
-            tax_used[tax_id] += 1
-        else:
-            tax_used[tax_id] = 0
-        tax_id_label = str(tax_id) + '.' + str(tax_used[tax_id])
-
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
-            taxid_for_fasta += [tax_id_label]
+            taxid_for_fasta += [tax_id]
             specific_against_metadata_accs.append(specific_against_metadata_acc)
             if taxs_to_design_for is None:
                 design_for += [True]
@@ -477,15 +469,21 @@ def design_for_id(args):
     # Note that although these are being place in alns, they may not
     # be actual alignments (they can be unaligned sequences)
     # If specific-against-metadata-filter is specified, add metadata filtered accessions to alns
-    if args.specific_against_metadata_accs is not None:
-        for i in range(num_aln_for_design):
-            logger.info(("Fetching %d sequences within taxon %s to be specific against"), 
+    # and store what index it is located at in alns. Also, store start and end indices of
+    # specific_against_metadata sequence lists
+    specific_against_metadata_indices = {}
+    specific_against_metadata_start = len(alns)
+    for i in range(num_aln_for_design):
+        if len(args.specific_against_metadata_accs[i]) > 0:
+            logger.info(("Fetching %d sequences within taxon %d to be specific against"), 
                 len(args.specific_against_metadata_accs[i]), args.taxid_for_fasta[i])
             seqs = prepare_alignment.fetch_sequences_for_acc_list(list(
                 args.specific_against_metadata_accs[i]))
             seqs_list = alignment.SequenceList(list(seqs.values()))
             alns += [seqs_list]
-    # Also add the specific_against_fastas sequences into alns 
+            specific_against_metadata_indices[i] = len(alns) - 1
+    specific_against_metadata_end = len(alns)
+    # Also add the specific_against_fastas sequences into alns
     for specific_against_fasta in args.specific_against_fastas:
         seqs = seq_io.read_fasta(specific_against_fasta)
         seqs_list = alignment.SequenceList(list(seqs.values()))
@@ -505,7 +503,7 @@ def design_for_id(args):
 
     specific_against_exists = ((len(args.specific_against_fastas) > 0 or
             args.specific_against_taxa is not None) or 
-            args.specific_against_metadata_accs is not None)
+            (specific_against_metadata_end - specific_against_metadata_start) > 0)
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
         parse_required_guides_and_blacklist(args)
@@ -556,7 +554,7 @@ def design_for_id(args):
     for i in range(num_aln_for_design):
         taxid = args.taxid_for_fasta[i]
         logger.info(("Finding guides for alignment %d (of %d), which is in "
-            "taxon %s"), i + 1, num_aln_for_design, taxid)
+            "taxon %d"), i + 1, num_aln_for_design, taxid)
 
         if args.design_for is not None and args.design_for[i] is False:
             logger.info("Skipping design for this alignment")
@@ -569,6 +567,8 @@ def design_for_id(args):
         required_guides_for_aln = required_guides[i]
         blacklisted_ranges_for_aln = blacklisted_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
+        specific_against_metadata_index = specific_against_metadata_indices[i] \
+            if i in specific_against_metadata_indices else None
 
         if aq is not None:
             guide_is_specific = aq.guide_is_specific_to_alns_fn(
@@ -597,8 +597,18 @@ def design_for_id(args):
             for j in range(num_aln_for_design):
                 if j in alns_in_same_taxon:
                     aq.mask_aln(j)
-                elif args.specific_against_metadata_accs is not None:
-                    aq.mask_aln(j + num_aln_for_design)
+                    logger.info(("Masking alignment %d as it is taxon %d"), 
+                        j + 1, taxid)
+            # Also mask any specific against metadata sequence lists that do not 
+            # match the one for this alignment
+            if specific_against_metadata_index is not None:
+                logger.info(("Masking all sequence lists for specificity except the one "
+                    "for alignment %d (taxon %d)"), i + 1, taxid)
+
+            for j in range(specific_against_metadata_start, specific_against_metadata_end):
+                if specific_against_metadata_index != j:
+                    aq.mask_aln(specific_against_metadata_index)
+
             # Also mask taxonomies to ignore when determining specificity
             # of taxid
             if taxid in tax_ignore:
