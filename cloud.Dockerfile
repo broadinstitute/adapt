@@ -5,13 +5,13 @@ FROM adapt
 #   docker build . -t adaptcloud -f ./cloud.Dockerfile
 #
 # to run:
-#   docker run --rm "design.py subcommands"
+#   docker run --rm [IMAGE-ID] "[COMMAND]"
 #
 # to run with memo:
-#   docker run --rm -v /path/to/memo/on/host:/memo <image_ID> "design.py subcommands"
+#   docker run --rm -v /path/to/memo/on/host:/memo [IMAGE-ID] "[COMMAND]"
 #
 # to run interactively:
-#   docker run --rm -it <image_ID>
+#   docker run --rm -it [IMAGE-ID]
 #
 
 COPY ./requirements-with-aws.txt .

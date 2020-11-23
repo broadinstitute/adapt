@@ -29,7 +29,7 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
   * [Setting up a conda environment](#setting-up-a-conda-environment)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
-  * [Building a Docker Image](#running-on-docker)
+  * [Running on Docker](#running-on-docker)
 * [Using ADAPT](#using-adapt)
   * [Designing assays](#designing-assays)
   * [Objective](#objective)
@@ -113,18 +113,44 @@ To execute all unit tests, run:
 python -m unittest discover
 ```
 
-## Building a Docker Image
-_Note: This section is optional, but may be useful for more advanced users or developers._
+## Running on Docker
+_Note: This section is optional, but may be useful for more advanced users or developers. You will need to install [Docker Desktop](https://docs.docker.com/get-docker/) to run on Docker._
 
-If you would like to run ADAPT using a Docker container, you will need to install [Docker Desktop](https://docs.docker.com/get-docker/), then, to build a Docker image with ADAPT installed, run:
+If you would like to run ADAPT using a Docker container, you may use one of our pre-built images (not yet released; coming soon) or build your own locally.
+
+### Getting a Docker Image
+
+To build a Docker image locally with ADAPT installed, run:
 ```bash
 docker build . -t adapt
 ```
-If you would like to build a Docker image with ADAPT's AWS Cloud features, also run:
+If you would like to build a Docker image locally with ADAPT's AWS Cloud features, also run:
 ```bash
 docker build . -t adaptcloud -f ./cloud.Dockerfile
 ```
-More details about running ADAPT in a Docker container can be found in `Dockerfile` and `cloud.Dockerfile`.
+
+If you would like to use one of our pre-built images, run:
+```bash
+docker pull [REGISTRY-PATH]
+```
+where `[REGISTRY-PATH]` is the URL to the image excluding `https://`.
+
+### Running in a Docker Container
+
+To run ADAPT on a Docker container, run:
+```bash
+docker run --rm [IMAGE-ID] "[COMMAND]"
+```
+To run with a local directory serving as the memo, run:
+```bash
+docker run --rm -v /path/to/memo/on/host:/memo [IMAGE-ID] "[COMMAND]"
+```
+To run the container interactively (opening a command line to the container), run:
+```bash
+docker run --rm -it [IMAGE-ID]
+```
+
+If you built a Docker image locally, `[IMAGE-ID]` is `adapt`/`adaptcloud`. If you are using one of our pre-built images, `[IMAGE-ID]` is the same as the `[REGISTRY-PATH]`.
 
 # Using ADAPT
 
