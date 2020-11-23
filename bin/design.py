@@ -764,6 +764,7 @@ def main(args):
                 "FASTAs"))
         args.design_for = None
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
+        args.specific_against_metadata_accs = [[] for _ in range(len(args.in_fasta))]
     else:
         raise Exception("Unknown input type subcommand '%s'" % args.input_type)
 
