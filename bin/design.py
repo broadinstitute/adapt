@@ -870,13 +870,13 @@ if __name__ == "__main__":
 
     # Differential identification
     base_subparser.add_argument('--id-m', dest="diff_id_mismatches",
-        type=int, default=2,
+        type=int, default=4,
         help=("Allow for this number of mismatches when determining whether "
               "a guide 'hits' a sequence in a group/taxon other than the "
               "for which it is being designed; higher values correspond to more "
               "specificity."))
     base_subparser.add_argument('--id-frac', dest="diff_id_frac",
-        type=float, default=0.05,
+        type=float, default=0.01,
         help=("Decide that a guide 'hits' a group/taxon if it 'hits' a "
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity."))
