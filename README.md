@@ -118,7 +118,7 @@ python -m unittest discover
 ```
 
 ## Running on Docker
-_Note: This section is optional, but may be useful for more advanced users or developers. You will need to install [Docker Desktop](https://docs.docker.com/get-docker/) to run on Docker._
+_Note: This section is optional, but may be useful for more advanced users or developers. You will need to install [Docker](https://docs.docker.com/get-docker/)._
 
 If you would like to run ADAPT using a Docker container rather than installing it, you may use one of our pre-built ADAPT images.
 These have not been released yet, but will be coming soon.
@@ -269,7 +269,7 @@ That is, the guides should not hit sequences in these taxonomies, as measured by
 
 ## Searching for complete targets
 
-When SEARCH-TYPE is `complete-targets`, ADAPT performs a brand and bound search to find a collection of assay design options.
+When SEARCH-TYPE is `complete-targets`, ADAPT performs a branch and bound search to find a collection of assay design options.
 It finds the best _N_ design options for a specified _N_.
 Each design option represents a genomic region containing primer pairs and guides between them.
 There is no set length for the region.
