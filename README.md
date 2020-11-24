@@ -20,8 +20,6 @@ However, the framework and software are compatible with other diagnostic technol
 
 For more information, see the bioRxiv preprint describing and evaluating ADAPT.
 
-<br/>
-
 ### Table of contents
 
 * [Setting up ADAPT](#setting-up-adapt)
@@ -31,9 +29,13 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
   * [Testing](#testing)
   * [Running on Docker](#running-on-docker)
 * [Using ADAPT](#using-adapt)
-  * [Designing assays](#designing-assays)
-  * [Objective](#objective)
-  * [Common options](#common-options)
+  * [Overview](#overview)
+  * [Required subcommands](#required-subcommands)
+  * [Specifying the objective](#specifying-the-objective)
+  * [Enforcing specificity](#enforcing-specificity)
+  * [Searching for complete targets](#searching-for-complete-targets)
+  * [Automatically downloading and curating data](#automatically-downloading-and-curating-data)
+  * [Miscellaneous key arguments](#miscellaneous-key-arguments)
   * [Output](#output)
 * [Examples](#examples)
   * [Basic: designing with sliding window](#basic-designing-within-sliding-window)
