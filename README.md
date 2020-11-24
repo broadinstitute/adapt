@@ -216,7 +216,7 @@ The value depends on the output values of the activity model and reflects a tole
 (Default: 'random-greedy'.)
 
 Note that, when the objective is to maximize activity, this objective requires a predictive model of activity and thus `--predict-activity-model-path` should be specified (details in [Miscellaneous key arguments](#miscellaneous-key-arguments)).
-If you wish to use this objective but do not have access to such a model, see the help message for the argument `--use-simple-binary-activity-prediction`.
+If you wish to use this objective but cannot use our pre-trained Cas13a model nor another model, see the help message for the argument `--use-simple-binary-activity-prediction`.
 
 ### Objective: minimizing complexity
 
