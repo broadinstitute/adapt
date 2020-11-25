@@ -1,26 +1,29 @@
 # ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 #### Activity-informed Design with All-inclusive Patrolling of Targets
 
-ADAPT efficiently designs sensitive and specific nucleic acid diagnostics for viruses.
+ADAPT efficiently designs activity-informed nucleic acid diagnostics for viruses.
 
-* **Comprehensive**: Designs are effective against variable targets because ADAPT considers the full spectrum of their known genomic diversity.
-This is critical for many viral species.
-* **Sensitive**: Designs are predicted to be highly active against targets because ADAPT leverages predictive models of detection activity.
-ADAPT includes a pre-trained model of CRISPR-Cas13a detection activity, trained from ~19,000 guide-target pairs.
-* **Specific**: Designs can distinguish related species or lineages within a species because ADAPT enforces strict specificity.
-The approach accommodates G-U pairing, which increases the chance of off-target hits in RNA applications.
-* **End-to-end**: Designs are made rapidly at scale because ADAPT automatically downloads and curates data from genome databases.
-The input can be as simple as a species or other taxonomy in the form of an NCBI taxonomy identifier.
+In particular, ADAPT designs assays with maximal predicted detection activity, in expectation over a virus's genomic diversity, subject to soft and hard constraints on the assay's complexity and specificity.
+ADAPT's designs are:
 
-ADAPT aims to design assays that maximize predicted detection activity, in expectation over a taxon's genomic diversity, subject to soft and hard constraints on the assay's complexity and specificity.
-The output is a ranked list of design options.
-ADAPT also supports a simpler objective function that minimizes a number of probes subject to detecting a fraction of known diversity.
+* **Comprehensive**. Designs are effective against variable targets because ADAPT considers the full spectrum of their known genomic diversity.
+* **Sensitive**. ADAPT leverages predictive models of detection activity.
+It includes a pre-trained model of CRISPR-Cas13a detection activity, trained from ~19,000 guide-target pairs.
+* **Specific**. Designs can distinguish related species or lineages within a species.
+The approach accommodates G-U pairing, which is important in RNA applications.
+* **End-to-end**. ADAPT automatically downloads and curates data from public databases to provide designs rapidly at scale.
+The input can be as simple as a species or taxonomy in the form of an NCBI taxonomy identifier.
 
-ADAPT includes a pre-trained model of CRISPR-Cas13a guide detection activity; therefore, ADAPT is directly suited to detection with Cas13a.
+<br/>
+
+ADAPT outputs a list of assay options ranked by predicted performance.
+In addition to its objective that maximizes expected activity, ADAPT supports a simpler objective that minimizes the number of probes subject to detecting a specified fraction of diversity.
+
+ADAPT includes a pre-trained model that predicts CRISPR-Cas13a guide detection activity, so ADAPT is directly suited to detection with Cas13a.
 ADAPT's output also includes amplification primers, e.g., for use with the SHERLOCK platform.
-However, the framework and software are compatible with other diagnostic technologies given appropriate models.
+The framework and software are compatible with other nucleic acid technologies given appropriate models.
 
-For more information, see the bioRxiv preprint describing and evaluating ADAPT.
+For more information, see our bioRxiv preprint that describes ADAPT and evaluates its designs experimentally.
 
 ### Table of contents
 
@@ -40,7 +43,7 @@ For more information, see the bioRxiv preprint describing and evaluating ADAPT.
   * [Miscellaneous key arguments](#miscellaneous-key-arguments)
   * [Output](#output)
 * [Examples](#examples)
-  * [Basic: designing with sliding window](#basic-designing-within-sliding-window)
+  * [Basic: designing within sliding window](#basic-designing-within-sliding-window)
   * [Designing end-to-end with predictive model](#designing-end-to-end-with-predictive-model)
 * [Support and contributing](#support-and-contributing)
   * [Questions](#questions)
