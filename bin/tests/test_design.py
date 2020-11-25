@@ -31,10 +31,10 @@ class TestDesignFasta(unittest.TestCase):
         # self.seqs["genome_2"] = "AAATA"
         # self.seqs["genome_3"] = "GGATA"
         # self.seqs["genome_4"] = "GGGAA"
-        self.seqs["genome_1"] = "AACTA-"
-        self.seqs["genome_2"] = "AAACT-"
-        self.seqs["genome_3"] = "GGCTA-"
-        self.seqs["genome_4"] = "GGCTT-"
+        self.seqs["genome_1"] = "AACTA"
+        self.seqs["genome_2"] = "AAACT"
+        self.seqs["genome_3"] = "GGCTA"
+        self.seqs["genome_4"] = "GGCTT"
 
         seq_io.write_fasta(self.seqs, self.fasta.name)
 
@@ -82,9 +82,9 @@ class TestDesignFasta(unittest.TestCase):
         args = design.argv_to_args(argv)
         print(argv)
         design.run(args)
-        with open(self.output.name) as f:
-            for line in f:
-                print(line)
+        # with open(self.output.name) as f:
+        #     for line in f:
+        #         print(line)
         #self.check_results(self.output.name, expected)
 
     def tearDown(self):
@@ -145,6 +145,6 @@ def baseArgv(search_type='sliding-window', input_type='fasta',
     elif objective =='maximize-activity':
         argv.extend(['--use-simple-binary-activity-prediction', '-gm', '1'])
 
-    argv.extend(['--obj', objective, '--seed', '294', '--debug'])
+    argv.extend(['--obj', objective, '--seed', '294'])
 
     return argv
