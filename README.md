@@ -171,7 +171,7 @@ This is the much simpler search type and can be helpful when getting started.
 INPUT-TYPE is one of:
 
 * `fasta`: The input is one or more FASTA files, each containing aligned sequences for a taxon.
-If more than one file is provided, the search finds designs that perform differential identification across the taxa.
+If more than one file is provided, the search finds taxon-specific designs meant for differential identification of the taxa.
 * `auto-from-args`: The input is a single NCBI taxonomy ID, and related information, provided as command-line arguments.
 This fetches sequences for the taxon, then curates, clusters and aligns the sequences, and finally uses the generated alignment as input for design.
 More information is in [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
@@ -189,15 +189,15 @@ These arguments are defined below for each INPUT-TYPE.
 ```bash
 design.py [SEARCH-TYPE] fasta [fasta] [fasta ...] -o [out-tsv] [out-tsv ...]
 ```
-where `[fasta]` is a path to an input FASTA file and `[out-tsv]` specifies where to write the output TSV file.
-If there are more than one space-separated FASTA, ADAPT designs with specificity across them; there must be an equivalent number of output TSV files, where each gives designs for its corresponding FASTA.
+where `[fasta]` is a path to an aligned FASTA file for a taxon and `[out-tsv]` specifies where to write the output TSV file.
+If there are more than one space-separated FASTA, there must be an equivalent number of output TSV files; the _i_'th output gives designs for the _i_'th input FASTA.
 
 ##### If INPUT-TYPE is `auto-from-args`:
 
 ```bash
 design.py [SEARCH-TYPE] auto-from-args [taxid] [segment] [refs] [out-tsv]
 ```
-where `[taxid]` is an NCBI [taxonomy ID](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi), `[segment]` is a segment label (e.g., 'S') or 'None' if unsegmented, `[refs]` is one or more comma-separated reference sequences for the taxon, and `[out-tsv]` specifies where to write the output TSV file.
+where `[taxid]` is an NCBI [taxonomy ID](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi), `[segment]` is a segment label (e.g., 'S') or 'None' if unsegmented, `[refs]` is one or more comma-separated accessions of reference sequences for the taxon, and `[out-tsv]` specifies where to write the output TSV file.
 
 ##### If INPUT-TYPE is `auto-from-file`:
 
