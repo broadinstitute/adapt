@@ -177,7 +177,7 @@ This fetches sequences for the taxon, then curates, clusters and aligns the sequ
 More information is in [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
 * `auto-from-file`: The input is a file containing a list of taxonomy IDs and related information.
 This operates like `auto-from-args`, except ADAPT designs with specificity across the input taxa using a single index for evaluating specificity (as opposed to having to build it separately for each taxon).
-More information is [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
+More information is in [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
 
 ### Positional arguments
 
