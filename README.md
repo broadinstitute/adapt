@@ -1,17 +1,29 @@
 # ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-#### Adaptive Design by Astutely Patrolling Targets
+#### Activity-informed Design with All-inclusive Patrolling of Targets
 
-ADAPT is a software package for designing optimal nucleic acid diagnostics.
+ADAPT efficiently designs activity-informed nucleic acid diagnostics for viruses.
 
-* **End-to-end**: ADAPT connects directly with publicly available genome databases, downloading and curating their data, so designs can be made rapidly and always account for the latest known microbial diversity.
-* **Comprehensive**: ADAPT optimally accounts for the full scope of known sequence diversity across input taxa, so designs are both minimal in size and effective against variable targets.
-* **Sensitive**: ADAPT can incorporate a predictive model of activity, so designs are predicted to be highly active against targets.
-* **Specific**: ADAPT enforces high specificity against set non-targeted taxa, so designs are more likely to be accurate in distinguishing between related taxa.
+In particular, ADAPT designs assays with maximal predicted detection activity, in expectation over a virus's genomic diversity, subject to soft and hard constraints on the assay's complexity and specificity.
+ADAPT's designs are:
 
-The methods and software are not yet published.
-However, the problems share some similarity with the problems solved by CATCH, which is described in [_Nature Biotechnology_](https://www.nature.com/articles/s41587-018-0006-x) and available publicly on [GitHub](https://github.com/broadinstitute/catch).
+* **Comprehensive**. Designs are effective against variable targets because ADAPT considers the full spectrum of their known genomic diversity.
+* **Sensitive**. ADAPT leverages predictive models of detection activity.
+It includes a pre-trained model of CRISPR-Cas13a detection activity, trained from ~19,000 guide-target pairs.
+* **Specific**. Designs can distinguish related species or lineages within a species.
+The approach accommodates G-U pairing, which is important in RNA applications.
+* **End-to-end**. ADAPT automatically downloads and curates data from public databases to provide designs rapidly at scale.
+The input can be as simple as a species or taxonomy in the form of an NCBI taxonomy identifier.
+
 <br/>
-<br/>
+
+ADAPT outputs a list of assay options ranked by predicted performance.
+In addition to its objective that maximizes expected activity, ADAPT supports a simpler objective that minimizes the number of probes subject to detecting a specified fraction of diversity.
+
+ADAPT includes a pre-trained model that predicts CRISPR-Cas13a guide detection activity, so ADAPT is directly suited to detection with Cas13a.
+ADAPT's output also includes amplification primers, e.g., for use with the SHERLOCK platform.
+The framework and software are compatible with other nucleic acid technologies given appropriate models.
+
+For more information, see our bioRxiv preprint that describes ADAPT and evaluates its designs experimentally.
 
 ### Table of contents
 
@@ -20,17 +32,25 @@ However, the problems share some similarity with the problems solved by CATCH, w
   * [Setting up a conda environment](#setting-up-a-conda-environment)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
+  * [Running on Docker](#running-on-docker)
 * [Using ADAPT](#using-adapt)
-  * [Designing guides](#designing-guides)
-  * [Objective](#objective)
-  * [Common options](#common-options)
+  * [Overview](#overview)
+  * [Required subcommands](#required-subcommands)
+  * [Specifying the objective](#specifying-the-objective)
+  * [Enforcing specificity](#enforcing-specificity)
+  * [Searching for complete targets](#searching-for-complete-targets)
+  * [Automatically downloading and curating data](#automatically-downloading-and-curating-data)
+  * [Miscellaneous key arguments](#miscellaneous-key-arguments)
   * [Output](#output)
 * [Examples](#examples)
-  * [Designing with sliding window against a single target](#designing-with-sliding-window-against-a-single-target)
-  * [Designing end-to-end against a single target](#designing-end-to-end-against-a-single-target)
-* [Contributing](#contributing)
-* [Citation](#citation)
-* [License](#license)
+  * [Basic: designing within sliding window](#basic-designing-within-sliding-window)
+  * [Designing end-to-end with predictive model](#designing-end-to-end-with-predictive-model)
+* [Support and contributing](#support-and-contributing)
+  * [Questions](#questions)
+  * [Contributing](#contributing)
+  * [Citation](#citation)
+  * [License](#license)
+  * [Related repositories](#related-repositories)
 <br/>
 
 # Setting up ADAPT
@@ -38,12 +58,12 @@ However, the problems share some similarity with the problems solved by CATCH, w
 ## Dependencies
 
 ADAPT requires:
-* [Python](https://www.python.org) &gt;= 3.8
+* [Python](https://www.python.org) &gt;= 3.8.0
 * [NumPy](http://www.numpy.org) &gt;= 1.16.0, &lt; 1.19.0
 * [SciPy](https://www.scipy.org) == 1.4.1
 * [TensorFlow](https://www.tensorflow.org) &gt;= 2.3.0
 
-ADAPT with AWS cloud features requires:
+Using ADAPT with AWS cloud features additionally requires:
 * [Boto3](https://aws.amazon.com/sdk-for-python/) &gt;= 1.14.54
 * [Botocore](https://botocore.amazonaws.com/v1/documentation/api/latest/index.html) &gt;= 1.17.54
 
@@ -87,7 +107,7 @@ pip install -e .
 ```
 Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
 
-If you want to be able to use AWS cloud features, replace the last line with the following:
+If you want to be able to use AWS cloud features through ADAPT, replace the last line with the following:
 ```bash
 pip install -e ".[AWS]"
 ```
@@ -95,256 +115,406 @@ pip install -e ".[AWS]"
 ## Testing
 
 The package uses Python's `unittest` framework.
-To execute all unit tests, run:
+To execute all tests, run:
 ```bash
 python -m unittest discover
 ```
 
+## Running on Docker
+_Note: This section is optional, but may be useful for more advanced users or developers. You will need to install [Docker](https://docs.docker.com/get-docker/)._
+
+If you would like to run ADAPT using a Docker container rather than installing it, you may use one of our pre-built ADAPT images.
+These have not been released yet, but will be coming soon.
+
+To pull our Docker image to your computer, run:
+```bash
+docker pull [IMAGE-ID]
+```
+where `[IMAGE-ID]` is the URL to the image excluding `https://`.
+
+To run ADAPT on a Docker container, run:
+```bash
+docker run --rm [IMAGE-ID] "[COMMAND]"
+```
+To run with ADAPT memoizing to a local directory, run:
+```bash
+docker run --rm -v /path/to/memo/on/host:/memo [IMAGE-ID] "[COMMAND]"
+```
+To run the container interactively (opening a command line to the container), run:
+```bash
+docker run --rm -it [IMAGE-ID]
+```
+
 # Using ADAPT
 
-## Designing guides
+## Overview
 
-The main program to design guides is [`design.py`](./bin/design.py).
+The main program for designing assays is [`design.py`](./bin/design.py).
+
+Below, we refer to *guides* in reference to our pre-trained model for CRISPR-Cas13a guides and our testing of ADAPT's designs with Cas13a.
+More generally, *guides* can be thought of as *probes* to encompass other diagnostic technologies.
 
 [`design.py`](./bin/design.py) requires two subcommands:
 ```bash
 design.py [SEARCH-TYPE] [INPUT-TYPE] ...
 ```
 
+## Required subcommands
+
 SEARCH-TYPE is one of:
 
-* `complete-targets`: Search for primer pairs and guides between them.
-Output the best _N_ design options, where each option contains primers and guides.
-The _N_ options should represent a diverse selection of genomic regions.
-There is no set length for the region.
-ADAPT uses a beam search to prune options.
-* `sliding-window`: Search for guides within a sliding window of a fixed size, and output an optimal guide set for each window.
+* `complete-targets`: Search for the best assay options, each containing primer pairs and guides between them.
+This is usually our recommended search type.
+More information is in [Searching for complete targets](#searching-for-complete-targets).
+(Example [here](#designing-end-to-end-with-predictive-model).)
+* `sliding-window`: Search for guides within a sliding window of a fixed length, and output an optimal guide set for each window.
+This is the much simpler search type and can be helpful when getting started.
+(Example [here](#basic-designing-with-sliding-window).)
 
 INPUT-TYPE is one of:
 
 * `fasta`: The input is one or more FASTA files, each containing aligned sequences for a taxon.
-If more than one file is provided, the search performs differential identification across the taxa.
-* `auto-from-file`: The input is a file containing a list of taxon IDs and related information.
-This fetches sequences for those taxa, then curates, clusters and aligns the sequences for each taxon, and finally uses the generated alignments as input for design.
-The search finds guides for differential identification across the taxa.
-* `auto-from-args`: The input is a single taxonomic ID, and related information, provided as command-line arguments.
+If more than one file is provided, the search finds taxon-specific designs meant for differential identification of the taxa.
+* `auto-from-args`: The input is a single NCBI taxonomy ID, and related information, provided as command-line arguments.
 This fetches sequences for the taxon, then curates, clusters and aligns the sequences, and finally uses the generated alignment as input for design.
+More information is in [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
+* `auto-from-file`: The input is a file containing a list of taxonomy IDs and related information.
+This operates like `auto-from-args`, except ADAPT designs with specificity across the input taxa using a single index for evaluating specificity (as opposed to having to build it separately for each taxon).
+More information is in [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
 
-To see details on all the arguments to use for a particular choice of subcommands, run:
+### Positional arguments
+
+The positional arguments &mdash; which specify required input to ADAPT &mdash; depend on the INPUT-TYPE.
+These arguments are defined below for each INPUT-TYPE.
+
+##### If INPUT-TYPE is `fasta`:
+
+```bash
+design.py [SEARCH-TYPE] fasta [fasta] [fasta ...] -o [out-tsv] [out-tsv ...]
+```
+where `[fasta]` is a path to an aligned FASTA file for a taxon and `[out-tsv]` specifies where to write the output TSV file.
+If there are more than one space-separated FASTA, there must be an equivalent number of output TSV files; the _i_'th output gives designs for the _i_'th input FASTA.
+
+##### If INPUT-TYPE is `auto-from-args`:
+
+```bash
+design.py [SEARCH-TYPE] auto-from-args [taxid] [segment] [out-tsv]
+```
+where `[taxid]` is an NCBI [taxonomy ID](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi), `[segment]` is a segment label (e.g., 'S') or 'None' if unsegmented, and `[out-tsv]` specifies where to write the output TSV file.
+
+##### If INPUT-TYPE is `auto-from-file`:
+
+```bash
+design.py [SEARCH-TYPE] auto-from-file [in-tsv] [out-dir]
+```
+where `[in-tsv]` is a path to a file specifying the input taxonomies (run `design.py [SEARCH-TYPE] auto-from-file --help` for details) and `[out-dir]` specifies a directory in which to write the outputs.
+
+### Details on all arguments
+
+To see details on all the arguments available, run
 ```bash
 design.py [SEARCH-TYPE] [INPUT-TYPE] --help
 ```
-This includes required positional arguments for each choice of subcommands.
+with the particular choice of subcommands substituted in for `[SEARCH-TYPE]` and `[INPUT-TYPE]`.
 
-## Objective
+## Specifying the objective
 
-ADAPT supports two objective functions, specified using the `--obj` argument, to identify guide sets:
+ADAPT supports two objective functions, specified using the `--obj` argument:
 
-* Minimize number of guides (`--obj minimize-guides`): Minimize the number of guides in the guide set subject to constraints on coverage of the input sequences.
-* Maximize activity (`--obj maximize-activity`): Maximize an expected activity for detecting the input sequences subject to soft and hard constraints on the size of the guide set.
+* Maximize activity (`--obj maximize-activity`)
+* Minimize complexity (`--obj minimize-guides`)
 
-When the objective is to minimize the number of guides in the guide sets, the following arguments are relevant:
+Details on each are below.
 
-* `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide hybridizes to a sequence.
-(Default: 0.)
-* `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are hit by the guides.
-(Default: 1.0.)
-* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a separate desired COVER_FRAC for each year.
-See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
-Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
-* `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
-THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
-Higher values have higher precision and less recall.
-THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
-Higher values limit the number of pairs determined to be highly active.
-When this argument is set, to count as detecting a target sequence, a guide must be: (a) within MISMATCHES mismatches of the target sequences; (b) classified as active; and (c) determined to be highly active against the target sequence.
-This argument requires also setting `--predict-activity-model-path`.
-(Default: use the default thresholds included with the model.)
+### Objective: maximizing activity
 
-When the objective is to maximize the expected activity of the guide sets, the following arguments are relevant:
+Setting `--obj maximize-activity` tells ADAPT to design sets of guides having maximal activity, in expectation over the input taxon's genomic diversity, subject to soft and hard constraints on the size of the guide set.
+This is usually our recommended objective, especially with access to a predictive model.
+With this objective, the following arguments to [`design.py`](./bin/design.py) are relevant:
 
-* `-sgc SOFT_GUIDE_CONSTRAINT`: Soft constraint on the number of guides.
+* `-sgc SOFT_GUIDE_CONSTRAINT`: Soft constraint on the number of guides in a design option.
 There is no penalty for a number of guides &le; SOFT_GUIDE_CONSTRAINT.
 Having a number of guides beyond this is penalized linearly according to PENALTY_STRENGTH.
 (Default: 1.)
-* `-hgc HARD_GUIDE_CONSTRAINT`: Hard constraint on the number of guides.
-The number of guides in a design will be &le; HARD_GUIDE_CONSTRAINT.
+* `-hgc HARD_GUIDE_CONSTRAINT`: Hard constraint on the number of guides in a design option.
+The number of guides in a design option will always be &le; HARD_GUIDE_CONSTRAINT.
 HARD_GUIDE_CONSTRAINT must be &ge; SOFT_GUIDE_CONSTRAINT.
 (Default: 5.)
 * `--penalty-strength PENALTY_STRENGTH`: Importance of the penalty when the number of guides exceeds the soft guide constraint.
 For a guide set G, the penalty in the objective is PENALTY_STRENGTH\*max(0, |G| - SOFT_GUIDE_CONSTRAINT).
-Must be &ge; 0.
-The value depends on the output values of the activity model and reflects a tolerance for more guides; for the default activity model, reasonable values are in the range \[0.1, 0.5\].
+PENALTY_STRENGTH must be &ge; 0.
+The value depends on the output values of the activity model and reflects a tolerance for more complexity in the assay; for the default pre-trained activity model included with ADAPT, reasonable values are in the range \[0.1, 0.5\].
 (Default: 0.25.)
 * `--maximization-algorithm [greedy|random-greedy]`: Algorithm to use for solving the submodular maximization problem.
 'greedy' uses the canonical greedy algorithm (Nemhauser 1978) for constrained monotone submodular maximization, which can perform well in practice but has poor worst-case guarantees because the function is not monotone (unless PENALTY_STRENGTH is 0).
 'random-greedy' uses a randomized greedy algorithm (Buchbinder 2014) for constrained non-monotone submodular maximization, which has good worst-case guarantees.
 (Default: 'random-greedy'.)
 
-Note that, when the objective is to maximize activity, this requires a predictive model of activity and thus `--predict-activity-model-path` (described below) must be specified.
+Note that, when the objective is to maximize activity, this objective requires a predictive model of activity and thus `--predict-activity-model-path` should be specified (details in [Miscellaneous key arguments](#miscellaneous-key-arguments)).
+If you wish to use this objective but cannot use our pre-trained Cas13a model nor another model, see the help message for the argument `--use-simple-binary-activity-prediction`.
 
-## Common options
+### Objective: minimizing complexity
 
-Below is a summary of some common arguments to [`design.py`](./bin/design.py):
+Setting `--obj minimize-guides` tells ADAPT to minimize the number of guides in an assay subject to constraints on coverage of the input taxon's genomic diversity.
+With this objective, the following arguments to [`design.py`](./bin/design.py) are relevant:
 
-* `-gl GUIDE_LENGTH`: Design guides to be GUIDE_LENGTH nt long.
-(Default: 28.)
-* `--predict-activity-model-path MODEL_C MODEL_R`: Predict activity of guide-target pairs and only count guides as detecting a target if they are predicted to be highly active against it.
-MODEL_C is for a classification model that predicts whether a guide-target pair is active, and MODEL_R is for a regression model that predicts a measure of activity on active pairs.
-Each argument is a path to a serialized model in TensorFlow's SavedModel format.
-Example classification and regression models are in [`models/`](./models).
-(Default: not set, which does not use predicted activity as a constraint during design.)
-* `--id-m ID_M` / `--id-frac ID_FRAC`: Design guides to perform differential identification where these parameters determine specificity.
-Allow for up to ID_M mismatches when determining whether a guide hits a sequence in a taxon other than the one for which it is being designed, and decide that a guide hits a taxon if it hits at least ID_FRAC of the sequences in that taxon.
-ADAPT does not output guides that hit group/taxons other than the one for which they are being designed.
-Higher values of ID_M and lower values of ID_FRAC correspond to more specificity.
-(Default: 2 for ID_M, 0.05 for ID_FRAC.)
-* `--auto-refs`: Automatically determine NCBI reference sequences for curation.
-* `--ref-accs [accession] [accession ...]`: Curate sequences using the reference sequence(s) identified by this NCBI GenBank accession number(s).
-This is required if `--auto-refs` is not set.
+* `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide detects a sequence.
+This argument is mainly meant to be helpful in the absence of a predictive model of activity.
+When using a predictive model of activity (via `--predict-activity-model-path` and `--predict-activity-thres`), this argument serves as an additional requirement for evaluating detection on top of the model; it can be effectively ignored by setting MISMATCHES to be sufficiently high.
+(Default: 0.)
+* `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
+THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
+Higher values have higher precision and less recall.
+THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
+Higher values limit the number of pairs determined to be highly active.
+To count as detecting a target sequence, a guide must be: (i) within MISMATCHES mismatches of the target sequence; (ii) classified as active; and (iii) predicted to be highly active.
+Using this argument requires also setting `--predict-activity-model-path` (see [Miscellaneous key arguments](#miscellaneous-key-arguments)).
+As noted above, MISMATCHES can be set to be sufficiently high to effectively ignore `-gm`.
+(Default: use the default thresholds included with the model.)
+* `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are detected by the guides.
+(Default: 1.0.)
+* `--cover-by-year-decay YEAR_TSV MIN_YEAR_WITH_COVG DECAY`: Group input sequences by year and set a distinct COVER_FRAC for each year.
+See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on this argument.
+Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not accept YEAR_TSV.
+
+## Enforcing specificity
+
+ADAPT can enforce strict specificity so that designs will distinguish related taxa.
+
+When INPUT-TYPE is `auto-from-file`, ADAPT will automatically enforce specificity between the input taxa using a single specificity index.
+ADAPT can also enforce specificity when designing for a single taxon by parsing the `--specific-against-*` arguments.
+
+To enforce specificity, the following arguments to [`design.py`](./bin/design.py) are important:
+
+* `--id-m ID_M` / `--id-frac ID_FRAC`: These parameters specify thresholds for determining specificity.
+Allow for up to ID_M mismatches when determining whether a guide *hits a sequence* in a taxon other than the one for which it is being designed, and decide that a guide *hits a taxon* if it hits at least ID_FRAC of the sequences in that taxon.
+ADAPT does not design guides that hit a taxon other than the one for which they are being designed.
+Higher values of ID_M and lower values of ID_FRAC correspond to more strict specificity.
+(Default: 4 for ID_M, 0.01 for ID_FRAC.)
 * `--specific-against-fastas [fasta] [fasta ...]`: Design guides to be specific against the provided sequences (in FASTA format; do not need to be aligned).
 That is, the guides should not hit sequences in these FASTA files, as measured by ID_M and ID_FRAC.
+Each `[fasta]` is treated as a separate taxon when ID_FRAC is applied.
 * `--specific-against-taxa SPECIFIC_TSV`: Design guides to be specific against the provided taxa.
-SPECIFIC_TSV is a path to a TSV file where each row specifies a taxonomy with two columns: (1) NCBI taxonomic ID; (2) segment label, or 'None' if unsegmented.
+SPECIFIC_TSV is a path to a TSV file where each row specifies a taxonomy with two columns: (1) NCBI taxonomy ID; (2) segment label, or 'None' if unsegmented.
 That is, the guides should not hit sequences in these taxonomies, as measured by ID_M and ID_FRAC.
-* `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs between guide and target sequence as matching.
-* `--require-flanking5 REQUIRE_FLANKING5` / `--require-flanking3 REQUIRE_FLANKING3`: Require the given sequence on the 5' (REQUIRE_FLANKING5) and/or 3' (REQUIRE_FLANKING3) protospacer flanking site (PFS) for each designed guide.
-This tolerates ambiguity in the sequence (e.g., 'H' requires 'A', 'C', or 'T').
-Note that this is the 5'/3' end in the target sequence (not the spacer sequence).
-* `--required-guides REQUIRED_GUIDES`: Ensure that the guides provided in REQUIRED_GUIDES are included in the design, and perform the design with them already included.
-See `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the REQUIRED_GUIDES file format.
-* `--blacklisted-ranges BLACKLISTED_RANGES`: Do not construct guides in the ranges provided in BLACKLISTED_RANGES.
-* `--blacklisted-kmers BLACKLISTED_KMERS`: Do not construct guides that contain k-mers provided in BLACKLISTED_KMERS.
 
-When SEARCH-TYPE is `complete-targets`, ADAPT performs a beam search to find a diverse collection of design options, each containing primers and guides.
-Below are some additional arguments when SEARCH-TYPE is `complete-targets`.
+## Searching for complete targets
 
+When SEARCH-TYPE is `complete-targets`, ADAPT performs a branch and bound search to find a collection of assay design options.
+It finds the best _N_ design options for a specified _N_.
+Each design option represents a genomic region containing primer pairs and guides between them.
+There is no set length for the region.
+The _N_ options are intended to be a diverse (non-overlapping) selection.
+
+Below are key arguments to [`design.py`](./bin/design.py) when SEARCH-TYPE is `complete-targets`:
+
+* `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS design options, where each receives an objective value according to OBJ_FN_WEIGHTS.
+Note that higher values of BEST_N_TARGETS can significantly increase runtime.
+(Default: 10.)
+* `--obj-fn-weights OBJ_FN_WEIGHTS`: Coefficients to use in an objective function for each design target.
+See `design.py complete-targets [INPUT-TYPE] --help` for details.
 * `-pl PRIMER_LENGTH`: Design primers to be PRIMER_LENGTH nt long.
 (Default: 30.)
 * `-pp PRIMER_COVER_FRAC`: Same as `-gp` described above, except for the design of primers.
 (Default: 1.0.)
 * `-pm PRIMER_MISMATCHES`: Tolerate up to PRIMER_MISMATCHES mismatches when determining whether a primer hybridizes to a sequence.
 (Default: 0.)
-* `--max-primers-at-site MAX_PRIMERS_AT_SITE`: Only allow up to MAX_PRIMERS_AT_SITE primers at each primer set.
+* `--max-primers-at-site MAX_PRIMERS_AT_SITE`: Only allow up to MAX_PRIMERS_AT_SITE primers at each primer site.
 If not set, there is no limit.
-Smaller values can significantly improve runtime.
+This argument is mostly intended to improve runtime &mdash; smaller values (~5) can significantly improve runtime on especially diverse viruses &mdash; because the number of primers is already penalized in the objective function.
+Note that this is only an upper bound, and in practice the number will usually be less than it.
 (Default: not set.)
-* `--obj-fn-weights OBJ_FN_WEIGHTS`: Coefficients to use in an objective function for each design target.
-See `design.py complete-targets [INPUT-TYPE] --help` for details.
-* `--best-n-targets BEST_N_TARGETS`: Only compute and output the best BEST_N_TARGETS design options, where receives an objective value according to OBJ_FN_WEIGHTS.
-Note that higher values can significantly increase runtime.
-(Default: 10.)
 
-Below are some additional arguments when INPUT-TYPE is `auto-from-{file,args}`:
+## Automatically downloading and curating data
 
+When INPUT-TYPE is `auto-from-{file,args}`, ADAPT will run end-to-end.
+It fetches and curates genomes, clusters and aligns them, and uses the generated alignment as input for design.
+
+Below are key arguments to [`design.py`](./bin/design.py) when SEARCH-TYPE is `auto-from-file` or `auto-from-args`:
+
+* `--auto-refs`: Automatically determine NCBI reference sequences to use for curating genomes.
+* `--ref-accs [accession] [accession ...]`: Curate sequences using the reference sequence(s) identified by this NCBI GenBank accession number(s).
+This is required if `--auto-refs` is not set.
 * `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
-* `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments in PREP_MEMOIZE_DIR.
-This can save the memo to an S3 bucket by using the syntax `s3://BUCKET/PATH`, though this requires the AWS cloud installation mentioned in [Downloading and installing](#downloading-and-installing) and setting access key information. Access key information can either be set using AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY or by installing and configuring [AWS CLI](https://aws.amazon.com/cli/). If not set (default), do not memoize this information.
-If repeatedly re-running on the same taxonomies, using this can significantly improve runtime.
+* `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments to the directory specified by PREP_MEMOIZE_DIR.
+If repeatedly re-running on the same taxonomies, using this argument can significantly improve runtime across runs.
+ADAPT can save the memoized information to an AWS S3 bucket by using the syntax `s3://BUCKET/PATH`, though this requires the AWS cloud installation mentioned in [Downloading and installing](#downloading-and-installing) and setting access key information.
+Access key information can either be set using AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (details below) or by installing and configuring [AWS CLI](https://aws.amazon.com/cli/).
+If not set (default), do not memoize information across runs.
 * `--prep-influenza`: If set, use NCBI's influenza database for fetching data.
-This must be specified if design is for influenza A/B/C viruses.
+This should be specified if design is for influenza A/B/C viruses.
 * `--sample-seqs SAMPLE_SEQS`: Randomly sample SAMPLE_SEQS accessions with replacement from each taxonomy, and move forward with the design using this sample.
-This can be useful for measuring various properties of the design.
+This can be useful for measuring some properties of the design, or for faster runtime when debugging.
 * `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
 The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
 (Default: 0.2.)
-* `--use-accessions USE_ACCESSIONS`: Use the specified accessions, in a file at the path USE_ACCESSIONS, for generating input.
-This is performed instead of fetching neighbors from NCBI.
-* `--aws-access-key-id AWS_ACCESS_KEY_ID`: Use AWS_ACCESS_KEY_ID to log in to AWS Cloud Services. Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are necessary to log in. This is only necessary if saving the memo to an S3 bucket using PREP_MEMOIZE_DIR and AWS CLI has not been installed and configured. If AWS CLI has been installed and configured and this argument is passed in, AWS_ACCESS_KEY_ID will override the AWS CLI configuration.
-* `--aws-secret-access-key AWS_SECRET_ACCESS_KEY`: Use AWS_SECRET_ACCESS_KEY to log in to AWS Cloud Services. Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are necessary to log in. This is only necessary if saving the memo to an S3 bucket using PREP_MEMOIZE_DIR and AWS CLI has not been installed and configured. If AWS CLI has been installed and configured and this argument is passed in, AWS_ACCESS_KEY_ID will override the AWS CLI configuration.
+* `--use-accessions USE_ACCESSIONS`: Use the specified NCBI GenBank accessions, in a file at the path USE_ACCESSIONS, for generating input.
+ADAPT uses these accessions instead of fetching neighbors from NCBI, but it will still download the sequences for these accessions.
 See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the format of the file.
+
+When using AWS S3 to memoize information across runs (`--prep-memoize-dir`), the following arguments are also important:
+
+* `--aws-access-key-id AWS_ACCESS_KEY_ID` / `--aws-secret-access-key AWS_SECRET_ACCESS_KEY`: Use AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to login to AWS cloud services.
+Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are needed to login.
+These arguments are only necessary if saving the memoized data to an S3 bucket using PREP_MEMOIZE_DIR and AWS CLI has not been installed and configured.
+If AWS CLI has been installed and configured and these arguments are passed, they will override the AWS CLI configuration.
+
+## Miscellaneous key arguments
+
+In addition to the arguments above, there are others that are often important when running [`design.py`](./bin/design.py):
+
+* `--predict-activity-model-path MODEL_C MODEL_R`: Modles that predict activity of guide-target pairs.
+MODEL_C gives a classification model that predicts whether a guide-target pair is active, and MODEL_R gives a regression model that predicts a measure of activity on active pairs.
+Each argument is a path to a serialized model in TensorFlow's SavedModel format.
+Pre-trained classification and regression models are in [`models/`](./models).
+With `--obj maximize-activity`, the models are essential because they inform ADAPT of the measurements it aims to maximize.
+With `--obj minimize-guides`, the models constrain the design such that a guide must be highly active to detect a sequence (specified by `--predict-activity-thres`).
+(Default: not set, which does not use predicted activity during design.)
+* `-gl GUIDE_LENGTH`: Design guides to be GUIDE_LENGTH nt long.
+(Default: 28.)
+* `--do-not-allow-gu-pairing`: If set, do not count G-U (wobble) base pairs between guide and target sequence as matching.
+By default, they count as matches.
+This applies when `-gm` is used with `--obj minimize-guides` and when enforcing specificity.
+* `--require-flanking5 REQUIRE_FLANKING5` / `--require-flanking3 REQUIRE_FLANKING3`: Require the given sequence on the 5' (REQUIRE_FLANKING5) and/or 3' (REQUIRE_FLANKING3) side of the protospacer for each designed guide.
+This tolerates ambiguity in the sequence (e.g., 'H' requires 'A', 'C', or 'T').
+This can enforce a desired protospacer flanking site (PFS) nucleotide; it can also accommodate multiple nucleotides (motif).
+Note that this is the 5'/3' end in the target sequence (not the spacer sequence).
+When a predictive model of activity is given, this argument is not needed; it can still be specified, however, as an additional requirement on top of how the model evaluates activity.
 
 ## Output
 
 The files output by ADAPT are TSV files, but vary in format depending on SEARCH-TYPE and INPUT-TYPE.
 There is a separate TSV file for each taxon.
 
-For all cases, see `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` for details on the output format and how to specify paths to the output TSV files.
-
-### Sliding window
-
-When SEARCH-TYPE is `sliding-window`, each row corresponds to a window in the alignment and the columns give information about the guides designed for that window.
-The columns are:
-* `window-start`/`window-end`: Start (inclusive) and end (exclusive) positions of this window in the alignment.
-* `count`: The number of guide sequences for this window.
-* `score`: A statistic between 0 and 1 that describes the redundancy of the guide sequences in capturing the input sequences (higher is better); it is meant to break ties between windows that have the same number of guide sequences, and is not intended to be compared between windows with different numbers of guide sequences.
-* `total-frac-bound`: The total fraction of all sequences in the alignment that are bound by a guide. Note that if `--cover-by-year-decay` is provided, this might be considerably less than COVER_FRAC.
-* `target-sequences`: The sequences of the targets for this window from which to construct guides, separated by spaces (guides should be reverse complements of these sequences).
-* `target-sequence-positions`: The positions of the guide sequences in the alignment, in the same order as the sequences are reported; since a guide may come from >1 position, positions are reported in set notation (e.g., \{100\}).
-
-By default, when SEARCH-TYPE is `sliding-window`, the rows in the output are sorted by the position of the window.
-If you include the `--sort` argument to [`design.py`](./bin/design.py), it will sort the rows in the output so that the "best" choices of windows are on top.
-It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.
+For all cases, run `design.py [SEARCH-TYPE] [INPUT-TYPE] --help` to see details on the output format and on how to specify paths to the output TSV files.
 
 ### Complete targets
 
-When SEARCH-TYPE is `complete-targets`, each row is a possible design option (primer pair and guide combination) and there are additional columns giving information about primer pairs and the guide sets.
-There is also an `objective-value` column, giving the objective value of each design option according to `--obj-fn-weights`.
-The rows in the output are sorted by the objective value (better options are on top); smaller values are better with `--obj minimize-guides` and larger values are better with `--obj maximize-activity`.
+When SEARCH-TYPE is `complete-targets`, each row gives an assay design option; there are BEST_N_TARGETS of them.
+Each design option corresponds to a genomic region (amplicon).
+The columns give the primer and guide sequences as well as additional information about them.
+There are about 20 columns; some key ones are:
+* `objective-value`: Objective value based on OBJ_FN_WEIGHTS.
+* `target-start` / `target-end`: Start (inclusive) and end (exclusive) positions of the genomic region in the alignment generated by ADAPT.
+* `{left,right}-primer-target-sequences`: Sequences of 5' and 3' primers, from the targets (see [Complementarity](#complementarity)).
+Within each of the two columns (amplicon endpoints), if there are multiple sequences they are separated by spaces.
+* `total-frac-bound-by-guides`: Fraction of all input sequences predicted to be detected by the guide set.
+* `guide-set-expected-activity`: Predicted activity of the guide set in detecting the input sequences, in expectation over the input sequences.
+(nan if no predictor is set.)
+* `guide-set-median-activity` / `guide-set-5th-pctile-activity`: Median and 5th percentile of predicted activity of the guide set over the input sequences.
+(nan if no predictor is set.)
+* `guide-expected-activities`: Predicted activity of each separate guide in detecting the input sequences, in expectation over the input sequences.
+They are separated by spaces; if there is only 1 guide, this is equivalent to `guide-set-expected-activity`.
+(nan if no predictor is set.)
+* `guide-target-sequences`: Sequences of guides, from the targets (see [Complementarity](#complementarity)!).
+If there are multiple, they are separated by spaces.
+* `guide-target-sequence-positions`: Positions of the guides in the alignment, in the same order as they are reported; a guide may come from >1 position, so positions are reported in set notation (e.g., \{100\}).
 
-When INPUT-TYPE is `auto-from-file` or `auto-from-args`, there is a separate TSV file for each cluster of input sequences.
+The rows in the output are sorted by the objective value: better options are on top.
+Smaller values are better with `--obj minimize-guides` and larger values are better with `--obj maximize-activity`.
+
+When INPUT-TYPE is `auto-from-file` or `auto-from-args` and ADAPT generates more than one cluster of input sequences, there is a separate TSV file for each cluster; the filenames end in `.0`, `.1`, etc.
+
+### Sliding window
+
+When SEARCH-TYPE is `sliding-window`, each row gives a window in the alignment and the columns give information about the guides designed for that window.
+The columns are:
+* `window-start` / `window-end`: Start (inclusive) and end (exclusive) positions in the alignment.
+* `count`: Number of guide sequences.
+* `score`: Statistic between 0 and 1 that describes the redundancy of the guides in detecting the input sequences (higher is better).
+This is meant to break ties between windows with the same number of guide sequences, and is not intended to be compared between windows with different numbers of guides.
+* `total-frac-bound`: Total fraction of all input sequences that are detected by a guide.
+Note that if `--cover-by-year-decay` is provided, this might be less than COVER_FRAC.
+* `target-sequences`: Sequences of guides, from the targets (see [Complementarity](#complementarity)!).
+If there are multiple, they are separated by spaces.
+* `target-sequence-positions`: Positions of the guides in the alignment, in the same order as they are reported; a guide may come from >1 position, so positions are reported in set notation (e.g., \{100\}).
+
+By default, when SEARCH-TYPE is `sliding-window`, the rows in the output are sorted by the position of the window.
+With the `--sort` argument to [`design.py`](./bin/design.py), ADAPT sorts the rows so that the "best" choices of windows are on top.
+It sorts by `count` (ascending) followed by `score` (descending), so that windows with the fewest guides and highest score are on top.
 
 ### Complementarity
 
-Note that output sequences are in the same sense as the input sequences.
-Synthesized guide sequences should be reverse complements of the output!
+Note that output sequences are all in the same sense as the input (target) sequences.
+**Synthesized guide sequences should be reverse complements of the output sequences!**
 Likewise, synthesized primer sequences should account for this.
 
 # Examples
 
-## Designing with sliding window against a single target
+## Basic: designing within sliding window
 
 This is the most simple example.
-The package includes an alignment of LASV sequences (S segment) from Sierra Leone.
-For example:
-```bash
-design.py sliding-window fasta examples/SLE_S.aligned.fasta -o guides.tsv -w 200 -gl 28 -gm 1 -gp 0.95
-```
-reads an alignment from `examples/SLE_S.aligned.fasta`.
+**It does not download genomes, search for genomic regions to target, or use a predictive model of activity; for these features, see the next example.**
 
-From this alignment, it scans each 200 nt window (`-w 200`) to find the smallest collection of guides that:
+The repository includes an alignment of Lassa virus sequences (S segment) from Sierra Leone in `examples/SLE_S.aligned.fasta`.
+Run:
+```bash
+design.py sliding-window fasta examples/SLE_S.aligned.fasta -o probes.tsv -w 200 -gl 28 -gm 1 -gp 0.95
+```
+
+From this alignment, ADAPT scans each 200 nt window (`-w 200`) to find the smallest collection of probes that:
 * are all within the window
 * are 28 nt long (`-gl 28`)
-* capture 95% of all input sequences (`-gp 0.95`) tolerating up to 1 mismatch (`-gm 1`)
+* detect 95% of all input sequences (`-gp 0.95`), tolerating up to 1 mismatch (`-gm 1`) between a probe and target
 
-It outputs a file, `guides.tsv`, that contains constructed guide sequences.
+ADAPT outputs a file, `probes.tsv`, that contains the probe sequences for each window.
 See [Output](#output) above for a description of this file.
 
-## Designing end-to-end against a single target
+## Designing end-to-end with predictive model
 
-ADAPT can automatically download and curate sequences during design, and search efficiently over the space of genomic regions to find primers/amplicons as well as guides.
-For example:
+ADAPT can automatically download and curate sequences for its design, and search efficiently over possible genomic regions to find primers/amplicons as well as Cas13a guides.
+It identifies Cas13a guides using a pre-trained predictive model of activity.
+
+Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj minimize-guides -gm 1 -gp 0.95 -pl 30 -pm 2 -pp 0.95 --auto-refs --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 10 --mafft-path MAFFT_PATH --sample-seqs 100
+design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --auto-refs --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
-downloads and designs against genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
-You must fill in `MAFFT_PATH` with an executable.
+This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
+You must fill in `MAFFT_PATH` with an executable of MAFFT.
 
-This designs primers and a minimal collection of guides within the amplicons they bind, such that:
+ADAPT designs primers and Cas13a guides within the amplicons, such that:
+* guides have maximal predicted detection activity, in expectation over Zika's genomic diversity (`--obj maximize-activity`) 
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
-* guides detect 95% of sequence diversity in their amplicons (`-gp 0.95`) and primers capture 95% of all sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-gm 1` and `-pm 1`), and only counting as detecting a target if predicted to be highly active against the target (`--predict-activity-model-path`)
+* primers capture 95% of sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-pm 1`)
 
-It outputs a file, `guides.tsv.0`, that contains the best 10 design choices (`--best-n-targets 10`) as measured by a cost function.
+ADAPT outputs a file, `guides.tsv.0`, that contains the best 5 design options (`--best-n-targets 5`) as measured by ADAPT's default objective function.
 See [Output](#output) above for a description of this file.
 
-This randomly selects 100 sequences (`--sample-seqs 100`) prior to design to speed the process for this example; the command should take about 10 minutes to run in full.
-You can set `--verbose` to obtain more detailed output.
+This example randomly selects 50 sequences (`--sample-seqs 50`) prior to design to speed the runtime in this example; the command should take about 20 minutes to run in full.
+Using `--verbose` provides detailed output and is usually recommended, but the output can be extensive.
 
-Note that this example does not account for taxon-specificity.
+Note that this example does not enforce specificity.
 
-To find guide sets that maximize expected activity, use `--obj maximize-activity` instead and remove `-gm` and `-gp`.
+To find minimal guide sets, use `--obj minimize-guides` instead and set `-gm` and `-gp`.
+With this objective, Cas13a guides are determined to detect a sequence if they (i) satisfy the number of mismatches specified with `-gm` and (ii) are predicted by the model to be highly active in detecting the sequence; `-gm` can be sufficiently high to rely entirely on the predictive model.
+The output guides will detect a desired fraction of all genomes, as specified by `-gp`.
 
-# Contributing
+# Support and contributing
+
+## Questions
+
+If you have questions about ADAPT, please create an [issue](https://github.com/broadinstitute/adapt/issues).
+
+## Contributing
 
 We welcome contributions to ADAPT.
 This can be in the form of an [issue](https://github.com/broadinstitute/adapt/issues) or [pull request](https://github.com/broadinstitute/adapt/pulls).
-If you have questions, please create an [issue](https://github.com/broadinstitute/adapt/issues) or email **Hayden Metsky** &lt;hayden@mit.edu&gt;.
 
-# Citation
+## Citation
 
-ADAPT is not yet published.
-If you find it useful to your work, please let us know and inquire about how to cite it.
+ADAPT was started by Hayden Metsky, and is developed by Priya Pillai and Hayden.
 
-# License
+If you find ADAPT useful to your work, please cite our preprint as:
+  * **[CITATION HERE]**
+
+## License
 
 ADAPT is licensed under the terms of the [MIT license](./LICENSE).
+
+## Related repositories
+
+There are other repositories on GitHub associated with ADAPT:
+  * [adapt-seq-design](https://github.com/broadinstitute/adapt-seq-design): Predictive modeling library, datasets, training, and evaluation (applied to CRISPR-Cas13a).
+  * [adapt-analysis](https://github.com/broadinstitute/adapt-analysis): Analysis of ADAPT's designs and benchmarking its computational performance, as well as miscellaneous analyses for the ADAPT paper.
+  * [adapt-designs](https://github.com/broadinstitute/adapt-designs): Designs output by ADAPT, including all experimentally tested designs.
+  * [adapt-pipes](https://github.com/broadinstitute/adapt-pipes): Workflows for running ADAPT on the cloud, tailored for AWS.

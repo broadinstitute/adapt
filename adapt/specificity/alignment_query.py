@@ -18,7 +18,8 @@ class AlignmentQuerier(metaclass=ABCMeta):
     """Abstract class supporting queries for potential guide sequences.
     """
 
-    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs):
+    def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs,
+                do_not_memoize=False):
         """
         Args:
             alns: list of Alignment objects
@@ -84,7 +85,8 @@ class AlignmentQuerier(metaclass=ABCMeta):
                 return False
         return True
 
-    def guide_is_specific_to_alns_fn(self, aln_idxs, frac_hit_thres):
+    def guide_is_specific_to_alns_fn(self, aln_idxs, frac_hit_thres,
+            do_not_memoize=False):
         """Provide a function for determining the specificity of guides.
 
         This creates and uses a new memoizer.
@@ -94,11 +96,19 @@ class AlignmentQuerier(metaclass=ABCMeta):
                 these indices (self.alns[aln_idxx[i]])
             frac_hit_thres: say that a guide "hits" an alignment A if the
                 fraction of sequences in A that it hits is > this value
+            do_not_memoize: if True, do not memoize query results
 
         Returns:
             a function with argument guide that returns the output of calling
             self.guide_is_specific_to_alns(guide, ...)
         """
+        if do_not_memoize:
+            # Just call the function without memoizing
+            def gis(guide):
+                return self.guide_is_specific_to_alns(
+                        guide, aln_idxs, frac_hit_thres)
+            return gis
+
         memoized = {}
         def gis(guide):
             if guide in memoized:

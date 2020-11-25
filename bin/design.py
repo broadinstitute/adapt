@@ -5,10 +5,12 @@ import argparse
 from collections import defaultdict
 import logging
 import os
+import random
 import re
 import shutil
+import sys
 import tempfile
-import random
+
 import numpy as np
 
 from adapt import alignment
@@ -572,7 +574,8 @@ def design_for_id(args):
 
         if aq is not None:
             guide_is_specific = aq.guide_is_specific_to_alns_fn(
-                    alns_in_same_taxon, args.diff_id_frac)
+                    alns_in_same_taxon, args.diff_id_frac,
+                    do_not_memoize=args.do_not_memoize_guide_computations)
         else:
             # No specificity to check
             guide_is_specific = lambda guide: True
@@ -662,7 +665,8 @@ def design_for_id(args):
                     blacklisted_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
-                    predictor=predictor)
+                    predictor=predictor,
+                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
         elif args.obj == 'maximize-activity':
             gs = guide_search.GuideSearcherMaximizeActivity(
                     aln,
@@ -677,7 +681,8 @@ def design_for_id(args):
                     blacklisted_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
-                    predictor=predictor)
+                    predictor=predictor,
+                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -912,13 +917,13 @@ if __name__ == "__main__":
 
     # Differential identification
     base_subparser.add_argument('--id-m', dest="diff_id_mismatches",
-        type=int, default=2,
+        type=int, default=4,
         help=("Allow for this number of mismatches when determining whether "
               "a guide 'hits' a sequence in a group/taxon other than the "
               "for which it is being designed; higher values correspond to more "
               "specificity."))
     base_subparser.add_argument('--id-frac', dest="diff_id_frac",
-        type=float, default=0.05,
+        type=float, default=0.01,
         help=("Decide that a guide 'hits' a group/taxon if it 'hits' a "
               "fraction of sequences in that group/taxon that exceeds this "
               "value; lower values correspond to more specificity."))
@@ -1032,6 +1037,17 @@ if __name__ == "__main__":
               "does not use a serialized model for predicting activity, so "
               "--predict-activity-model-path should not be set when this "
               "is set."))
+
+    # Technical options
+    base_subparser.add_argument('--do-not-memoize-guide-computations',
+        action='store_true',
+        help=("If set, do not memoize computations during the search, "
+              "including of guides identified at each site and of "
+              "specificity queries. This can be helpful for benchmarking "
+              "the improvement of memoization, or if there is reason "
+              "to believe memoization will slow the search (e.g., "
+              "if possible amplicons rarely overlap). Note that activity "
+              "predictions are still memoized."))
 
     # Log levels
     base_subparser.add_argument("--debug",
@@ -1321,5 +1337,20 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Handle missing positional arguments by printing a help message
+    if len(sys.argv) == 1:
+        # No arguments
+        parser.print_help()
+        sys.exit(1)
+    if len(sys.argv) == 2:
+        # Only one position argument (missing input type)
+        if args.search_cmd == 'sliding-window':
+            parser_sw.print_help()
+        if args.search_cmd == 'complete-targets':
+            parser_ct.print_help()
+        sys.exit(1)
+
+    # Setup the logger
     log.configure_logging(args.log_level)
+
     main(args)

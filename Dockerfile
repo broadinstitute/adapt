@@ -1,15 +1,16 @@
 FROM python:3.8.5-slim
 
-LABEL maintainer='Priya Pillai <ppillai@broadinstitute.org>'
-
 # to build:
 #   docker build . -t adapt
 #
+# to run:
+#   docker run --rm [IMAGE-ID] "[COMMAND]"
+#
 # to run with memo:
-#   docker run --rm  -v /path/to/memo/on/host:/memo <image_ID> "design.py subcommands"
+#   docker run --rm -v /path/to/memo/on/host:/memo [IMAGE-ID] "[COMMAND]"
 #
 # to run interactively:
-#   docker run --rm -it <image_ID>
+#   docker run --rm -it [IMAGE-ID]
 #
 
 ENV \
