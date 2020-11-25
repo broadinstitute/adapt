@@ -184,7 +184,7 @@ More information is [Automatically downloading and curating data](#automatically
 The positional arguments &mdash; which specify required input to ADAPT &mdash; depend on the INPUT-TYPE.
 These arguments are defined below for each INPUT-TYPE.
 
-#### INPUT-TYPE is `fasta`
+##### If INPUT-TYPE is `fasta`:
 
 ```bash
 design.py [SEARCH-TYPE] fasta [fasta] [fasta ...] -o [out-tsv] [out-tsv ...]
@@ -192,14 +192,14 @@ design.py [SEARCH-TYPE] fasta [fasta] [fasta ...] -o [out-tsv] [out-tsv ...]
 where `[fasta]` is a path to an input FASTA file and `[out-tsv]` specifies where to write the output TSV file.
 If there are more than one space-separated FASTA, ADAPT designs with specificity across them; there must be an equivalent number of output TSV files, where each gives designs for its corresponding FASTA.
 
-#### INPUT-TYPE is `auto-from-args`
+##### If INPUT-TYPE is `auto-from-args`:
 
 ```bash
 design.py [SEARCH-TYPE] auto-from-args [taxid] [segment] [refs] [out-tsv]
 ```
 where `[taxid]` is an NCBI [taxonomy ID](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi), `[segment]` is a segment label (e.g., 'S') or 'None' if unsegmented, `[refs]` is one or more comma-separated reference sequences for the taxon, and `[out-tsv]` specifies where to write the output TSV file.
 
-#### INPUT-TYPE is `auto-from-file`
+##### If INPUT-TYPE is `auto-from-file`:
 
 ```bash
 design.py [SEARCH-TYPE] auto-from-file [in-tsv] [out-dir]
