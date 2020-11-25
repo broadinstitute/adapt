@@ -50,6 +50,7 @@ OBJ_PARAM_DEFAULTS = {
             'guide_cover_frac': 1.0
         },
         'maximize-activity': {
+            'guide_mismatches': 0,
             'soft_guide_constraint': 1,
             'hard_guide_constraint': 5,
             'penalty_strength': 0.25,
@@ -642,10 +643,12 @@ def design_for_id(args):
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
             # and write them to a file
+            print_analysis = not args.quiet_analysis
             gs.find_guides_with_sliding_window(args.window_size,
                 args.out_tsv[i],
                 window_step=args.window_step,
-                sort=args.sort_out)
+                sort=args.sort_out,
+                print_analysis=print_analysis)
         elif args.search_cmd == 'complete-targets':
             # Find optimal targets (primer and guide set combinations),
             # and write them to a file
@@ -681,7 +684,7 @@ def design_for_id(args):
             aq.unmask_all_aln()
 
 
-def main(args):
+def run(args):
     logger = logging.getLogger(__name__)
 
     # Set random seed for entire program
@@ -736,7 +739,7 @@ def main(args):
             years_tsv.close()
 
 
-if __name__ == "__main__":
+def argv_to_args(argv):
     parser = argparse.ArgumentParser()
 
     ###########################################################################
@@ -1036,6 +1039,9 @@ if __name__ == "__main__":
         help=("If set, sort output TSV by number of guides "
               "(ascending) then by score (descending); "
               "default is to sort by window position"))
+    parser_sw_args.add_argument('--quiet-analysis', action='store_true',
+        help=("If set, do not print analysis information "
+              "to output"))
 
     # Subcommand: complete-targets
     parser_ct = search_subparsers.add_parser('complete-targets',
@@ -1274,14 +1280,14 @@ if __name__ == "__main__":
                   "taxonomy is provided as command-line arguments."))
     ###########################################################################
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv[1:])
 
     # Handle missing positional arguments by printing a help message
-    if len(sys.argv) == 1:
+    if len(argv) == 1:
         # No arguments
         parser.print_help()
         sys.exit(1)
-    if len(sys.argv) == 2:
+    if len(argv) == 2:
         # Only one position argument (missing input type)
         if args.search_cmd == 'sliding-window':
             parser_sw.print_help()
@@ -1292,4 +1298,8 @@ if __name__ == "__main__":
     # Setup the logger
     log.configure_logging(args.log_level)
 
-    main(args)
+    return args
+
+
+if __name__ == "__main__":
+    run(argv_to_args(sys.argv))

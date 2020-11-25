@@ -938,7 +938,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         logger.debug("Adding required covers to cover")
         for gd, gd_pos in self.required_guides.items():
             if (gd_pos < start or
-                    gd_pos + self.guide_length > end):
+                    gd_pos + self.guide_length >= end):
                 # gd is not fully within this window
                 continue
             # Find the sequences in the alignment that are bound by gd
