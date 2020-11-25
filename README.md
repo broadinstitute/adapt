@@ -179,12 +179,34 @@ More information is in [Automatically downloading and curating data](#automatica
 This operates like `auto-from-args`, except ADAPT designs with specificity across the input taxa using a single index for evaluating specificity (as opposed to having to build it separately for each taxon).
 More information is [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
 
+### Positional arguments
+
+The positional arguments &mdash; which specify required input to ADAPT &mdash; depend on the INPUT-TYPE.
+
+When INPUT-TYPE is `fasta`:
+```bash
+design.py [SEARCH-TYPE] fasta [fasta] [fasta ...] -o [out-tsv] [out-tsv ...]
+```
+where `[fasta]` is a path to an input FASTA file and `[out-tsv]` specifies where to write the output TSV file.
+If there are more than one space-separated FASTA, ADAPT designs with specificity across them; there must be an equivalent number of output TSV files, where each gives designs for its corresponding FASTA.
+
+When INPUT-TYPE is `auto-from-args`:
+```bash
+design.py [SEARCH-TYPE] auto-from-args [taxid] [segment] [refs] [out-tsv]
+```
+where `[taxid]` is an NCBI [taxonomy ID](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi), `[segment]` is a segment label (e.g., 'S') or 'None' if unsegmented, `[refs]` is one or more comma-separated reference sequences for the taxon, and `[out-tsv]` specifies where to write the output TSV file.
+
+When INPUT-TYPE is `auto-from-file`:
+```bash
+design.py [SEARCH-TYPE] auto-from-file [in-tsv] [out-dir]
+```
+where `[in-tsv]` is a path to a file specifying the input taxonomies (run `design.py [SEARCH-TYPE] auto-from-file --help` for details) and `[out-dir]` specifies a directory in which to write the outputs.
+
 **To see details on all the arguments available**, run
 ```bash
 design.py [SEARCH-TYPE] [INPUT-TYPE] --help
 ```
 with the particular choice of subcommands substituted in for `[SEARCH-TYPE]` and `[INPUT-TYPE]`.
-These details include required positional arguments for some choices of subcommands.
 
 ## Specifying the objective
 
