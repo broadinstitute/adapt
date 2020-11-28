@@ -23,7 +23,7 @@ ADAPT includes a pre-trained model that predicts CRISPR-Cas13a guide detection a
 ADAPT's output also includes amplification primers, e.g., for use with the SHERLOCK platform.
 The framework and software are compatible with other nucleic acid technologies given appropriate models.
 
-For more information, see our bioRxiv preprint that describes ADAPT and evaluates its designs experimentally.
+For more information, see our [bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2020.11.28.401877v1) that describes ADAPT and evaluates its designs experimentally.
 
 ### Table of contents
 
@@ -501,8 +501,8 @@ This can be in the form of an [issue](https://github.com/broadinstitute/adapt/is
 
 ADAPT was started by Hayden Metsky, and is developed by Priya Pillai and Hayden.
 
-If you find ADAPT useful to your work, please cite our preprint as:
-  * **[CITATION HERE]**
+If you find ADAPT useful to your work, please cite our [preprint](https://www.biorxiv.org/content/10.1101/2020.11.28.401877v1) as:
+  * Metsky HC _et al_. Efficient design of maximally active and specific nucleic acid diagnostics for thousands of viruses. _bioRxiv_ 2020.11.28.401877. doi:10.1101/2020.11.28.401877.
 
 ## License
 
