@@ -27,10 +27,6 @@ class TestDesignFasta(unittest.TestCase):
         self.fasta.close()
 
         self.seqs = OrderedDict()
-        # self.seqs["genome_1"] = "AACCA"
-        # self.seqs["genome_2"] = "AAATA"
-        # self.seqs["genome_3"] = "GGATA"
-        # self.seqs["genome_4"] = "GGGAA"
         self.seqs["genome_1"] = "AACTA"
         self.seqs["genome_2"] = "AAACT"
         self.seqs["genome_3"] = "GGCTA"
@@ -80,12 +76,18 @@ class TestDesignFasta(unittest.TestCase):
         argv = baseArgv(search_type='complete-targets', input_file=self.fasta.name, 
                         output_file=self.output.name)
         args = design.argv_to_args(argv)
-        print(argv)
         design.run(args)
-        # with open(self.output.name) as f:
-        #     for line in f:
-        #         print(line)
-        #self.check_results(self.output.name, expected)
+        expected = ["objective-value\ttarget-start\ttarget-end\ttarget-length"
+                    "\tleft-primer-start\tleft-primer-num-primers\tleft-primer-frac-bound"
+                    "\tleft-primer-target-sequences\tright-primer-start"
+                    "\tright-primer-num-primers\tright-primer-frac-bound"
+                    "\tright-primer-target-sequences\tnum-guides\ttotal-frac-bound-by-guides"
+                    "\tguide-set-expected-activity\tguide-set-median-activity"
+                    "\tguide-set-5th-pctile-activity\tguide-expected-activities"
+                    "\tguide-target-sequences\tguide-target-sequence-positions\n",
+                    "3.25\t1\t5\t4\t1\t2\t1.0\tA G\t4\t2\t1.0\tA T\t1\t0.75"
+                    "\tnan\tnan\tnan\tnan\tCT\t{2}\n"]
+        self.check_results(self.output.name, expected)
 
     def tearDown(self):
         for file in self.files:
@@ -97,12 +99,36 @@ class TestDesignAutos(unittest.TestCase):
     """
     def setUp(self):
         self.files = []
+        # Create a temporary fasta file
+        self.input = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        # Closes the file so that it can be reopened on Windows
+        self.input.close()
+
+        # TODO write input file 
+
+        # Create a temporary output file 
+        self.output = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        self.output.close()
+
+        self.files = [self.input.name, self.output.name]
 
     def test_auto_from_file(self):
+        # TODO
+        # argv = baseArgv(input_type='auto_from_file', 
+        #                 input_file=self.input.name, 
+        #                 output_file=self.output.name)
+        # args = design.argv_to_args(argv)
+        # design.run(args)
         pass
 
     def test_auto_from_args(self):
-        pass
+        argv = baseArgv(input_type='auto-from-args', 
+                        output_file=self.output.name)
+        args = design.argv_to_args(argv)
+        try:
+            design.run(args)
+        except FileNotFoundError:
+            pass
 
     def tearDown(self):
         for file in self.files:
@@ -129,7 +155,7 @@ def baseArgv(search_type='sliding-window', input_type='fasta',
         argv.extend(['-w', '3', '--quiet-analysis'])
     if search_type == 'complete-targets':
         argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl', '1', 
-                     '--max-primers-at-site', '1'])
+                     '--max-primers-at-site', '2'])
 
     if objective == 'minimize-guides':
         argv.extend(['-gm', '0', '-gp', '.75'])
