@@ -501,18 +501,19 @@ def add_metadata_to_neighbors_and_filter(neighbors, meta_filt=None, meta_filt_ag
 
     Args:
         neighbors: collection of Neighbor objects
-        meta_filt: list of 2 dictionaries where the keys are any of 'country', 'year',
+        meta_filt: tuple of 2 dictionaries where the keys are any of 'country', 'year',
             'entry_create_year', 'taxid' and values for the first are a collection 
             of what to include or True to indicate that the metadata must exist and
             the second are what to exclude.
-        meta_filt_against: list of 2 dictionaries where the keys are any of 'country', 
+        meta_filt_against: tuple of 2 dictionaries where the keys are any of 'country', 
             'year', 'entry_create_year', 'taxid' and values for the first are a 
             collection of what to include in accessions to be specific against and
             the second are what to exclude.
 
     Returns:
         neighbors with metadata included (excluding the ones filtered out), and
-            accession numbers of neighbors that are filtered out by meta_filt_against
+            accession numbers of neighbors for the design to be specific against 
+            (as specified by meta_filt_against)
     """
     # Fetch metadata for each neighbor without metadata
     to_fetch = set(n.acc for n in neighbors if n.metadata == {})

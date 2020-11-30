@@ -332,9 +332,6 @@ It fetches and curates genomes, clusters and aligns them, and uses the generated
 
 Below are key arguments to [`design.py`](./bin/design.py) when SEARCH-TYPE is `auto-from-file` or `auto-from-args`:
 
-* `--auto-refs`: Automatically determine NCBI reference sequences to use for curating genomes.
-* `--ref-accs [accession] [accession ...]`: Curate sequences using the reference sequence(s) identified by this NCBI GenBank accession number(s).
-This is required if `--auto-refs` is not set.
 * `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
 * `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments to the directory specified by PREP_MEMOIZE_DIR.
 If repeatedly re-running on the same taxonomies, using this argument can significantly improve runtime across runs.
@@ -467,7 +464,7 @@ It identifies Cas13a guides using a pre-trained predictive model of activity.
 
 Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --auto-refs --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
+design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
 This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable of MAFFT.

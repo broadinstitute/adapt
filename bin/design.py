@@ -275,7 +275,7 @@ def prepare_alignments(args):
     if args.input_type == 'auto-from-args':
         s = None if args.segment == 'None' else args.segment
         ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
-            if args.auto_refs else args.ref_accs
+            if not args.ref_accs else args.ref_accs
         meta_filt = None
         meta_filt_against = None
         if args.metadata_filter:
@@ -569,6 +569,8 @@ def design_for_id(args):
         required_guides_for_aln = required_guides[i]
         blacklisted_ranges_for_aln = blacklisted_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
+        # For metadata filtering, we only want to be specific against the 
+        # accessions in alns[specific_against_metadata_index]
         specific_against_metadata_index = specific_against_metadata_indices[i] \
             if i in specific_against_metadata_indices else None
 
@@ -1287,23 +1289,23 @@ if __name__ == "__main__":
     input_autoargs_subparser.add_argument('out_tsv',
         help=("Path to output TSVs, with one per cluster; output TSVs are "
               "OUT_TSV.{cluster-number}"))
-    input_autoargs_subparser.add_argument('--auto-refs', action='store_true',
-        help=("If set, automatically get accession numbers for "
-              "reference sequences from NCBI"))
     input_autoargs_subparser.add_argument('--ref-accs', nargs='+',
         help=("Accession(s) of reference sequence(s) to use for curation (comma-"
-              "separated). Required if AUTO_REFS is not set"))
+              "separated). If not set, ADAPT will automatically get accessions "
+              "for reference sequences from NCBI based on the taxonomic ID"))
     input_autoargs_subparser.add_argument('--metadata-filter', nargs='+',
         help=("Only include accessions of specified taxonomic ID that match this metadata "
             "in the design. Metadata options are year, taxid, and country. Format as "
             "'metadata=value' or 'metadata!=value'. Separate multiple values with commas "
-            "and different metadata filters with spaces (e.g. 'year!=2020,2019 taxid=11060')"))
+            "and different metadata filters with spaces (e.g. '--metadata-filter "
+            "year!=2020,2019 taxid=11060')"))
     input_autoargs_subparser.add_argument('--specific-against-metadata-filter', nargs='+',
         help=("Only include accessions of the specified taxonomic ID that do not match this "
             "metadata in the design, and be specific against any accession that does match "
             "this metadata. Metadata options are year, taxid, and country. Format as "
             "'metadata=value' or 'metadata!=value'. Separate multiple values with commas "
-            "and different metadata filters with spaces (e.g. 'year!=2020,2019 taxid=11060')"))
+            "and different metadata filters with spaces (e.g. "
+            "'--specific-against-metadata-filter year!=2020,2019 taxid=11060')"))
     input_autoargs_subparser.add_argument('--write-input-seqs',
         help=("Path to a file to which to write the sequences "
               "(accession.version) being used as input for design"))

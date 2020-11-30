@@ -445,13 +445,16 @@ def read_metadata_filters(meta_filts):
             'key!=values' with a comma separated list of values
 
     Returns:
-        list of 2 dicts where each key is any of ['taxid', 'year', 'country']
+        tuple of 2 dicts where each key is any of ['taxid', 'year', 'country']
             and each value is what to include for the first dict and exclude for
             the second dict
     """
     dict_filter_eq = {}
     dict_filter_neq = {}
     for filt in meta_filts:
+        if ' ' in filt:
+            raise ValueError("Incorrect format for filter '%s'; individual filters "
+                "should not include spaces" %filt)
         dict_to_use = dict_filter_eq
         filt_split = filt.split('!=')
         if len(filt_split) == 2:
@@ -459,10 +462,10 @@ def read_metadata_filters(meta_filts):
         else:
             filt_split = filt.split('=')
         if len(filt_split) != 2:
-            raise Exception("Incorrect format for filter '%s'; should be "
+            raise ValueError("Incorrect format for filter '%s'; should be "
                 "'metadata=value or metadata!=value'" %filt)
         if filt_split[0] not in ['taxid', 'year', 'country']:
-            raise Exception("Incorrect filter key '%s'; should be one of "
+            raise ValueError("Incorrect filter key '%s'; should be one of "
                 "['taxid', 'year', 'country']" %filt_split[0])
         if filt_split[0] in ['taxid', 'year']:
             dict_to_use[filt_split[0]] = [int(i) for i in filt_split[1].split(",")]

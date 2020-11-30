@@ -76,9 +76,14 @@ def prepare_for(taxid, segment, ref_accs, out,
         sequences_to_use: if set, a dict of sequences to use instead of
             fetching them for taxid; note that this does not perform
             curation on these sequences
-        meta_filt: a dictionary of filters of metadata to include in the design
-        meta_filt_against: a dictionary of filters of metadata to exclude from 
-            the design
+        meta_filt: tuple of 2 dictionaries where the keys are any of 'country', 'year',
+            'entry_create_year', 'taxid' and values for the first are a collection 
+            of what to include or True to indicate that the metadata must exist and
+            the second are what to exclude.
+        meta_filt_against: tuple of 2 dictionaries where the keys are any of 'country', 
+            'year', 'entry_create_year', 'taxid' and values for the first are a 
+            collection of what to include in accessions to be specific against and
+            the second are what to exclude.
 
     Returns:
         number of clusters, set of accessions filtered out by meta_filt_against
@@ -342,6 +347,14 @@ def fetch_sequences_for_taxonomy(taxid, segment):
 
 
 def fetch_sequences_for_acc_list(acc_to_fetch):
+    """Fetch list of sequences given a list of accessions
+
+    Args:
+        acc_to_fetch: list of accessions
+
+    Returns:
+        dict mapping sequence header to sequence string
+    """
     seqs_unaligned_fp = ncbi_neighbors.fetch_fastas(acc_to_fetch)
     seqs_unaligned = align.read_unaligned_seqs(seqs_unaligned_fp)
     # Delete temporary file
