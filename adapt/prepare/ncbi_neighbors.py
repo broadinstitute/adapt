@@ -486,8 +486,12 @@ def construct_references(taxid):
         ls = line.strip()
         if len(ls) == 0:
             continue
-        references += [ls]
+        references.append(ls)
 
+    if len(references) == 0:
+        raise ValueError("Taxonomic ID %d does not have any references in "
+                         "NCBI. Try specifying a reference accession using "
+                         "--ref-accs" %taxid)
     return references
 
 
