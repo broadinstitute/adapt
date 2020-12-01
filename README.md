@@ -32,6 +32,7 @@ For more information, see our [bioRxiv preprint](https://www.biorxiv.org/content
   * [Setting up a conda environment](#setting-up-a-conda-environment)
   * [Downloading and installing](#downloading-and-installing)
   * [Testing](#testing)
+  * [Running on Docker](#running-on-docker)
 * [Using ADAPT](#using-adapt)
   * [Overview](#overview)
   * [Required subcommands](#required-subcommands)
@@ -117,6 +118,33 @@ The package uses Python's `unittest` framework.
 To execute all tests, run:
 ```bash
 python -m unittest discover
+```
+
+## Running on Docker
+_Note: This section is optional, but may be useful for more advanced users or developers. You will need to install [Docker](https://docs.docker.com/get-docker/)._
+
+If you would like to run ADAPT using a Docker container rather than installing it, you may use one of our pre-built ADAPT images.
+
+For ADAPT without cloud features, use the image ID `quay.io/broadinstitute/adapt`.
+
+For ADAPT with cloud features, use the image ID `quay.io/broadinstitute/adaptcloud`.
+
+To pull our Docker image to your computer, run:
+```bash
+docker pull [IMAGE-ID]
+```
+
+To run ADAPT on a Docker container, run:
+```bash
+docker run --rm [IMAGE-ID] "[COMMAND]"
+```
+To run with ADAPT memoizing to a local directory, run:
+```bash
+docker run --rm -v /path/to/memo/on/host:/memo [IMAGE-ID] "[COMMAND]"
+```
+To run the container interactively (opening a command line to the container), run:
+```bash
+docker run --rm -it [IMAGE-ID]
 ```
 
 # Using ADAPT
