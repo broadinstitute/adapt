@@ -40,10 +40,7 @@ class TestDesignFasta(unittest.TestCase):
         self.sp_fasta.close()
 
         sp_seqs = OrderedDict()
-        # sp_seqs["genome_5"] = "AAGTT"
-        # sp_seqs["genome_6"] = "AACTT"
-
-        sp_seqs["genome_5"] = "----G"
+        sp_seqs["genome_5"] = "AA---"
 
         seq_io.write_fasta(sp_seqs, self.sp_fasta.name)
 
@@ -59,15 +56,18 @@ class TestDesignFasta(unittest.TestCase):
                 if i == 0:
                     continue
                 self.assertLess(i, len(expected) + 1)
-                guide = line.split('\t')[-2]
-                self.assertEqual(guide, expected[i-1])
+                guide_line = line.split('\t')[-2]
+                guides = guide_line.split(' ')
+                for guide in guides: 
+                    self.assertIn(guide, expected[i-1])
+                self.assertEqual(len(guides), len(expected[i-1]))
             self.assertEqual(i, len(expected))
 
     def test_min_guides(self):
         argv = baseArgv(input_file=self.fasta.name, output_file=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        expected = ["AA", "CT", "CT"]
+        expected = [["AA"], ["CT"], ["CT"]]
         self.check_results(self.output_file.name, expected)
 
     def test_max_activity(self):
@@ -75,7 +75,7 @@ class TestDesignFasta(unittest.TestCase):
                         output_file=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        expected = ["AA", "CT", "CT"]
+        expected = [["AA"], ["CT"], ["CT"]]
         self.check_results(self.output_file.name, expected)
 
     def test_complete_targets(self):
@@ -83,7 +83,7 @@ class TestDesignFasta(unittest.TestCase):
                         output_file=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        expected = ["CT"]
+        expected = [["CT"]]
         self.check_results(self.output_file.name, expected)
 
     def test_specific_fastas(self):
@@ -91,7 +91,7 @@ class TestDesignFasta(unittest.TestCase):
                         specific='fasta', specificity_file=self.sp_fasta.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        expected = ["AA", "CT", "CT"]
+        expected = [["AC", "GG"], ["CT"], ["CT"]]
         self.check_results(self.output_file.name, expected)
 
     def tearDown(self):
@@ -142,6 +142,15 @@ class TestDesignAutos(unittest.TestCase):
         except FileNotFoundError:
             pass
 
+    def test_specific_taxa(self):
+        argv = baseArgv(input_type='auto-from-args', output_file=self.output_file.name,
+                        specific='taxa', specificity_file=self.sp_file.name)
+        args = design.argv_to_args(argv)
+        try:
+            design.run(args)
+        except FileNotFoundError:
+            pass
+
     def tearDown(self):
         for file in self.files:
             if os.path.isfile(file):
@@ -176,9 +185,9 @@ def baseArgv(search_type='sliding-window', input_type='fasta',
         argv.extend(['--maximization-algorithm', 'greedy'])
 
     if specific == 'fasta':
-        argv.extend(['--specific-against-fastas', specificity_file])
+        argv.extend(['--specific-against-fastas', specificity_file, '--id-m', '0'])
     elif specific == 'taxa':
-        argv.extend(['--specific-against-taxa', specificity_file])
+        argv.extend(['--specific-against-taxa', specificity_file, '--id-m', '0'])
 
     if model:
         argv.extend(['--predict-activity-model-path', 'models/classify/model-51373185', 
