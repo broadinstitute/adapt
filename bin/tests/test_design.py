@@ -17,7 +17,7 @@ __author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
 
 
 class TestDesignFasta(unittest.TestCase):
-    """Test design.py
+    """Test design.py given an input FASTA
     """
 
     def setUp(self):
@@ -26,104 +26,116 @@ class TestDesignFasta(unittest.TestCase):
         # Closes the file so that it can be reopened on Windows
         self.fasta.close()
 
-        self.seqs = OrderedDict()
-        self.seqs["genome_1"] = "AACTA"
-        self.seqs["genome_2"] = "AAACT"
-        self.seqs["genome_3"] = "GGCTA"
-        self.seqs["genome_4"] = "GGCTT"
+        seqs = OrderedDict()
+        seqs["genome_1"] = "AACTA"
+        seqs["genome_2"] = "AAACT"
+        seqs["genome_3"] = "GGCTA"
+        seqs["genome_4"] = "GGCTT"
 
-        seq_io.write_fasta(self.seqs, self.fasta.name)
+        seq_io.write_fasta(seqs, self.fasta.name)
+
+        # Create a temporary fasta file for specificity
+        self.sp_fasta = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        # Closes the file so that it can be reopened on Windows
+        self.sp_fasta.close()
+
+        sp_seqs = OrderedDict()
+        # sp_seqs["genome_5"] = "AAGTT"
+        # sp_seqs["genome_6"] = "AACTT"
+
+        sp_seqs["genome_5"] = "----G"
+
+        seq_io.write_fasta(sp_seqs, self.sp_fasta.name)
 
         # Create a temporary output file 
-        self.output = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        self.output.close()
+        self.output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        self.output_file.close()
 
-        self.files = [self.fasta.name, self.output.name]
+        self.files = [self.fasta.name, self.sp_fasta.name, self.output_file.name]
 
     def check_results(self, file, expected):
         with open(file) as f:
             for i, line in enumerate(f):
-                self.assertLess(i, len(expected))
-                self.assertEqual(line, expected[i])
-            self.assertEqual(i, len(expected)-1)
+                if i == 0:
+                    continue
+                self.assertLess(i, len(expected) + 1)
+                guide = line.split('\t')[-2]
+                self.assertEqual(guide, expected[i-1])
+            self.assertEqual(i, len(expected))
 
     def test_min_guides(self):
-        argv = baseArgv(input_file=self.fasta.name, output_file=self.output.name)
+        argv = baseArgv(input_file=self.fasta.name, output_file=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        expected = ["window-start\twindow-end\tcount\tscore\ttotal-frac-bound"
-                    "\ttarget-sequences\ttarget-sequence-positions\n",
-                    "0\t3\t1\t1.0\t1.0\tAA\t{0}\n",
-                    "1\t4\t1\t1.0\t0.75\tCT\t{2}\n",
-                    "2\t5\t1\t1.0\t0.75\tCT\t{2}\n"]
-        self.check_results(self.output.name, expected)
+        expected = ["AA", "CT", "CT"]
+        self.check_results(self.output_file.name, expected)
 
     def test_max_activity(self):
         argv = baseArgv(objective='maximize-activity', input_file=self.fasta.name, 
-                        output_file=self.output.name)
+                        output_file=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        expected = ["window-start\twindow-end\tcount\tobjective-value\ttotal-frac-bound"
-                    "\tguide-set-expected-activity\tguide-set-median-activity"
-                    "\tguide-set-5th-pctile-activity\tguide-expected-activities"
-                    "\ttarget-sequences\ttarget-sequence-positions\n",
-                    "0\t3\t1\t1.0\t1.0\t1.0\t1.0\t1.0\t1.0\tAA\t{0}\n",
-                    "1\t4\t1\t1.0\t1.0\t1.0\t1.0\t1.0\t1.0\tAC\t{2}\n",
-                    "2\t5\t1\t1.0\t1.0\t1.0\t1.0\t1.0\t1.0\tCT\t{3}\n"]
-        self.check_results(self.output.name, expected)
+        expected = ["AA", "CT", "CT"]
+        self.check_results(self.output_file.name, expected)
 
     def test_complete_targets(self):
         argv = baseArgv(search_type='complete-targets', input_file=self.fasta.name, 
-                        output_file=self.output.name)
+                        output_file=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        expected = ["objective-value\ttarget-start\ttarget-end\ttarget-length"
-                    "\tleft-primer-start\tleft-primer-num-primers\tleft-primer-frac-bound"
-                    "\tleft-primer-target-sequences\tright-primer-start"
-                    "\tright-primer-num-primers\tright-primer-frac-bound"
-                    "\tright-primer-target-sequences\tnum-guides\ttotal-frac-bound-by-guides"
-                    "\tguide-set-expected-activity\tguide-set-median-activity"
-                    "\tguide-set-5th-pctile-activity\tguide-expected-activities"
-                    "\tguide-target-sequences\tguide-target-sequence-positions\n",
-                    "3.25\t1\t5\t4\t1\t2\t1.0\tA G\t4\t2\t1.0\tA T\t1\t0.75"
-                    "\tnan\tnan\tnan\tnan\tCT\t{2}\n"]
-        self.check_results(self.output.name, expected)
+        expected = ["CT"]
+        self.check_results(self.output_file.name, expected)
+
+    def test_specific_fastas(self):
+        argv = baseArgv(input_file=self.fasta.name, output_file=self.output_file.name,
+                        specific='fasta', specificity_file=self.sp_fasta.name)
+        args = design.argv_to_args(argv)
+        design.run(args)
+        expected = ["AA", "CT", "CT"]
+        self.check_results(self.output_file.name, expected)
 
     def tearDown(self):
         for file in self.files:
             if os.path.isfile(file):
                 os.unlink(file)
 
+
 class TestDesignAutos(unittest.TestCase):
-    """Test design.py
+    """Test design.py given arguments to automatically download FASTAs
     """
     def setUp(self):
         self.files = []
-        # Create a temporary fasta file
-        self.input = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        # Create a temporary input file
+        self.input_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        self.input_file.write("Zika virus\t64320\tNone\tNC_035889\n")
         # Closes the file so that it can be reopened on Windows
-        self.input.close()
+        self.input_file.close()
 
-        # TODO write input file 
+        # Create a temporary input file
+        self.sp_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        self.sp_file.write("11083\tNone\n")
+        # Closes the file so that it can be reopened on Windows
+        self.sp_file.close()
 
         # Create a temporary output file 
-        self.output = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        self.output.close()
+        self.output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
+        self.output_file.close()
 
-        self.files = [self.input.name, self.output.name]
+        self.files = [self.input_file.name, self.sp_file.name, self.output_file.name]
 
     def test_auto_from_file(self):
-        # TODO
-        # argv = baseArgv(input_type='auto_from_file', 
-        #                 input_file=self.input.name, 
-        #                 output_file=self.output.name)
-        # args = design.argv_to_args(argv)
-        # design.run(args)
-        pass
+        argv = baseArgv(input_type='auto-from-file', 
+                        input_file=self.input_file.name, 
+                        output_file=self.output_file.name)
+        args = design.argv_to_args(argv)
+        try:
+            design.run(args)
+        except FileNotFoundError:
+            pass
 
     def test_auto_from_args(self):
         argv = baseArgv(input_type='auto-from-args', 
-                        output_file=self.output.name)
+                        output_file=self.output_file.name)
         args = design.argv_to_args(argv)
         try:
             design.run(args)
@@ -135,9 +147,10 @@ class TestDesignAutos(unittest.TestCase):
             if os.path.isfile(file):
                 os.unlink(file)
 
+
 def baseArgv(search_type='sliding-window', input_type='fasta', 
              objective='minimize-guides', model=False, specific=None, 
-             input_file=None, output_file=None):
+             input_file=None, output_file=None, specificity_file=None):
 
     argv = ['design.py', search_type, input_type]
 
@@ -159,17 +172,19 @@ def baseArgv(search_type='sliding-window', input_type='fasta',
 
     if objective == 'minimize-guides':
         argv.extend(['-gm', '0', '-gp', '.75'])
+    elif objective =='maximize-activity':
+        argv.extend(['--maximization-algorithm', 'greedy'])
 
-    if specific == 'fastas':
-        argv.extend(['--specific-against-fastas', 'examples/powassan.tsv'])
+    if specific == 'fasta':
+        argv.extend(['--specific-against-fastas', specificity_file])
     elif specific == 'taxa':
-        argv.extend(['--specific-against-taxa', '11083'])
+        argv.extend(['--specific-against-taxa', specificity_file])
 
     if model:
         argv.extend(['--predict-activity-model-path', 'models/classify/model-51373185', 
                      'models/regress/model-f8b6fd5d'])
     elif objective =='maximize-activity':
-        argv.extend(['--use-simple-binary-activity-prediction', '-gm', '1'])
+        argv.extend(['--use-simple-binary-activity-prediction', '-gm', '0'])
 
     argv.extend(['--obj', objective, '--seed', '294'])
 
