@@ -643,12 +643,11 @@ def design_for_id(args):
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
             # and write them to a file
-            print_analysis = not args.quiet_analysis
             gs.find_guides_with_sliding_window(args.window_size,
                 args.out_tsv[i],
                 window_step=args.window_step,
                 sort=args.sort_out,
-                print_analysis=print_analysis)
+                print_analysis=(args.log_level==logging.INFO))
         elif args.search_cmd == 'complete-targets':
             # Find optimal targets (primer and guide set combinations),
             # and write them to a file
@@ -1039,9 +1038,6 @@ def argv_to_args(argv):
         help=("If set, sort output TSV by number of guides "
               "(ascending) then by score (descending); "
               "default is to sort by window position"))
-    parser_sw_args.add_argument('--quiet-analysis', action='store_true',
-        help=("If set, do not print analysis information "
-              "to output"))
 
     # Subcommand: complete-targets
     parser_ct = search_subparsers.add_parser('complete-targets',

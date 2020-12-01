@@ -245,8 +245,7 @@ class GuideSearcher:
 
         # Decide whether to resize
         total_size = sum(len(self._memoized_guides[k])
-                for k in self._memoized_guides.keys()) + \
-                self._memoized_guides_num_removed_since_last_resize
+                for k in self._memoized_guides.keys())
         if total_size > 0:
             frac_removed = float(self._memoized_guides_num_removed_since_last_resize) / total_size
             logger.debug(("Deciding to resize with a fraction %f removed "

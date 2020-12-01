@@ -174,7 +174,7 @@ def baseArgv(search_type='sliding-window', input_type='fasta',
         argv.extend(['--sample-seqs', '1', '--mafft-path', 'fake_path'])
 
     if search_type == 'sliding-window':
-        argv.extend(['-w', '3', '--quiet-analysis'])
+        argv.extend(['-w', '3'])
     if search_type == 'complete-targets':
         argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl', '1', 
                      '--max-primers-at-site', '2'])
