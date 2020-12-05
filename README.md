@@ -1,4 +1,4 @@
-# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/adapt/README.html)
 #### Activity-informed Design with All-inclusive Patrolling of Targets
 
 ADAPT efficiently designs activity-informed nucleic acid diagnostics for viruses.
@@ -99,7 +99,12 @@ You will need to activate the environment each time you use ADAPT.
 
 ## Downloading and installing
 
-An easy way to setup ADAPT is to clone the repository and install the package with `pip`:
+ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for Linux operating systems. To install ADAPT via Bioconda, follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda, then run the following command:
+```bash
+conda install -c bioconda adapt
+```
+
+On other operating systems, ADAPT can be installed by cloning the repository and installing the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/adapt.git
 cd adapt
