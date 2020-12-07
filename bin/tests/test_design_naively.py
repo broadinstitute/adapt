@@ -143,6 +143,10 @@ class TestDesignNaively(unittest.TestCase):
                                             [('CA', -30), ('GG', -20), ('TG', 0)], 
                                             [('CA', -30), ('GG', -20), ('AA', -10)]])
 
+    def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
+
 
 def baseArgs():
     args = Namespace()

@@ -6,6 +6,7 @@ import os
 import copy
 import tempfile
 import unittest
+import logging
 
 from collections import OrderedDict
 from argparse import Namespace
@@ -21,12 +22,17 @@ class TestDesignFasta(unittest.TestCase):
     """
 
     def setUp(self):
+        # Disable logging
+        logging.disable(logging.INFO)
+
         # Create a temporary fasta file
         self.fasta = tempfile.NamedTemporaryFile(mode='w', delete=False)
         # Closes the file so that it can be reopened on Windows
         self.fasta.close()
 
         seqs = OrderedDict()
+        # Default args: window size 3, guide size 2, allow GU pairing
+        # GU pairing makes AA matches GG in first window
         seqs["genome_1"] = "AACTA"
         seqs["genome_2"] = "AAACT"
         seqs["genome_3"] = "GGCTA"
@@ -50,10 +56,14 @@ class TestDesignFasta(unittest.TestCase):
 
         self.files = [self.fasta.name, self.sp_fasta.name, self.output_file.name]
 
-    def check_results(self, file, expected):
+    def check_results(self, file, expected, header='target-sequences'):
+        col_loc = None
         with open(file) as f:
             for i, line in enumerate(f):
                 if i == 0:
+                    headers = line.split('\t')
+                    # Will raise an error if header is not in output
+                    col_loc = headers.index(header)
                     continue
                 self.assertLess(i, len(expected) + 1)
                 guide_line = line.split('\t')[-2]
@@ -64,30 +74,38 @@ class TestDesignFasta(unittest.TestCase):
             self.assertEqual(i, len(expected))
 
     def test_min_guides(self):
-        argv = baseArgv(input_file=self.fasta.name, output_file=self.output_file.name)
+        # Base args set the percentage of sequences to match at 75%
+        argv = baseArgv(input_file=self.fasta.name, output_loc=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
         expected = [["AA"], ["CT"], ["CT"]]
         self.check_results(self.output_file.name, expected)
 
     def test_max_activity(self):
+        # Doesn't use model, just greedy binary prediction with 0 mismatches
+        # (so same outputs as min-guides)
         argv = baseArgv(objective='maximize-activity', input_file=self.fasta.name, 
-                        output_file=self.output_file.name)
+                        output_loc=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
         expected = [["AA"], ["CT"], ["CT"]]
         self.check_results(self.output_file.name, expected)
 
     def test_complete_targets(self):
+        # Since sequences are short and need 1 base for primer on each side, 
+        # only finds 1 target in middle
         argv = baseArgv(search_type='complete-targets', input_file=self.fasta.name, 
-                        output_file=self.output_file.name)
+                        output_loc=self.output_file.name)
         args = design.argv_to_args(argv)
         design.run(args)
         expected = [["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.output_file.name, expected, 
+                           header='guide-target-sequences')
 
-    def test_specific_fastas(self):
-        argv = baseArgv(input_file=self.fasta.name, output_file=self.output_file.name,
+    def test_specificity_fastas(self):
+        # AA isn't allowed in first window by specifity fasta, 
+        # so first window changes
+        argv = baseArgv(input_file=self.fasta.name, output_loc=self.output_file.name,
                         specific='fasta', specificity_file=self.sp_fasta.name)
         args = design.argv_to_args(argv)
         design.run(args)
@@ -99,11 +117,20 @@ class TestDesignFasta(unittest.TestCase):
             if os.path.isfile(file):
                 os.unlink(file)
 
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
+
 
 class TestDesignAutos(unittest.TestCase):
     """Test design.py given arguments to automatically download FASTAs
+
+    Does not run the entire design.py; prematurely stops by giving a fake path
+    to MAFFT. Expected to return a FileNotFoundError
     """
     def setUp(self):
+        # Disable logging
+        logging.disable(logging.INFO)
+
         self.files = []
         # Create a temporary input file
         self.input_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -121,12 +148,15 @@ class TestDesignAutos(unittest.TestCase):
         self.output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
         self.output_file.close()
 
+        # Create a temporary output directory 
+        self.output_dir = tempfile.TemporaryDirectory()
+
         self.files = [self.input_file.name, self.sp_file.name, self.output_file.name]
 
     def test_auto_from_file(self):
         argv = baseArgv(input_type='auto-from-file', 
                         input_file=self.input_file.name, 
-                        output_file=self.output_file.name)
+                        output_loc=self.output_dir.name)
         args = design.argv_to_args(argv)
         try:
             design.run(args)
@@ -135,7 +165,7 @@ class TestDesignAutos(unittest.TestCase):
 
     def test_auto_from_args(self):
         argv = baseArgv(input_type='auto-from-args', 
-                        output_file=self.output_file.name)
+                        output_loc=self.output_file.name)
         args = design.argv_to_args(argv)
         try:
             design.run(args)
@@ -143,7 +173,7 @@ class TestDesignAutos(unittest.TestCase):
             pass
 
     def test_specific_taxa(self):
-        argv = baseArgv(input_type='auto-from-args', output_file=self.output_file.name,
+        argv = baseArgv(input_type='auto-from-args', output_loc=self.output_file.name,
                         specific='taxa', specificity_file=self.sp_file.name)
         args = design.argv_to_args(argv)
         try:
@@ -155,20 +185,24 @@ class TestDesignAutos(unittest.TestCase):
         for file in self.files:
             if os.path.isfile(file):
                 os.unlink(file)
+        self.output_dir.cleanup()
+        
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
 
 
 def baseArgv(search_type='sliding-window', input_type='fasta', 
              objective='minimize-guides', model=False, specific=None, 
-             input_file=None, output_file=None, specificity_file=None):
+             input_file=None, output_loc=None, specificity_file=None):
 
     argv = ['design.py', search_type, input_type]
 
     if input_type == 'fasta':
-        argv.extend([input_file, '-o', output_file, '-gl', '2'])
+        argv.extend([input_file, '-o', output_loc, '-gl', '2'])
     elif input_type == 'auto-from-args':
-        argv.extend(['64320', 'None', 'NC_035889', output_file])
+        argv.extend(['64320', 'None', 'NC_035889', output_loc])
     elif input_type == 'auto-from-file':
-        argv.extend([input_file, '.'])
+        argv.extend([input_file, output_loc])
 
     if input_type in ['auto-from-args', 'auto-from-file']:
         argv.extend(['--sample-seqs', '1', '--mafft-path', 'fake_path'])
