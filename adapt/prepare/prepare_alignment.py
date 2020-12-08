@@ -206,8 +206,10 @@ def prepare_for(taxid, segment, ref_accs, out,
                 len(seqs_unaligned_curated))
 
         # When determining how many were filtered out, we care about acc_to_fetch
-        # (which has multiplicity in case of sampling with replacement)
-        frac_filtered = 1.0 - float(len(seqs_unaligned_curated)) / len(acc_to_fetch)
+        # (which has multiplicity in case of sampling with replacement) minus any
+        # removed reference sequences
+        frac_filtered = 1.0 - float(len(seqs_unaligned_curated)) / \
+                (len(acc_to_fetch) - len(added_ref_accs_to_fetch))
         if frac_filtered >= filter_warn:
             logger.warning(("A fraction %f of sequences were filtered out "
                 "during curation for tax %d (segment: %s) using references %s") %
