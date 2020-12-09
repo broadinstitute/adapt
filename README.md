@@ -23,7 +23,7 @@ ADAPT includes a pre-trained model that predicts CRISPR-Cas13a guide detection a
 ADAPT's output also includes amplification primers, e.g., for use with the SHERLOCK platform.
 The framework and software are compatible with other nucleic acid technologies given appropriate models.
 
-For more information, see our bioRxiv preprint that describes ADAPT and evaluates its designs experimentally.
+For more information, see our [bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2020.11.28.401877v1) that describes ADAPT and evaluates its designs experimentally.
 
 ### Table of contents
 
@@ -124,13 +124,15 @@ python -m unittest discover
 _Note: This section is optional, but may be useful for more advanced users or developers. You will need to install [Docker](https://docs.docker.com/get-docker/)._
 
 If you would like to run ADAPT using a Docker container rather than installing it, you may use one of our pre-built ADAPT images.
-These have not been released yet, but will be coming soon.
+
+For ADAPT without cloud features, use the image ID `quay.io/broadinstitute/adapt`.
+
+For ADAPT with cloud features, use the image ID `quay.io/broadinstitute/adaptcloud`.
 
 To pull our Docker image to your computer, run:
 ```bash
 docker pull [IMAGE-ID]
 ```
-where `[IMAGE-ID]` is the URL to the image excluding `https://`.
 
 To run ADAPT on a Docker container, run:
 ```bash
@@ -501,8 +503,8 @@ This can be in the form of an [issue](https://github.com/broadinstitute/adapt/is
 
 ADAPT was started by Hayden Metsky, and is developed by Priya Pillai and Hayden.
 
-If you find ADAPT useful to your work, please cite our preprint as:
-  * **[CITATION HERE]**
+If you find ADAPT useful to your work, please cite our [preprint](https://www.biorxiv.org/content/10.1101/2020.11.28.401877v1) as:
+  * Metsky HC _et al_. Efficient design of maximally active and specific nucleic acid diagnostics for thousands of viruses. _bioRxiv_ 2020.11.28.401877. doi:10.1101/2020.11.28.401877.
 
 ## License
 
