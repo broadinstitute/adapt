@@ -18,6 +18,12 @@ class TestURLConstruction(unittest.TestCase):
             '.cgi?taxid=123&cmd=download2')
         self.assertEqual(url, expected_url)
 
+    def test_ncbi_reference_url(self):
+        url = nn.ncbi_reference_url(123)
+        expected_url = ('https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup'
+            '.cgi?taxid=123&cmd=download1')
+        self.assertEqual(url, expected_url)
+
     def test_ncbi_fasta_download_url(self):
         url = nn.ncbi_fasta_download_url(['A123', 'A456', 'B789'])
         expected_url = ('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch'
@@ -33,7 +39,7 @@ class TestURLConstruction(unittest.TestCase):
     def test_read_taxid(self):
         url = ('https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup'
             '.cgi?taxid=123&cmd=download2')
-        taxid = nn.read_taxid_from_ncbi_neighbors_url(url)
+        taxid = nn.read_taxid_from_ncbi_url(url)
         expected_taxid = 123
         self.assertEqual(taxid, expected_taxid)
 

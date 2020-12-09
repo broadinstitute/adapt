@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 
 def prepare_for(taxid, segment, ref_accs, out,
-        aln_memoizer=None, aln_stat_memoizer=None,
+        aln_memoizer=None, aln_stat_memoizer=None, 
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
-        cluster_threshold=0.1, accessions_to_use=None,
-        sequences_to_use=None):
+        cluster_threshold=0.1, accessions_to_use=None, 
+        sequences_to_use=None, meta_filt=None, meta_filt_against=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -76,12 +76,22 @@ def prepare_for(taxid, segment, ref_accs, out,
         sequences_to_use: if set, a dict of sequences to use instead of
             fetching them for taxid; note that this does not perform
             curation on these sequences
+        meta_filt: tuple of 2 dictionaries where the keys are any of 'country', 'year',
+            'entry_create_year', 'taxid' and values for the first are a collection 
+            of what to include or True to indicate that the metadata must exist and
+            the second are what to exclude.
+        meta_filt_against: tuple of 2 dictionaries where the keys are any of 'country', 
+            'year', 'entry_create_year', 'taxid' and values for the first are a 
+            collection of what to include in accessions to be specific against and
+            the second are what to exclude.
 
     Returns:
-        number of clusters
+        number of clusters, set of accessions filtered out by meta_filt_against
     """
     logger.info(("Preparing an alignment for tax %d (segment: %s) with "
         "references %s") % (taxid, segment, ref_accs))
+
+    specific_against_metadata_acc = set()
 
     if taxid in [11320, 11520, 11552]:
         # Represents influenza
@@ -109,10 +119,19 @@ def prepare_for(taxid, segment, ref_accs, out,
         logger.info(("There are %d neighbors (%d with unique accessions)"),
                 len(neighbors), num_unique_acc)
 
+        # Filter out anything that does not have a year if years_tsv is defined
         if years_tsv is not None:
-            # Fetch metadata (including year), add it to neighbors, and
-            # filter out ones without a known year
-            neighbors = ncbi_neighbors.add_metadata_to_neighbors_and_filter(neighbors)
+            if meta_filt:
+                if 'year' not in meta_filt[0]:
+                    meta_filt[0]['year'] = True
+            else:
+                meta_filt = ({'year': True}, None)
+        
+        # Fetch metadata, add it to neighbors, and filter out ones that do
+        # not fit the filters
+        if meta_filt is not None or meta_filt_against is not None:
+            neighbors, specific_against_metadata_acc = ncbi_neighbors.add_metadata_to_neighbors_and_filter(
+                neighbors, meta_filt, meta_filt_against)
 
         if len(neighbors) == 0:
             if segment != None and segment != '':
@@ -286,7 +305,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 acc = name.split('.')[0]
                 fw.write('\t'.join([name, str(year_for_acc[acc])]) + '\n')
 
-    return len(clusters)
+    return len(clusters), specific_against_metadata_acc
 
 
 def fetch_sequences_for_taxonomy(taxid, segment):
@@ -324,6 +343,20 @@ def fetch_sequences_for_taxonomy(taxid, segment):
         logger.critical(("There are 0 accessions for tax %d (segment: %s)"),
                 taxid, segment)
 
+    seqs_unaligned = fetch_sequences_for_acc_list(acc_to_fetch)
+
+    return seqs_unaligned
+
+
+def fetch_sequences_for_acc_list(acc_to_fetch):
+    """Fetch list of sequences given a list of accessions
+
+    Args:
+        acc_to_fetch: list of accessions
+
+    Returns:
+        dict mapping sequence header to sequence string
+    """
     seqs_unaligned_fp = ncbi_neighbors.fetch_fastas(acc_to_fetch)
     seqs_unaligned = align.read_unaligned_seqs(seqs_unaligned_fp)
     # Delete temporary file

@@ -105,7 +105,24 @@ def ncbi_neighbors_url(taxid):
     return url
 
 
-def read_taxid_from_ncbi_neighbors_url(url):
+def ncbi_reference_url(taxid):
+    """Construct URL for downloading list of genome references.
+
+    Args:
+        taxid: taxonomic ID to download references for
+
+    Returns:
+        str representing download URL
+    """
+    params = [('taxid', taxid), ('cmd', 'download1')]
+    if ncbi_api_key is not None:
+        params += [('api_key', ncbi_api_key)]
+    params_url = urllib.parse.urlencode(params)
+    url = 'https://www.ncbi.nlm.nih.gov/genomes/GenomesGroup.cgi?%s' % params_url
+    return url
+
+
+def read_taxid_from_ncbi_url(url):
     """Read the taxid from a URL.
 
     Args:
@@ -143,12 +160,49 @@ def fetch_neighbors_table(taxid):
     # the response is different from what was requested; if it is,
     # then re-fetch the url with the new taxid (only try this once, otherwise
     # we could end up in a loop of redirects)
-    taxid_in_url = read_taxid_from_ncbi_neighbors_url(r.geturl())
+    taxid_in_url = read_taxid_from_ncbi_url(r.geturl())
     if taxid_in_url != taxid:
         logger.warning(("The neighbors table for taxid %d is being redirected "
             "to taxid %d"), taxid, taxid_in_url)
         new_taxid = taxid_in_url
         url = ncbi_neighbors_url(new_taxid)
+        r = urlopen_with_tries(url)
+
+    raw_data = r.read()
+    for line in raw_data.decode('utf-8').split('\n'):
+        line_rstrip = line.rstrip()
+        if line_rstrip != '':
+            yield line_rstrip
+
+
+def fetch_references(taxid):
+    """Fetch genome references list from NCBI.
+
+    Args:
+        taxid: taxonomic ID to download references for
+
+    Yields:
+        lines, where each line is from the genome references
+        list and each line is a str
+    """
+    logger.debug(("Fetching list of references for tax %d") % taxid)
+
+    url = ncbi_reference_url(taxid)
+    r = urlopen_with_tries(url)
+
+    # For some taxids, NCBI redirects to a different taxid and we are
+    # then unable to read the contents of the response (because it is
+    # HTML, and not the expected text format)
+    # Check if this occurred by seeing if the taxid in the url of
+    # the response is different from what was requested; if it is,
+    # then re-fetch the url with the new taxid (only try this once, otherwise
+    # we could end up in a loop of redirects)
+    taxid_in_url = read_taxid_from_ncbi_url(r.geturl())
+    if taxid_in_url != taxid:
+        logger.warning(("The references list for taxid %d is being redirected "
+            "to taxid %d"), taxid, taxid_in_url)
+        new_taxid = taxid_in_url
+        url = ncbi_reference_url(new_taxid)
         r = urlopen_with_tries(url)
 
     raw_data = r.read()
@@ -416,19 +470,54 @@ def construct_neighbors(taxid):
 
     return neighbors
 
+def construct_references(taxid):
+    """Construct reference accession number list for a taxonomic ID.
 
-def add_metadata_to_neighbors_and_filter(neighbors):
-    """Fetch and add metadata to neighbors.
+    Args:
+        taxid: taxonomic ID to download references for
+
+    Returns:
+        list of strings of reference accession numbers
+    """
+    logger.info(("Constructing a list of references for tax %d") % taxid)
+
+    references = []
+    for line in fetch_references(taxid):
+        ls = line.strip()
+        if len(ls) == 0:
+            continue
+        references.append(ls)
+
+    if len(references) == 0:
+        raise ValueError("Taxonomic ID %d does not have any references in "
+                         "NCBI. Try specifying a reference accession using "
+                         "--ref-accs" %taxid)
+    return references
+
+
+def add_metadata_to_neighbors_and_filter(neighbors, meta_filt=None, meta_filt_against=None):
+    """Fetch and add metadata to neighbors, and filter them based on metadata
 
     This only fetches for neighbors that do not have metadata set.
 
-    This also filters out neighbors without a known year.
+    This also filters out neighbors which do not match the filters in meta_filt or 
+    match a filter in meta_filt_against.
 
     Args:
         neighbors: collection of Neighbor objects
+        meta_filt: tuple of 2 dictionaries where the keys are any of 'country', 'year',
+            'entry_create_year', 'taxid' and values for the first are a collection 
+            of what to include or True to indicate that the metadata must exist and
+            the second are what to exclude.
+        meta_filt_against: tuple of 2 dictionaries where the keys are any of 'country', 
+            'year', 'entry_create_year', 'taxid' and values for the first are a 
+            collection of what to include in accessions to be specific against and
+            the second are what to exclude.
 
     Returns:
-        neighbors, with metadata included (excluding the ones filtered out)
+        neighbors with metadata included (excluding the ones filtered out), and
+            accession numbers of neighbors for the design to be specific against 
+            (as specified by meta_filt_against)
     """
     # Fetch metadata for each neighbor without metadata
     to_fetch = set(n.acc for n in neighbors if n.metadata == {})
@@ -436,20 +525,74 @@ def add_metadata_to_neighbors_and_filter(neighbors):
         metadata = fetch_metadata(to_fetch)
     else:
         metadata = {}
-    acc_to_skip = set()
+
+    # Keep track of the number of neighbors filtered out by meta_filt_against and not 
+    # meta_filt, as these may or may not be unintentional
+    only_in_against = 0
+    # Keep track of which neighbors don't match meta_filt or match meta_filt_against,
+    # as these should not be included in the design
+    acc_to_exclude = set()
+    # Keep track of which neighbors match meta_filt_against, as the design should
+    # be specific against these accessions
+    specific_against_metadata_acc = set()
+
+    # The first value of the filter is what the metadata should equal; the second is
+    # what the metadata should not equal
+    if meta_filt:
+        meta_filt_eq, meta_filt_neq = meta_filt
+    if meta_filt_against:
+        meta_filt_against_eq, meta_filt_against_neq = meta_filt_against
     for neighbor in neighbors:
+        # Set metadata for neighbor if it was not previously set
         if neighbor.acc in to_fetch:
             neighbor.metadata = metadata[neighbor.acc]
-        if neighbor.metadata['year'] is None:
-            acc_to_skip.add(neighbor.acc)
 
-    # Requiring year, so remove accessions that do not have a year
-    if len(acc_to_skip) > 0:
-        logger.warning(("Leaving out %d accessions that do not contain "
-            "a year"), len(acc_to_skip))
-    neighbors = [n for n in neighbors if n.acc not in acc_to_skip]
+        # If there is a filter for metadata, exclude any neighbors that don't match it 
+        # in the design
+        if meta_filt:
+            for key, value in meta_filt_eq.items():
+                if value is True and neighbor.metadata[key] is None:
+                    # Filter says that the metadata must exist, and it doesn't for this 
+                    # neighbor, so exclude
+                    acc_to_exclude.add(neighbor.acc)
+                elif neighbor.metadata[key] not in value:
+                    # Metadata doesn't match the list of what it should equal, so exclude
+                    acc_to_exclude.add(neighbor.acc)
+            for key, value in meta_filt_neq.items():
+                if neighbor.metadata[key] in value:
+                    # Metadata matches the list of what it shouldn't equal, so exclude
+                    acc_to_exclude.add(neighbor.acc)
 
-    return neighbors
+        # If there is a filter to be specific against metadata, add any neighbors that
+        # match it to specific_against_metadata_acc and exclude them from the design
+        if meta_filt_against:
+            for key, value in meta_filt_against_eq.items():
+                if neighbor.metadata[key] in value:
+                    # Metadata matches the list of what should be designed against,
+                    # so exclude if not already excluded & add to list to be specific against
+                    if neighbor.acc not in acc_to_exclude:
+                        acc_to_exclude.add(neighbor.acc)
+                        only_in_against += 1
+                    specific_against_metadata_acc.add(neighbor.acc)
+            for key, value in meta_filt_against_neq.items():
+                if neighbor.metadata[key] not in value:
+                    # Metadata doesn't match the list of what shouldn't be designed against,
+                    # so exclude if not already excluded & add to list to be specific against
+                    if neighbor.acc not in acc_to_exclude:
+                        acc_to_exclude.add(neighbor.acc)
+                        only_in_against += 1
+                    acc_to_exclude.add(neighbor.acc)
+                    specific_against_metadata_acc.add(neighbor.acc)
+
+    # Remove accessions that do not match the filters
+    if len(acc_to_exclude) > 0:
+        logger.info(("Leaving out %d accessions that do not match "
+            "metadata filters, %d of which were only identified by "
+            "specific_against_metadata_filter"), 
+            len(acc_to_exclude), only_in_against)
+    included_neighbors = [n for n in neighbors if n.acc not in acc_to_exclude]
+
+    return included_neighbors, specific_against_metadata_acc
 
 
 def construct_influenza_genome_neighbors(taxid):
@@ -620,7 +763,8 @@ def fetch_metadata(accessions):
         accessions: collection of accessions to fetch for
 
     Returns:
-        dict {accession: {'country': country, 'year': collection-year}}
+        dict {accession: {'country': country, 'year': collection-year, 
+            'entry_create_year': create-year, 'taxid': taxonomic id}}
     """
     accessions = list(set(accessions))
     logger.info(("Fetching metadata for %d accessions"), len(accessions))
@@ -640,6 +784,7 @@ def fetch_metadata(accessions):
         year = None
         entry_create_year = None
         country = None
+        taxid = None
         for (name, value) in feats:
             if name == 'collection_date' or name == 'create_date':
                 # Parse the year
@@ -665,8 +810,11 @@ def fetch_metadata(accessions):
                     raise Exception(("Inconsistent country for "
                         "accession %s") % accession)
                 country = value
+            if name == 'db_xref':
+                # Find a string of digits that represents the taxonomic ID
+                taxid = int(re.search(r"\d+", value)[0])
         metadata[accession] = {'country': country, 'year': year,
-                'entry_create_year': entry_create_year}
+                'entry_create_year': entry_create_year, 'taxid': taxid}
 
     # Delete the tempfile
     unlink(xml_tf.name)
