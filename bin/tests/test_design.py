@@ -113,7 +113,7 @@ class TestDesign(object):
             if input_type == 'fasta':
                 argv.extend([input_file, '-o', output_loc])
             elif input_type == 'auto-from-args':
-                argv.extend(['64320', 'None', 'NC_035889', output_loc])
+                argv.extend(['64320', 'None', output_loc])
             elif input_type == 'auto-from-file':
                 argv.extend([input_file, output_loc])
 
@@ -291,7 +291,8 @@ class TestDesignFull(TestDesign.TestDesignCase):
         self.curate_against_ref = align.curate_against_ref
 
         def small_curate(seqs, ref_accs, asm=None, remove_ref_accs=[]):
-            return {seq: seqs[seq] for seq in seqs if seq.split('.')[0] != 'NC_035889'}
+            return {seq: seqs[seq] for seq in seqs \
+                if seq.split('.')[0] not in remove_ref_accs}
 
         align.curate_against_ref = small_curate
 
