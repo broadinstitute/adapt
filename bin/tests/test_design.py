@@ -55,7 +55,7 @@ class TestDesign(object):
         def check_results(self, file, expected, header='target-sequences'):
             """Check the results of the test output
             
-            Given a CSV file of test output and expected output, fails the test
+            Given a TSV file of test output and expected output, fails the test
             if the test output guide target sequences do not equal the expected
             guide target sequences
 
@@ -84,8 +84,7 @@ class TestDesign(object):
 
         def baseArgv(self, search_type='sliding-window', input_type='fasta', 
                      objective='minimize-guides', model=False, specific=None, 
-                     specificity_file=None, input_file=None, 
-                     output_loc=None):
+                     specificity_file=None, output_loc=None):
             """Get arguments for tests
             
             Produces the correct arguments for a test case given details of 
@@ -100,16 +99,13 @@ class TestDesign(object):
                     to use simple binary prediction
                 specific: None, 'fasta', or 'taxa'; what sort of input
                     to be specific against
-                input_file: path to input file, set to self.input_file.name
-                    if None
                 output_loc: path to the output file/directory; set to 
                     self.output_file.name if None
 
             Returns:
                 List of strings that are the arguments of the test
             """
-            if input_file is None:
-                input_file = self.input_file.name
+            input_file = self.input_file.name
             if output_loc is None:
                 output_loc = self.output_file.name
             argv = ['design.py', search_type, input_type]
