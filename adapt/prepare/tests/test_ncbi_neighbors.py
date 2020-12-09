@@ -42,7 +42,7 @@ class TestConstructNeighbors(unittest.TestCase):
     """Tests the construct_neighbors() function.
 
     The function construct_neighbors() calls fetch_neighbors_table(),
-    which makes a request to NCBI. To avoid the request, thsi overrides
+    which makes a request to NCBI. To avoid the request, this overrides
     fetch_neighbors_table() to return a known neighbors table.
     """
 
