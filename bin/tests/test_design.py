@@ -1,4 +1,4 @@
-"""Tests for design_naively.py
+"""Tests for design.py
 """
 
 import random
