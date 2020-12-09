@@ -205,9 +205,9 @@ If there are more than one space-separated FASTA, there must be an equivalent nu
 ##### If INPUT-TYPE is `auto-from-args`:
 
 ```bash
-design.py [SEARCH-TYPE] auto-from-args [taxid] [segment] [refs] [out-tsv]
+design.py [SEARCH-TYPE] auto-from-args [taxid] [segment] [out-tsv]
 ```
-where `[taxid]` is an NCBI [taxonomy ID](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi), `[segment]` is a segment label (e.g., 'S') or 'None' if unsegmented, `[refs]` is one or more comma-separated accessions of reference sequences for the taxon, and `[out-tsv]` specifies where to write the output TSV file.
+where `[taxid]` is an NCBI [taxonomy ID](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi), `[segment]` is a segment label (e.g., 'S') or 'None' if unsegmented, and `[out-tsv]` specifies where to write the output TSV file.
 
 ##### If INPUT-TYPE is `auto-from-file`:
 
@@ -471,7 +471,7 @@ It identifies Cas13a guides using a pre-trained predictive model of activity.
 
 Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None NC_035889 guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
+design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
 This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable of MAFFT.

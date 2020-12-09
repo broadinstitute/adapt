@@ -237,20 +237,29 @@ def read_taxonomies(fn):
         2) a taxonomic (e.g., species) ID from NCBI
         3) a segment label, or 'None' if unsegmented
         4) one or more accessions of reference sequences (comma-separated)
+        5) (optional) metadata filters to only design for a subset of a taxa,
+            format: 'metadata=value' or 'metadata!=value', 
+                    commas to separate values, semicolons to separate filters
+
+        6) (optional) metadata filters to exclude from a taxa and be specific against,
+            column 5 must be included to include this column,
+            format: 'metadata=value' or 'metadata!=value', 
+                    commas to separate values, semicolons to separate filters
 
     Args:
         fn: path to TSV file, where each row corresponds to a taxonomy
 
     Returns:
-        list of tuples (label, taxonomic_id, segment, reference_accessions)
+        list of tuples (label, taxonomic_id, segment, reference_accessions, metadata_filters, metadata_filters_against)
     """
     labels = set()
     taxs = []
     with open(fn) as f:
         for line in f:
+            none_strings = ['', 'none']
             ls = line.rstrip().split('\t')
-            if len(ls) != 4:
-                raise Exception(("Input taxonomy TSV must have 4 columns"))
+            if len(ls) < 4 or len(ls) > 6:
+                raise Exception(("Input taxonomy TSV must have between 4 and 6 columns"))
 
             label = ls[0]
             if label in labels:
@@ -264,10 +273,19 @@ def read_taxonomies(fn):
                     ls[1])
 
             segment = ls[2]
-            if segment.lower() == 'none':
+            if segment.lower() in none_strings:
                 segment = None
             ref_accs = ls[3].split(',')
-            taxs += [(label, tax_id, segment, ref_accs)]
+
+            meta_filt = None
+            if len(ls) > 4 and ls[4].lower() not in none_strings:
+                meta_filt = read_metadata_filters(ls[4].split(';'))
+
+            meta_filt_against = None
+            if len(ls) > 5 and ls[5].lower() not in none_strings:
+                meta_filt_against = read_metadata_filters(ls[5].split(';'))
+
+            taxs += [(label, tax_id, segment, ref_accs, meta_filt, meta_filt_against)]
     return taxs
 
 
@@ -417,4 +435,41 @@ def read_taxonomy_specificity_ignore(fn):
 
             tax_ignore[tax_id_a].add(tax_id_b)
     return tax_ignore
+
+
+def read_metadata_filters(meta_filts):
+    """Create dictionaries of metadata filters from a list.
+    
+    Args:
+        meta_filts: list of filters in the format 'key=values' or 
+            'key!=values' with a comma separated list of values
+
+    Returns:
+        tuple of 2 dicts where each key is any of ['taxid', 'year', 'country']
+            and each value is what to include for the first dict and exclude for
+            the second dict
+    """
+    dict_filter_eq = {}
+    dict_filter_neq = {}
+    for filt in meta_filts:
+        if ' ' in filt:
+            raise ValueError("Incorrect format for filter '%s'; individual filters "
+                "should not include spaces" %filt)
+        dict_to_use = dict_filter_eq
+        filt_split = filt.split('!=')
+        if len(filt_split) == 2:
+            dict_to_use = dict_filter_neq
+        else:
+            filt_split = filt.split('=')
+        if len(filt_split) != 2:
+            raise ValueError("Incorrect format for filter '%s'; should be "
+                "'metadata=value or metadata!=value'" %filt)
+        if filt_split[0] not in ['taxid', 'year', 'country']:
+            raise ValueError("Incorrect filter key '%s'; should be one of "
+                "['taxid', 'year', 'country']" %filt_split[0])
+        if filt_split[0] in ['taxid', 'year']:
+            dict_to_use[filt_split[0]] = [int(i) for i in filt_split[1].split(",")]
+        else:
+            dict_to_use[filt_split[0]] = filt_split[1].split(",")
+    return (dict_filter_eq, dict_filter_neq)
 

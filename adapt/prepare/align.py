@@ -301,7 +301,7 @@ def set_mafft_exec(mafft_path):
     global _mafft_exec
     # Verify the path exists and is an executable
     if not os.path.isfile(mafft_path) or not os.access(mafft_path, os.X_OK):
-        raise Exception(("Path to mafft (%s) does not exist or is not "
+        raise FileNotFoundError(("Path to mafft (%s) does not exist or is not "
             "executable") % mafft_path)
     _mafft_exec = mafft_path
 
