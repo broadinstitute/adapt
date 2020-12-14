@@ -100,12 +100,13 @@ You will need to activate the environment each time you use ADAPT.
 
 ## Downloading and installing
 
-ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for Linux operating systems. To install ADAPT via Bioconda, follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda, then run the following command:
+ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for GNU/Linux operating systems.
+To install ADAPT via Bioconda, follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda and activate the environment, and then run the following command:
 ```bash
 conda install -c bioconda adapt
 ```
 
-On other operating systems, ADAPT can be installed by cloning the repository and installing the package with `pip`:
+On other operating systems (or if you may wish to modify ADAPT's code), ADAPT can be installed by cloning the repository and installing the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/adapt.git
 cd adapt
