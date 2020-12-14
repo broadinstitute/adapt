@@ -11,6 +11,8 @@ __author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppill
 with open("README.md", "r", encoding="utf-8") as f:
   LONG_DESCRIPTION = f.read()
 
+# There is a PyPi package called 'adapt' already, so renamed for PyPi
+# Does not affect the Bioconda package name
 setup(name='adapt-diagnostics',
       description='Tools to design guides for diagnostics',
       long_description=LONG_DESCRIPTION,

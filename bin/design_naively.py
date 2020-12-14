@@ -12,7 +12,7 @@ from adapt import alignment
 from adapt.utils import log
 from adapt.utils import seq_io
 
-__author__ = 'Hayden Metsky <hayden@mit.edu>'
+__author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
 logger = logging.getLogger(__name__)
 

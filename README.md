@@ -100,23 +100,23 @@ You will need to activate the environment each time you use ADAPT.
 
 ## Downloading and installing
 
-ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for GNU/Linux operating systems.
+ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for GNU/Linux and Windows operating systems.
 To install ADAPT via Bioconda, follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda and activate the environment, and then run the following command:
 ```bash
 conda install -c bioconda adapt
 ```
 
-On other operating systems (or if you may wish to modify ADAPT's code), ADAPT can be installed by cloning the repository and installing the package with `pip`:
+On other operating systems (or if you wish to modify ADAPT's code), ADAPT can be installed by cloning the repository and installing the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/adapt.git
 cd adapt
-pip install -e .
+pip3 install -e .
 ```
-Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
+Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip3 install`.
 
 If you want to be able to use AWS cloud features through ADAPT, replace the last line with the following:
 ```bash
-pip install -e ".[AWS]"
+pip3 install -e ".[AWS]"
 ```
 
 ## Testing
