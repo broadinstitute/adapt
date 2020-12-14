@@ -59,7 +59,7 @@ For more information, see our [bioRxiv preprint](https://www.biorxiv.org/content
 ## Dependencies
 
 ADAPT requires:
-* [Python](https://www.python.org) &gt;= 3.8.0
+* [Python](https://www.python.org) &gt;= 3.8.0, &lt; 3.9.0
 * [NumPy](http://www.numpy.org) &gt;= 1.16.0, &lt; 1.19.0
 * [SciPy](https://www.scipy.org) == 1.4.1
 * [TensorFlow](https://www.tensorflow.org) == 2.3.0
