@@ -4,6 +4,8 @@
 from collections import defaultdict
 import logging
 
+import numpy as np
+
 from adapt.utils import guide
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -117,7 +119,8 @@ class CoverageAnalyzer:
         """
         raise NotImplementedError()
 
-    def find_binding_pos(self, target_seq_name, seq, bind_fn):
+    def find_binding_pos(self, target_seq_name, seq, bind_fn,
+            save_activities=None):
         """Find if and where a sequence binds to in a target sequence.
 
         This takes a naive (but fully sensitive) approach: it simply
@@ -136,6 +139,8 @@ class CoverageAnalyzer:
             seq: guide or primer sequence to lookup
             bind_fn: function accepting (seq, target_seq, pos) and outputs
                 positions in pos to which seq binds to target_seq
+            save_activities: if set, pass along to guide_fn to save computed
+                activities
 
         Returns:
             collection of start positions in target_seq to which seq binds;
@@ -155,6 +160,13 @@ class CoverageAnalyzer:
 
         if not self.seqs_are_indexed:
             self._index_seqs()
+
+        def bind_fn_with_save(seq, target_seq, pos):
+            if save_activities is None:
+                return bind_fn(seq, target_seq, pos)
+            else:
+                return bind_fn(seq, target_seq, pos,
+                        save_activities=save_activities)
 
         target_seq = self.seqs[target_seq_name]
 
@@ -177,7 +189,7 @@ class CoverageAnalyzer:
                     if (kmer_start - j >= 0 and
                             kmer_start - j + len(seq) <= len(target_seq)):
                         pos_to_evaluate = [kmer_start - j]
-                        bind_pos.update(bind_fn(seq, target_seq,
+                        bind_pos.update(bind_fn_with_save(seq, target_seq,
                             pos_to_evaluate))
             if len(bind_pos) > 0:
                 # We have found at least 1 binding position; this may
@@ -191,7 +203,7 @@ class CoverageAnalyzer:
             # sliding approach
 
         pos_to_evaluate = list(range(len(target_seq) - len(seq) + 1))
-        bind_pos = bind_fn(seq, target_seq, pos_to_evaluate)
+        bind_pos = bind_fn_with_save(seq, target_seq, pos_to_evaluate)
         return bind_pos
 
     def seqs_where_guides_bind(self, guide_seqs):
@@ -320,6 +332,21 @@ class CoverageAnalyzer:
             frac_bound[design_id] = float(len(seqs_bound)) / len(self.seqs)
         return frac_bound
 
+    def mean_activity_of_guides(self):
+        """Determine the mean activity of guides from each design.
+
+        Returns:
+            dict mapping design identifier (self.designs.keys()) to the
+            mean activity, across the target sequences, of its guide set
+        """
+        mean_activities = {}
+        for design_id, design in self.designs.items():
+            logger.info(("Computing mean activities of guides in design "
+                "'%s'"), str(design_id))
+            activities_across_targets = self.activities_where_guide_binds(design.guides)
+            mean_activities[design_id] = np.mean(list(activities_across_targets.values()))
+        return mean_activities
+
 
 class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
     """Methods to analyze coverage of a design using model with fixed number
@@ -347,6 +374,9 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
                 fully_sensitive=fully_sensitive)
         self.guide_mismatches = guide_mismatches
         self.allow_gu_pairs = allow_gu_pairs
+
+    def activities_where_guide_binds(self, guide_seqs):
+        raise NotImplementedError()
 
     def guide_bind_fn(self, seq, target_seq, pos):
         """Evaluate binding with a mismatch model.
@@ -393,7 +423,34 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
         self.predictor = predictor
         self.highly_active = highly_active
 
-    def guide_bind_fn(self, seq, target_seq, pos):
+    def activities_where_guide_binds(self, guide_seqs):
+        """Determine activities across the target sequences.
+
+        Args:
+            guide_seqs: guide sequences to lookup (treat as a guide set)
+
+        Returns:
+            dict {target seq in self.seqs: predicted activity}
+        """
+        target_act = {}
+        for seq_name, target_seq in self.seqs.items():
+            activities_for_target = []
+            for guide_seq in guide_seqs:
+                activities = {}
+                bind_pos = self.find_binding_pos(seq_name, guide_seq,
+                        self.guide_bind_fn, save_activities=activities)
+                if len(bind_pos) > 0:
+                    # guide_seq binds somewhere in target_seq
+                    # As its activity, take the maximum over multiple
+                    # positions (if there is more than one where it may bind)
+                    activities_for_target += [max(activities.values())]
+                else:
+                    activities_for_target += [0]
+            # If there are multiple guides, take the max across them
+            target_act[target_seq] = max(activities_for_target)
+        return target_act
+
+    def guide_bind_fn(self, seq, target_seq, pos, save_activities=None):
         """Evaluate binding with a predictor -- i.e., based on what is
         predicted to be highly active.
 
@@ -402,6 +459,9 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
             target_seq: target sequence against which to check
             pos: list of positions indicating subsequence in target_seq
                 to check for binding of seq
+            save_activities: if set, this saves computed activities as
+                save_activites[p]=activity for each p in pos for which
+                this can compute activity; self.highly_active must be False
 
         Returns:
             set of positions in pos where seq binds to target_seq
@@ -427,9 +487,15 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
         if self.highly_active:
             predictions = self.predictor.determine_highly_active(-1,
                     pairs_to_evaluate)
+            if save_activities is not None:
+                raise Exception(("Cannot use save_activities when using "
+                    "'highly active' as a criterion"))
         else:
             predictions = self.predictor.compute_activity(-1,
                     pairs_to_evaluate)
+            if save_activities is not None:
+                for i, p in zip(pos_evaluating, predictions):
+                    save_activities[i] = p
             predictions = [bool(p > 0) for p in predictions]
         bind_pos = set()
         for i, p in zip(pos_evaluating, predictions):
