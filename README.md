@@ -110,13 +110,13 @@ On other operating systems (or if you wish to modify ADAPT's code), ADAPT can be
 ```bash
 git clone git@github.com:broadinstitute/adapt.git
 cd adapt
-pip3 install -e .
+pip install -e .
 ```
-Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip3 install`.
+Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
 
 If you want to be able to use AWS cloud features through ADAPT, replace the last line with the following:
 ```bash
-pip3 install -e ".[AWS]"
+pip install -e ".[AWS]"
 ```
 
 ## Testing
