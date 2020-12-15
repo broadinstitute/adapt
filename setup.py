@@ -24,7 +24,7 @@ setup(name='adapt-diagnostics',
       url="https://github.com/broadinstitute/adapt",
       version=adapt.__version__,
       packages=find_packages(),
-      install_requires=['numpy>=1.16.0,<1.19.0', 'scipy==1.4.1', 'tensorflow==2.3.0'],
+      install_requires=['numpy>=1.16.0,<1.19.0', 'scipy==1.4.1', 'tensorflow==2.4.0'],
       extras_require={
         'AWS': ['boto3>=1.14.54', 'botocore>=1.17.54']
       },
