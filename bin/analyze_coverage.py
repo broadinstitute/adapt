@@ -112,6 +112,30 @@ def write_frac_bound(designs, frac_bound, out_fn):
             fw.write('\t'.join([str(x) for x in row]) + '\n')
 
 
+def write_mean_activity_of_guides(designs, mean_activities, out_fn):
+    """Write table giving the mean activity of guide sets.
+
+    Args:
+        designs: dict {design_id: design} where design_id is an
+            identifier for design and design is a coverage_analysis.
+            Design object
+        mean_activities: dict {design_id: activity} where design_id is
+            an identifier for a design and activity is the mean activity,
+            across the target sequences, of its guide set
+        out_fn: path to TSV file at which to write table
+    """
+    header = ['design_id',
+              'guide-target-sequences',
+              'mean-activity']
+    with open(out_fn, 'w') as fw:
+        fw.write('\t'.join(header) + '\n')
+        for design_id in sorted(list(designs.keys())):
+            guides = designs[design_id].guides
+            guides = ' '.join(sorted(guides))
+            row = [design_id, guides, mean_activities[design_id]]
+            fw.write('\t'.join([str(x) for x in row]) + '\n')
+
+
 def main(args):
     # Allow G-U base pairing, unless it is explicitly disallowed
     allow_gu_pairs = not args.do_not_allow_gu_pairing
@@ -169,6 +193,17 @@ def main(args):
         frac_bound = analyzer.frac_of_seqs_bound()
         write_frac_bound(designs, frac_bound, args.write_frac_bound)
         performed_analysis = True
+    if args.write_mean_activity_of_guides:
+        if (not args.predict_activity_model_path or
+                args.predict_activity_require_highly_active):
+            raise Exception(("To use --write-mean-activity-of-guides, "
+                    "a predictive model must be set and "
+                    "--predict-activity-require-highly-active must *not* "
+                    "be set"))
+        mean_activity = analyzer.mean_activity_of_guides()
+        write_mean_activity_of_guides(designs, mean_activity,
+                args.write_mean_activity_of_guides)
+        performed_analysis = True
 
     if not performed_analysis:
         logger.warning(("No analysis was requested"))
@@ -198,6 +233,15 @@ if __name__ == "__main__":
               "the row number of the design in the designs input (1 for "
               "the first design). The provided argument is a path to "
               "a TSV file at which to the write the table."))
+    parser.add_argument('--write-mean-activity-of-guides',
+        help=("If set, write a table in which each row represents an "
+              "input design and gives the mean activity across the target "
+              "sequences of the guide set. The 'design_id' column gives "
+              "the row number of the design in the designs input (1 for "
+              "the first design). The provided argument is a path to "
+              "a TSV file at which to write the table. If set, a predictive "
+              "model must be set without "
+              "--predict-activity-require-highly-active"))
 
     # Parameter determining whether a primer binds to target
     parser.add_argument('-pm', '--primer-mismatches',
