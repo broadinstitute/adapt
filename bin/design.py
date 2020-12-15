@@ -35,7 +35,7 @@ except:
 else:
     cloud = True
 
-__author__ = 'Hayden Metsky <hayden@mit.edu>'
+__author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
 logger = logging.getLogger(__name__)
 

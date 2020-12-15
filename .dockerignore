@@ -2,6 +2,5 @@
 .gitignore
 .travis.yml
 README.md
-LICENSE
 adapt.egg-info
 **/tests/
