@@ -262,10 +262,10 @@ def prepare_alignments(args):
             if not os.path.exists(align_stat_memoize_dir):
                 os.makedirs(align_stat_memoize_dir)
 
-        am = align.AlignmentMemoizer(align_memoize_dir, 
+        am = align.AlignmentMemoizer(align_memoize_dir,
             aws_access_key_id = args.aws_access_key_id,
             aws_secret_access_key = args.aws_secret_access_key)
-        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir, 
+        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir,
             aws_access_key_id = args.aws_access_key_id,
             aws_secret_access_key = args.aws_secret_access_key)
     else:
@@ -351,13 +351,13 @@ def prepare_alignments(args):
         nc, specific_against_metadata_acc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
-            sample_seqs=args.sample_seqs, 
+            sample_seqs=args.sample_seqs,
             prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name,
             cluster_threshold=args.cluster_threshold,
             accessions_to_use=accessions_to_use_for_tax,
             sequences_to_use=sequences_to_use_for_tax,
-            meta_filt=meta_filt, 
+            meta_filt=meta_filt,
             meta_filt_against=meta_filt_against)
 
         for i in range(nc):
@@ -478,7 +478,7 @@ def design_for_id(args):
     specific_against_metadata_start = len(alns)
     for i in range(num_aln_for_design):
         if len(args.specific_against_metadata_accs[i]) > 0:
-            logger.info(("Fetching %d sequences within taxon %d to be specific against"), 
+            logger.info(("Fetching %d sequences within taxon %d to be specific against"),
                 len(args.specific_against_metadata_accs[i]), args.taxid_for_fasta[i])
             seqs = prepare_alignment.fetch_sequences_for_acc_list(list(
                 args.specific_against_metadata_accs[i]))
@@ -505,7 +505,7 @@ def design_for_id(args):
             alns += [seqs_list]
 
     specific_against_exists = ((len(args.specific_against_fastas) > 0 or
-            args.specific_against_taxa is not None) or 
+            args.specific_against_taxa is not None) or
             (specific_against_metadata_end - specific_against_metadata_start) > 0)
 
     required_guides, blacklisted_ranges, blacklisted_kmers = \
@@ -570,7 +570,7 @@ def design_for_id(args):
         required_guides_for_aln = required_guides[i]
         blacklisted_ranges_for_aln = blacklisted_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
-        # For metadata filtering, we only want to be specific against the 
+        # For metadata filtering, we only want to be specific against the
         # accessions in alns[specific_against_metadata_index]
         specific_against_metadata_index = specific_against_metadata_indices[i] \
             if i in specific_against_metadata_indices else None
@@ -603,9 +603,9 @@ def design_for_id(args):
             for j in range(num_aln_for_design):
                 if j in alns_in_same_taxon:
                     aq.mask_aln(j)
-                    logger.info(("Masking alignment %d as it is taxon %d"), 
+                    logger.info(("Masking alignment %d as it is taxon %d"),
                         j + 1, taxid)
-            # Also mask any specific against metadata sequence lists that do not 
+            # Also mask any specific against metadata sequence lists that do not
             # match the one for this alignment
             if specific_against_metadata_index is not None:
                 logger.info(("Masking all sequence lists for specificity except the one "
@@ -694,7 +694,7 @@ def design_for_id(args):
                 args.out_tsv[i],
                 window_step=args.window_step,
                 sort=args.sort_out,
-                print_analysis=(args.log_level==logging.INFO))
+                print_analysis=(args.log_level<=logging.INFO))
         elif args.search_cmd == 'complete-targets':
             # Find optimal targets (primer and guide set combinations),
             # and write them to a file
