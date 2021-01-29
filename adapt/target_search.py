@@ -115,18 +115,19 @@ class TargetSearcher:
                 p2 = primers[j]
                 yield (p1, p2)
 
-    def find_targets(self, best_n=10, no_overlap=True):
+    def find_targets(self, best_n=10, no_overlap='amplicon'):
         """Find targets across an alignment.
 
         Args:
             best_n: only store and output the best_n targets according
                 to the objective
-            no_overlap: if True, do not allow targets in the output
-                whose amplicons (target range) overlap. When True,
-                if a target overlaps with a target already in the output,
-                this *replaces* the overlapping one with the new one
-                if the new one has a better objective value. When False,
-                many targets in the best_n may be very similar
+            no_overlap: if 'amplicon', do not allow targets in the output
+                whose amplicons (target range) overlap; if 'primer', do not
+                allow targets in the output if both primers overlap.
+                When not 'none', if a target overlaps with a target already
+                in the output, this *replaces* the overlapping one with
+                the new one if the new one has a better objective value.
+                When 'none', many targets in the best_n may be very similar
 
         Returns:
             list of tuples (obj_value, target) where target is a tuple
@@ -258,23 +259,23 @@ class TargetSearcher:
             # If targets should not overlap and this overlaps a target
             # already in target_heap, check if we should bother trying to
             # find guides in this window
+            # Note that this strategy does have the possibility of leading
+            # to suboptimal solutions. Effectively, successive windows
+            # can repeatedly remove other overlapping ones that might
+            # otherwise be in the best_n. For example, consider targets
+            # A, B, and C where A overlaps B and B overlaps C but A
+            # does not overlap C. And say the true ranking is
+            # A<B<C, but their objective values are close and better than
+            # any other possible target option. Adding B would remove
+            # A, and then adding C would remove B. So we are left with
+            # only C from this set of targets, but ideally we would
+            # like to have both A and C. One way around this might be
+            # to keep a heap with >best_n options and only prune for
+            # diverse solutions (non-overlap) later on.
             overlapping_i = []
-            if no_overlap:
+            if no_overlap=='amplicon':
                 # Check if any targets already in target_heap overlap
                 # with this target
-                # Note that this strategy does have the possibility of leading
-                # to suboptimal solutions. Effectively, successive windows
-                # can repeatedly remove other overlapping ones that might
-                # otherwise be in the best_n. For example, consider targets
-                # A, B, and C where A overlaps B and B overlaps C but A
-                # does not overlap C. And say the true ranking is
-                # A<B<C, but their objective values are close and better than
-                # any other possible target option. Adding B would remove
-                # A, and then adding C would remove B. So we are left with
-                # only C from this set of targets, but ideally we would
-                # like to have both A and C. One way around this might be
-                # to keep a heap with >best_n options and only prune for
-                # diverse solutions (non-overlap) later on.
                 this_start = p1.start
                 this_end = this_start + target_length
                 for i in range(len(target_heap)):
@@ -283,6 +284,15 @@ class TargetSearcher:
                     i_start = p1_i.start
                     i_end = p2_i.start + p2_i.primer_length
                     if (this_start < i_end) and (i_start < this_end):
+                        # Replace target_i
+                        overlapping_i += [i]
+            if no_overlap=='primer':
+                this_start = p1.start
+                this_end = this_start + target_length
+                for i in range(len(target_heap)):
+                    _, _, target_i = target_heap[i]
+                    (p1_i, p2_i), _ = target_i
+                    if p1.overlaps(p1_i) and p2.overlaps(p2_i):
                         # Replace target_i
                         overlapping_i += [i]
             if overlapping_i:
@@ -489,7 +499,7 @@ class TargetSearcher:
 
         return r
 
-    def find_and_write_targets(self, out_fn, best_n=10):
+    def find_and_write_targets(self, out_fn, best_n=10, no_overlap='amplicon'):
         """Find targets across an alignment, and write them to a file.
 
         This writes a table of the targets to a file, in which each
@@ -500,8 +510,15 @@ class TargetSearcher:
             out_fn: output TSV file to write targets
             best_n: only store and output the best_n targets according to
                 objective value
+            no_overlap: if 'amplicon', do not allow targets in the output
+                whose amplicons (target range) overlap; if 'primer', do not
+                allow targets in the output if both primers overlap.
+                When not 'none', if a target overlaps with a target already
+                in the output, this *replaces* the overlapping one with
+                the new one if the new one has a better objective value.
+                When 'none', many targets in the best_n may be very similar
         """
-        targets = self.find_targets(best_n=best_n)
+        targets = self.find_targets(best_n=best_n, no_overlap=no_overlap)
 
         with open(out_fn, 'w') as outf:
             # Write a header
