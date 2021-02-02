@@ -156,6 +156,7 @@ class TargetSearcher:
         push_id_counter = itertools.count()
 
         assert self.obj_type in ['min', 'max']
+        assert no_overlap in ['amplicon', 'primer', 'none']
         def obj_value(i):
             # Return objective value of the i'th element
             if self.obj_type == 'min':
@@ -273,7 +274,7 @@ class TargetSearcher:
             # to keep a heap with >best_n options and only prune for
             # diverse solutions (non-overlap) later on.
             overlapping_i = []
-            if no_overlap=='amplicon':
+            if no_overlap == 'amplicon':
                 # Check if any targets already in target_heap overlap
                 # with this target
                 this_start = p1.start
@@ -286,9 +287,7 @@ class TargetSearcher:
                     if (this_start < i_end) and (i_start < this_end):
                         # Replace target_i
                         overlapping_i += [i]
-            if no_overlap=='primer':
-                this_start = p1.start
-                this_end = this_start + target_length
+            if no_overlap == 'primer':
                 for i in range(len(target_heap)):
                     _, _, target_i = target_heap[i]
                     (p1_i, p2_i), _ = target_i
@@ -425,11 +424,13 @@ class TargetSearcher:
                     # For some edge cases, the new entry overlaps with
                     # multiple existing entries
                     # Check if the new entry has a sufficiently low cost
-                    # to justify removing any existing overlapping entries
-                    obj_value_is_sufficiently_good = False
+                    # to justify removing any existing overlapping entries,
+                    # where 'sufficiently low cost' means a lower cost than
+                    # all of the overlapping targets
+                    obj_value_is_sufficiently_good = True
                     for i in overlapping_i:
-                        if obj_value_is_better(obj_value_total, obj_value(i)):
-                            obj_value_is_sufficiently_good = True
+                        if obj_value_is_better(obj_value(i), obj_value_total):
+                            obj_value_is_sufficiently_good = False
                             break
                     if obj_value_is_sufficiently_good:
                         # Remove all entries that overlap the new entry,
