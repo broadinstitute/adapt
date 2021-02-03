@@ -126,7 +126,7 @@ pip install -e ".[AWS]"
 
 ## Testing
 
-If you clone of this repository, you may want to run tests to ensure your clone is running properly.
+If you clone this repository, you may want to run tests to ensure your clone is running properly.
 This package uses Python's `unittest` framework.
 To execute all tests, from the home directory of your ADAPT clone, run:
 ```bash
