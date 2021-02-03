@@ -1,4 +1,4 @@
-# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/adapt/README.html)
+# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Bioconda Package](https://img.shields.io/conda/vn/bioconda/adapt)](http://bioconda.github.io/recipes/adapt/README.html) [![PyPI package](https://img.shields.io/pypi/v/adapt-diagnostics)](https://pypi.org/project/adapt-diagnostics/)
 #### Activity-informed Design with All-inclusive Patrolling of Targets
 
 ADAPT efficiently designs activity-informed nucleic acid diagnostics for viruses.
@@ -100,13 +100,18 @@ You will need to activate the environment each time you use ADAPT.
 
 ## Downloading and installing
 
-ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for GNU/Linux and Windows operating systems.
-To install ADAPT via Bioconda, follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda and activate the environment, and then run the following command:
+ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for GNU/Linux and Windows operating systems and via [PyPI](https://pypi.org/project/adapt-diagnostics/) for all operating systems.
+Before installing ADAPT via Bioconda, we suggest you follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda and activate the environment. To install via Bioconda, run the following command:
 ```bash
 conda install -c bioconda adapt
 ```
 
-On other operating systems (or if you wish to modify ADAPT's code), ADAPT can be installed by cloning the repository and installing the package with `pip`:
+Before installing ADAPT via PyPI, we suggest you follow the instructions in the [Python documentation](https://docs.python.org/3/tutorial/venv.html) to set up and activate a virtual environment for ADAPT. To install via PyPI, run the following command:
+```bash
+pip install adapt-diagnostics
+```
+
+If you wish to modify ADAPT's code, ADAPT can be installed by cloning the repository and installing the package with `pip`:
 ```bash
 git clone git@github.com:broadinstitute/adapt.git
 cd adapt
@@ -121,8 +126,9 @@ pip install -e ".[AWS]"
 
 ## Testing
 
-The package uses Python's `unittest` framework.
-To execute all tests, run:
+If you clone of this repository, you may want to run tests to ensure your clone is running properly.
+This package uses Python's `unittest` framework.
+To execute all tests, from the home directory of your ADAPT clone, run:
 ```bash
 python -m unittest discover
 ```
@@ -479,7 +485,7 @@ This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy
 You must fill in `MAFFT_PATH` with an executable of MAFFT.
 
 ADAPT designs primers and Cas13a guides within the amplicons, such that:
-* guides have maximal predicted detection activity, in expectation over Zika's genomic diversity (`--obj maximize-activity`) 
+* guides have maximal predicted detection activity, in expectation over Zika's genomic diversity (`--obj maximize-activity`)
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
 * primers capture 95% of sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-pm 1`)
 
