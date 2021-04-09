@@ -472,3 +472,38 @@ class SimpleBinaryPredictor:
         no memoizations.
         """
         pass
+
+
+class MutationPredictor:
+    """Methods to predict the effect of mutations on guide activity"""
+    def __init__(self, mutator, predictor, n):
+        """
+        Args:
+            mutator: a adapt.utils.mutate Mutator object
+            predictor: a Predictor object
+            n: number of child mutations per sequence
+        """
+        self.mutator = mutator
+        self.predictor = predictor
+        self.n = n
+        self.context_nt = 0
+        if not isinstance(predictor, predict_activity.SimpleBinaryPredictor):
+            self.context_nt = predictor.context_nt
+
+    def compute_activity(self, start_pos, pairs):
+        """Compute a single activity measurement for pairs.
+
+        Args:
+            start_pos: start position of all guides in pairs; used for
+                memoizations
+            pairs: list of tuples (target with context, guide)
+
+        Returns:
+            activity value for each pair
+        """
+        mutated_activities = [None * len(pairs)]
+        for i, pair in enumerate(pairs):
+            mutated_target_seqs = self.mutator.mutate(pair[0], self.n)
+            pairs = [(mutated_target_seq, guide_seq) for mutated_target_seq in mutated_target_seqs]
+            mutated_activities[i] = self.predictor.compute_activity(start_pos, pairs)
+        return mutated_activities

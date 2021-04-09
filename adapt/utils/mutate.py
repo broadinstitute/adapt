@@ -7,7 +7,7 @@ from scipy.linalg import expm
 __author__ = 'David K. Yang <yangd5153@gmail.com>'
 
 
-class GTRSubstitutionModel:
+class GTRSubstitutionMutator:
     """GTR Substitution model to model distribution of future viral sequences
     """
     def __init__(self, piA, piC, piG, piT,
@@ -70,9 +70,8 @@ class GTRSubstitutionModel:
         """Computes probability of wild_seq mutating into mut_seq, under transition probability matrix P
 
         Args:
-            str: reference sequence
-            str: mutated sequence to compute probability for
-            list(list(float)): transition probability matrix P
+            wild_seq: reference sequence
+            mut_seq: mutated sequence to compute probability for
 
         Returns:
             float: probability of mutated sequence
@@ -87,13 +86,12 @@ class GTRSubstitutionModel:
 
         return prob
 
-    def naive_sampler(self, wild_seq, n):
+    def mutate(self, wild_seq, n):
         """Sample future sequences under transition probability matrix P
 
         Args:
-            str: reference sequence
-            list(list(float)): transition probability matrix P
-            int: number of samples
+            wild_seq: reference sequence
+            n: number of samples (int)
 
         Returns:
             list(str): list of samples from the distribution of future sequences
@@ -108,11 +106,3 @@ class GTRSubstitutionModel:
 
         sampled_seqs_list = np.array(sampled_seq_matrix).transpose()
         return ["".join(seq) for seq in sampled_seqs_list]
-
-
-class MutationEffectPredictor:
-    """Methods to predict the effect of mutations on guide activity"""
-    def __init__(self, alignment, gsm, predictor):
-        self.alignment = alignment
-        self.gsm = gsm
-        self.predictor = predictor

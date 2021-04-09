@@ -28,7 +28,8 @@ class TargetSearcher:
             max_primers_at_site=None,
             max_target_length=None, obj_weights=None,
             only_account_for_amplified_seqs=False,
-            halt_early=False, obj_value_shift=None):
+            halt_early=False, obj_value_shift=None,
+            mutation_predictor=None):
         """
         Args:
             ps: PrimerSearcher object
@@ -62,6 +63,8 @@ class TargetSearcher:
                 positive so that there is not confusion about differences
                 between positive/negative. If None (default), defaults are
                 set below based on obj_type.
+            mutation_predictor: a adapt.utils.predict_activity MutationPredictor
+                object. If None (default), do not predict activity after mutations.
         """
         self.ps = ps
         self.gs = gs
@@ -99,6 +102,8 @@ class TargetSearcher:
                 # negative, so shift all up so that most are positive
                 self.obj_value_shift = 4.0
 
+        self.mutation_predictor = mutation_predictor
+
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.ps.
 
@@ -114,6 +119,19 @@ class TargetSearcher:
             for j in range(i + 1, len(primers)):
                 p2 = primers[j]
                 yield (p1, p2)
+
+    def _find_mutated_activity(self):
+        mutated_activities = [None] * len(targets)
+        for i, (obj_value, target) in enumerate(targets):
+            ((p1, p2), (guides_stats, guides)) = target
+            guides_seqs_sorted = sorted(list(guides))
+            mutated_activities[i] = [[self.gs.aln.compute_activity(
+                    start_pos,
+                    guide,
+                    self.mutation_predictor) \
+                for start_pos in self.gs._selected_guide_positions[guide]] \
+            for guide in guides_seqs_sorted]
+        return mutated_activities
 
     def find_targets(self, best_n=10, no_overlap=True):
         """Find targets across an alignment.
@@ -502,6 +520,8 @@ class TargetSearcher:
                 objective value
         """
         targets = self.find_targets(best_n=best_n)
+        if self.mutation_predictor:
+            mutated_activity = self._find_mutated_activity(targets)
 
         with open(out_fn, 'w') as outf:
             # Write a header
