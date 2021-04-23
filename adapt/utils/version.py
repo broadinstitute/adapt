@@ -23,17 +23,17 @@ __version__ = None
 
 
 def get_project_path():
-    """Determine absolute path to the top-level of the catch project.
+    """Determine absolute path to the top-level of the project.
     This is assumed to be the parent of the directory containing this script.
     Returns:
-        path (string) to top-level of the catch project
+        path (string) to top-level of the project
     """
     # abspath converts relative to absolute path; expanduser interprets ~
     path = __file__  # path to this script
     path = os.path.expanduser(path)  # interpret ~
     path = os.path.abspath(path)  # convert to absolute path
     path = os.path.dirname(path)  # containing directory: utils
-    path = os.path.dirname(path)  # containing directory: catch project dir
+    path = os.path.dirname(path)  # containing directory: project dir
     return path
 
 
