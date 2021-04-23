@@ -17,8 +17,8 @@ class TestPredictor(unittest.TestCase):
 
     def setUp(self):
         # Use the provided models with default thresholds
-        classification_model_path = 'models/classify/model-51373185'
-        regression_model_path = 'models/regress/model-f8b6fd5d'
+        classification_model_path = 'adapt/models/classify/cas13a'
+        regression_model_path = 'adapt/models/regress/cas13a'
         self.predictor = predict_activity.Predictor(
                 classification_model_path,
                 regression_model_path)
@@ -69,7 +69,7 @@ class TestPredictor(unittest.TestCase):
         target_with_context_2 = ('A'*self.predictor.context_nt +
                 'G'*28 + 'A'*self.predictor.context_nt)
         guide_2 = 'G'*28
-        
+
         pairs = [(target_with_context_1, guide_1), (target_with_context_2,
             guide_2)]
         pairs_onehot = self.predictor._model_input_from_nt(pairs)
@@ -91,7 +91,7 @@ class TestPredictor(unittest.TestCase):
         target_with_context_2 = ('A'*self.predictor.context_nt +
                 'A'*28 + 'A'*self.predictor.context_nt)
         guide_2 = 'A'*28
-        
+
         pairs = [(target_with_context_1, guide_1), (target_with_context_2,
             guide_2)]
         pairs_onehot = self.predictor._model_input_from_nt(pairs)
