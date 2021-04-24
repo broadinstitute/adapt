@@ -349,7 +349,7 @@ class GuideSearcher:
         """Compute percentiles of activity across target sequences for
         a guide set in a window.
 
-        For example, when percentiles is 0.5, this returns the median
+        For example, when percentiles is 50, this returns the median
         activity across the target sequences that the guide set provides.
 
         Args:
@@ -481,7 +481,7 @@ class GuideSearcher:
             raise ValueError(("window size must be < the length of the "
                               "alignment"))
         if window_size < self.guide_length:
-            raise ValueError("window size must be >= guide length") 
+            raise ValueError("window size must be >= guide length")
 
         for start in range(0, self.aln.seq_length - window_size + 1,
                 window_step):
@@ -676,7 +676,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
 
             key = (seqs_to_consider_frozen, num_needed_frozen)
             return key
-        
+
         p = super()._compute_guide_memoized(start, construct_p, make_key,
                 use_last=use_last)
         return p
@@ -1170,7 +1170,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 num_with_min_count = sum(1 for x in guide_collections
                     if len(x[2]) == min_count)
 
-                min_count_str = (str(min_count) + " guide" + 
+                min_count_str = (str(min_count) + " guide" +
                                  ("s" if min_count > 1 else ""))
 
                 stat_display = [
@@ -1287,7 +1287,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         if activities is None:
             activities = self.guide_set_activities(window_start, window_end,
                     guide_set)
-        
+
         # Use the mean (i.e., uniform prior over target sequences)
         expected_activity = np.mean(activities)
 

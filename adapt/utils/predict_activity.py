@@ -377,16 +377,19 @@ class Predictor:
         mem = self._memoized_evaluations[start_pos]
         return [mem[pair][1] for pair in pairs]
 
-    def compute_activity(self, start_pos, pairs):
+    def compute_activity(self, start_pos, pairs, percentile=None):
         """Compute a single activity measurement for pairs.
 
         Args:
             start_pos: start position of all guides in pairs; used for
                 memoizations
             pairs: list of tuples (target with context, guide)
+            percentile: a percentile between 0 and 100 of the activity
+                values to return
 
         Returns:
-            activity value for each pair
+            activity value for each pair, if percentile is included,
+                activity value for the percentile amongst the pairs
         """
         # Determine which pairs do not have memoized results, and call
         # these
@@ -397,7 +400,11 @@ class Predictor:
                 if pair not in mem]
         self._run_models_and_memoize(start_pos, unique_pairs_to_evaluate)
 
-        return [mem[pair][0] for pair in pairs]
+        activities = [mem[pair][0] for pair in pairs]
+        if percentile:
+            percentile_activity = np.percentile(activities, percentile)
+            return (activities, percentile_activity)
+        return activities
 
     def cleanup_memoized(self, start_pos):
         """Cleanup memoizations no longer needed at a start position.
@@ -438,7 +445,7 @@ class SimpleBinaryPredictor:
 
         self.rough_max_activity = 1.0
 
-    def compute_activity(self, start_pos, gd_sequence, aln):
+    def compute_activity(self, start_pos, gd_sequence, aln, percentile=None):
         """Compute activity by checking hybridization across an alignment.
 
         This says the activity is 1.0 if a guide is deemed to bind to
@@ -465,6 +472,10 @@ class SimpleBinaryPredictor:
         for seq_idx in seqs_bound:
             activities[seq_idx] = 1.0
 
+        if percentile:
+            percentile_activity = np.percentile(activities, percentile)
+            return (activities, percentile_activity)
+
         return activities
 
     def cleanup_memoized(self, start_pos):
@@ -472,38 +483,3 @@ class SimpleBinaryPredictor:
         no memoizations.
         """
         pass
-
-
-class MutationPredictor:
-    """Methods to predict the effect of mutations on guide activity"""
-    def __init__(self, mutator, predictor, n):
-        """
-        Args:
-            mutator: a adapt.utils.mutate Mutator object
-            predictor: a Predictor object
-            n: number of child mutations per sequence
-        """
-        self.mutator = mutator
-        self.predictor = predictor
-        self.n = n
-        self.context_nt = 0
-        if not isinstance(predictor, predict_activity.SimpleBinaryPredictor):
-            self.context_nt = predictor.context_nt
-
-    def compute_activity(self, start_pos, pairs):
-        """Compute a single activity measurement for pairs.
-
-        Args:
-            start_pos: start position of all guides in pairs; used for
-                memoizations
-            pairs: list of tuples (target with context, guide)
-
-        Returns:
-            activity value for each pair
-        """
-        mutated_activities = [None * len(pairs)]
-        for i, pair in enumerate(pairs):
-            mutated_target_seqs = self.mutator.mutate(pair[0], self.n)
-            pairs = [(mutated_target_seq, guide_seq) for mutated_target_seq in mutated_target_seqs]
-            mutated_activities[i] = self.predictor.compute_activity(start_pos, pairs)
-        return mutated_activities
