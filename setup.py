@@ -36,6 +36,7 @@ setup(name='adapt-diagnostics',
       scripts=[
         'bin/design.py',
         'bin/design_naively.py',
+        'bin/compute_activity.py',
         'bin/analyze_coverage.py',
         'bin/pick_test_targets.py'
       ])
