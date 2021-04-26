@@ -1833,7 +1833,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             # It is possible no guides can be found (e.g., if they all
             # create negative objective values)
             if self.algorithm == 'random-greedy':
-                logger.warning(("No guides could be found, possibly because "
+                logger.debug(("No guides could be found, possibly because "
                     "the ground set in this window is empty. 'random-greedy' "
                     "restricts the ground set so that the objective function "
                     "is non-negative. This is more likely to be the case "

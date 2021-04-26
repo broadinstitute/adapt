@@ -69,7 +69,7 @@ class TestTargetSearch(unittest.TestCase):
 
     def test_find_targets_allowing_overlap_minimize(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = self.a_min.find_targets(best_n=best_n, no_overlap=False)
+            targets = self.a_min.find_targets(best_n=best_n, no_overlap='none')
             self.assertEqual(len(targets), best_n)
 
             for cost, target in targets:
@@ -91,20 +91,59 @@ class TestTargetSearch(unittest.TestCase):
                 # The guides should cover all sequences
                 self.assertEqual(guides_frac_bound, 1.0)
 
-    def test_find_targets_without_overlap_minimize(self):
+    def test_find_targets_without_overlap_amp_minimize(self):
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = self.a_min.find_targets(best_n=best_n, no_overlap=True)
+            targets = self.a_min.find_targets(best_n=best_n, no_overlap='amplicon')
 
             # It is possible the number of targets is slightly
             # less than best_n
             self.assertLessEqual(len(targets), best_n)
-
+            prev_targets = []
             for cost, target in targets:
                 (p1, p2), (guides_stats, guides) = target
                 window_start = p1.start + p1.primer_length
                 window_end = p2.start
                 window_length = window_end - window_start
                 guides_frac_bound, _, _, _ = guides_stats
+
+                amp_start = p1.start
+                amp_end = window_end + p2.primer_length
+                for prev_target in prev_targets:
+                    self.assertTrue(amp_end <= prev_target[0] or amp_start >= prev_target[1])
+                prev_targets.append((amp_start, amp_end))
+
+                # All windows are at least 10 nt long; verify this
+                # Since here targets cannot overlap, some may be
+                # shorter than 10, but all must be at least the
+                # guide length (6)
+                self.assertGreaterEqual(window_length, 6)
+
+                # For up to the top 6 targets, only 1 primer on each
+                # end is needed
+                self.assertEqual(p1.num_primers, 1)
+                self.assertEqual(p2.num_primers, 1)
+
+                # The guides should cover all sequences
+                self.assertEqual(guides_frac_bound, 1.0)
+
+    def test_find_targets_without_overlap_primer_minimize(self):
+        for best_n in [1, 2, 3, 4, 5, 6]:
+            targets = self.a_min.find_targets(best_n=best_n, no_overlap='primer')
+
+            # It is possible the number of targets is slightly
+            # less than best_n
+            self.assertLessEqual(len(targets), best_n)
+            prev_targets = []
+            for cost, target in targets:
+                (p1, p2), (guides_stats, guides) = target
+                window_start = p1.start + p1.primer_length
+                window_end = p2.start
+                window_length = window_end - window_start
+                guides_frac_bound, _, _, _ = guides_stats
+
+                for prev_target in prev_targets:
+                    self.assertFalse(p1.overlaps(prev_target[0]) and p2.overlaps(prev_target[1]))
+                prev_targets.append((p1, p2))
 
                 # All windows are at least 10 nt long; verify this
                 # Since here targets cannot overlap, some may be
@@ -138,7 +177,7 @@ class TestTargetSearch(unittest.TestCase):
             max_primers_at_site=2)
 
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = b.find_targets(best_n=best_n, no_overlap=False)
+            targets = b.find_targets(best_n=best_n, no_overlap='none')
             self.assertEqual(len(targets), best_n)
 
             for cost, target in targets:
@@ -206,7 +245,7 @@ class TestTargetSearch(unittest.TestCase):
             max_primers_at_site=2)
 
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = a_max.find_targets(best_n=best_n, no_overlap=False)
+            targets = a_max.find_targets(best_n=best_n, no_overlap='none')
 
             if check_for_no_targets:
                 self.assertEqual(len(targets), 0)

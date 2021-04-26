@@ -735,7 +735,7 @@ def design_for_id(args):
                 only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
                 halt_early=args.halt_search_early, mutator=mutator)
             ts.find_and_write_targets(args.out_tsv[i],
-                best_n=args.best_n_targets)
+                best_n=args.best_n_targets, no_overlap=args.do_not_overlap)
         else:
             raise Exception("Unknown search subcommand '%s'" % args.search_cmd)
 
@@ -1018,10 +1018,6 @@ def argv_to_args(argv):
               "equivalently, avoids guides flanked by 'G'). Note that "
               "this is the 3' end in the target sequence (not the spacer "
               "sequence)."))
-    base_subparser.add_argument('--seed', type=int,
-        help=("SEED will set the random seed, guaranteeing the same output "
-              "given the same inputs. If SEED is not set to the same value, "
-              "output may vary across different runs."))
 
     # Use a model to predict activity
     base_subparser.add_argument('--predict-activity-model-path',
@@ -1088,6 +1084,10 @@ def argv_to_args(argv):
               "to believe memoization will slow the search (e.g., "
               "if possible amplicons rarely overlap). Note that activity "
               "predictions are still memoized."))
+    base_subparser.add_argument('--seed', type=int,
+        help=("SEED will set the random seed, guaranteeing the same output "
+              "given the same inputs. If SEED is not set to the same value, "
+              "output may vary across different runs."))
 
     # Log levels
     base_subparser.add_argument("--debug",
@@ -1184,6 +1184,17 @@ def argv_to_args(argv):
               "because the sequences to consider for guide design will "
               "change more often across amplicons and therefore designs "
               "can be less easily memoized."))
+    parser_ct_args.add_argument('--do-not-overlap',
+        choices=['amplicon', 'primer', 'none'],
+        default='amplicon',
+        help=("What should be prevented from overlapping in the outputted targets. "
+              "'amplicon' (default) prevents overlapping amplicons (target ranges) "
+              "'primer' prevents both primers from overlapping (allowing 1 primer "
+              "overlap). 'none' allows targets to overlap. When not 'none', if a "
+              "target overlaps with a target already in the output, this *replaces* "
+              "the overlapping one with the new one if the new one has a better "
+              "objective value. When set to 'none', many targets in the "
+              "BEST_N_TARGETS may be very similar"))
     ###########################################################################
 
     ###########################################################################
