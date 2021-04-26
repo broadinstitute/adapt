@@ -122,17 +122,30 @@ class TargetSearcher:
                 yield (p1, p2)
 
     def _find_mutated_activity(self, targets):
+        """Find the activities of the guides after mutation
+
+        For each target, find the activity of the best of the guide
+        set across each potential starting location after mutation,
+        averaged across the sequences.
+
+        Args:
+            targets: list of tuples (obj_value, target) where target is a tuple
+                ((p1, p2), (guides_stats, guides))
+        Returns:
+            list of mutated activities, ordered by target's ordering.
+
+        """
         mutated_activities = [None] * len(targets)
         for i, (obj_value, target) in enumerate(targets):
             ((p1, p2), (guides_stats, guides)) = target
             mutated_activities[i] = max([max([np.average(
-                    self.gs.aln.compute_activity(
-                        start_pos,
-                        guide,
-                        self.gs.predictor,
-                        self.mutator)) \
-                for start_pos in self.gs._selected_guide_positions[guide]]) \
-            for guide in guides])
+                        self.gs.aln.compute_activity(
+                            start_pos,
+                            guide,
+                            self.gs.predictor,
+                            self.mutator))
+                    for start_pos in self.gs._selected_guide_positions[guide]])
+                for guide in guides])
         return mutated_activities
 
     def find_targets(self, best_n=10, no_overlap=True):

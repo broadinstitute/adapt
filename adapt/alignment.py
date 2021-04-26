@@ -755,6 +755,33 @@ class Alignment(SequenceList):
         assert start + guide_length <= self.seq_length
 
         if isinstance(predictor, predict_activity.SimpleBinaryPredictor):
+            if mutator:
+                # Extract the target sequences, including context to use with
+                # prediction (i.e. the flanking sequences, if they exist)
+                left_context = 0
+                right_context = 0
+                if predictor:
+                    if predictor.required_flanking_seqs[0]:
+                        left_context = len(predictor.required_flanking_seqs[0])
+                    if predictor.required_flanking_seqs[1]:
+                        right_context = len(predictor.required_flanking_seqs[1])
+
+                aln_for_guide_with_context = self.extract_range(
+                        start - left_context,
+                        start + guide_length + right_context)
+                seq_rows_with_context = aln_for_guide_with_context.make_list_of_seqs()
+
+                # Start array of predicted activities; make this all 0s so that
+                # sequences for which activities are not computed (e.g., gap)
+                # have activity=0
+                activities = np.zeros(self.num_sequences)
+                for i, seq_with_context in enumerate(seq_rows_with_context):
+                    activity = mutator.computed_mutated_activity(predictor,
+                                                                 seq_with_context,
+                                                                 gd_sequence,
+                                                                 start=start)
+                    activities[i] = activity
+                return activities
             # Do not use a model; just predict binary activity (1 or 0)
             # based on distance between guide and targets
             return predictor.compute_activity(start, gd_sequence, self)

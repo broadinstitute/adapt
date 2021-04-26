@@ -650,6 +650,10 @@ def design_for_id(args):
                 raise Exception(("--predict-activity-model-path must be "
                     "specified if --obj is 'maximize-activity' (unless "
                     "--use-simple-binary-activity-prediction is set)"))
+            if args.predict_activity_degradation:
+                raise Exception(("--predict-activity-model-path must be "
+                    "specified if --predict-activity-degradation is set "
+                    "(unless --use-simple-binary-activity-prediction is set)"))
             # Do not predict activity
             predictor = None
 

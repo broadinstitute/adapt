@@ -146,7 +146,7 @@ class GTRSubstitutionMutator:
         return ["".join(seq) for seq in sampled_seqs_list]
 
     def computed_mutated_activity(self, predictor, target_seq,
-                                  guide_seq, start=None):
+                                  guide_seq, start=0):
         """Calculate the activity of the guide after mutating the target
 
         Args:
@@ -164,10 +164,10 @@ class GTRSubstitutionMutator:
         if isinstance(predictor, predict_activity.SimpleBinaryPredictor):
             mutated_aln = alignment.Alignment.from_list_of_seqs(
                 mutated_target_seqs)
-            start = 0
+            left_context = 0
             if predictor.required_flanking_seqs[0]:
-                start = len(predictor.required_flanking_seqs[0])
-            _, activity = predictor.compute_activity(start, guide_seq,
+                left_context = len(predictor.required_flanking_seqs[0])
+            _, activity = predictor.compute_activity(left_context, guide_seq,
                                                      mutated_aln, percentile=5)
         else:
             pairs_to_eval = []
