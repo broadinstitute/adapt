@@ -343,9 +343,7 @@ class TestTargetSearch(unittest.TestCase):
         mutator = mutate.GTRSubstitutionMutator(self.a_aln, 1, 1, 1, 1, 1, 1,
                                                 1, 1, 1)
         predictor = predict_activity.SimpleBinaryPredictor(
-                    6,
-                    False,
-                    required_flanking_seqs=('A', None))
+                    6, False, required_flanking_seqs=('A', None))
         c_ps = primer_search.PrimerSearcher(self.a_aln, 4, 0, 1.0, (1, 1, 100))
         c_gs = guide_search.GuideSearcherMaximizeActivity(
                     self.a_aln, 6, 1, 5, 0.05, (1, 1, 100), algorithm='greedy',
@@ -353,7 +351,7 @@ class TestTargetSearch(unittest.TestCase):
         c = target_search.TargetSearcher(c_ps, c_gs, max_primers_at_site=2,
                                          obj_type='max', mutator=mutator)
         for best_n in [1, 2, 3, 4, 5, 6]:
-            targets = c.find_targets(best_n=best_n, no_overlap=False)
+            targets = c.find_targets(best_n=best_n, no_overlap='none')
             mut_activities = c._find_mutated_activity(targets)
             self.assertEqual(len(mut_activities), best_n)
             for mut_activity in mut_activities:
