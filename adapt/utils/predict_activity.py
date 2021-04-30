@@ -79,9 +79,9 @@ class Predictor:
         # Load context_nt; this should be the same for the classification
         # and regression models
         classification_context_nt_path = os.path.join(
-                classification_model_path, 'assets.extra', 'context_nt.arg')
+                classification_model_path, 'assets.extra/context_nt.arg')
         regression_context_nt_path = os.path.join(
-                regression_model_path, 'assets.extra', 'context_nt.arg')
+                regression_model_path, 'assets.extra/context_nt.arg')
         if not os.path.isfile(classification_context_nt_path):
             raise Exception(("Unknown context_nt for classification model; "
                 "the model should have a assets.extra/context_nt.arg file"))
@@ -100,9 +100,9 @@ class Predictor:
         # Load guide_length; this should be the same for the classification
         # and regression models
         classification_guide_length_path = os.path.join(
-                classification_model_path, 'assets.extra', 'guide_length.arg')
+                classification_model_path, 'assets.extra/guide_length.arg')
         regression_guide_length_path = os.path.join(
-                regression_model_path, 'assets.extra', 'guide_length.arg')
+                regression_model_path, 'assets.extra/guide_length.arg')
         if not os.path.isfile(classification_guide_length_path):
             raise Exception(("Unknown guide_length for classification model; "
                 "the model should have a assets.extra/guide_length.arg file"))
@@ -126,7 +126,7 @@ class Predictor:
             # Read default threshold
             classification_default_threshold_path = os.path.join(
                     classification_model_path,
-                    'assets.extra', 'default_threshold.arg')
+                    'assets.extra/default_threshold.arg')
             if not os.path.isfile(classification_default_threshold_path):
                 raise Exception(("Unknown default threshold for classification "
                     "model; the model should have a "
@@ -143,7 +143,7 @@ class Predictor:
             # Read default threshold
             regression_default_threshold_path = os.path.join(
                     regression_model_path,
-                    'assets.extra', 'default_threshold.arg')
+                    'assets.extra/default_threshold.arg')
             if not os.path.isfile(regression_default_threshold_path):
                 raise Exception(("Unknown default threshold for regression "
                     "model; the model should have a "
