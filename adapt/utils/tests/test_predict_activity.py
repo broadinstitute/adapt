@@ -20,8 +20,8 @@ class TestPredictor(unittest.TestCase):
     def setUp(self):
         # Use the provided models with default thresholds
         dir_path = get_project_path()
-        cla_path = os.path.join(dir_path, 'models/classify/cas13a/latest')
-        reg_path = os.path.join(dir_path, 'models/regress/cas13a/latest')
+        cla_path = os.path.join(dir_path, 'models', 'classify', 'cas13a', 'latest')
+        reg_path = os.path.join(dir_path, 'models', 'regress', 'cas13a', 'latest')
         self.predictor = predict_activity.Predictor(cla_path, reg_path)
 
     def test_model_input_from_nt(self):

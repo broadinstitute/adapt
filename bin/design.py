@@ -639,8 +639,8 @@ def design_for_id(args):
                 cla_path, reg_path = args.predict_activity_model_path
             else:
                 dir_path = get_project_path()
-                cla_path = os.path.join(dir_path, 'models/classify/cas13a/latest')
-                reg_path = os.path.join(dir_path, 'models/regress/cas13a/latest')
+                cla_path = os.path.join(dir_path, 'models', 'classify', 'cas13a', 'latest')
+                reg_path = os.path.join(dir_path, 'models', 'regress', 'cas13a', 'latest')
             if args.predict_activity_thres:
                 # Use specified thresholds on classification and regression
                 cla_thres, reg_thres = args.predict_activity_thres
