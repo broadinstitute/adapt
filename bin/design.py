@@ -639,8 +639,8 @@ def design_for_id(args):
                 cla_path, reg_path = args.predict_activity_model_path
             else:
                 dir_path = get_project_path()
-                cla_path = os.path.join(dir_path, 'models/classify/cas13a')
-                reg_path = os.path.join(dir_path, 'models/regress/cas13a')
+                cla_path = os.path.join(dir_path, 'models/classify/cas13a/latest')
+                reg_path = os.path.join(dir_path, 'models/regress/cas13a/latest')
             if args.predict_activity_thres:
                 # Use specified thresholds on classification and regression
                 cla_thres, reg_thres = args.predict_activity_thres
@@ -1322,7 +1322,7 @@ def argv_to_args(argv):
         help=("Path to output TSVs, with one per cluster; output TSVs are "
               "OUT_TSV.{cluster-number}"))
     input_autoargs_subparser.add_argument('--ref-accs', nargs='+',
-        help=("Accession(s) of reference sequence(s) to use for curation (comma-"
+        help=("Accession(s) of reference sequence(s) to use for curation (space-"
               "separated). If not set, ADAPT will automatically get accessions "
               "for reference sequences from NCBI based on the taxonomic ID"))
     input_autoargs_subparser.add_argument('--metadata-filter', nargs='+',

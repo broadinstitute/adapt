@@ -25,7 +25,7 @@ setup(name='adapt-diagnostics',
       version=adapt.__version__,
       packages=find_packages(),
       package_data={
-        "adapt": ["models/*/*/assets.extra/*", "models/*/*/variables/*", "models/*/*/*"],
+        "adapt": ["models/*/*/*/assets.extra/*", "models/*/*/*/variables/*", "models/*/*/*/*", "models/*/*/*"],
       },
       install_requires=['numpy>=1.16.0,<1.19.0', 'scipy==1.4.1', 'tensorflow==2.3.2'],
       extras_require={

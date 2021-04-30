@@ -389,6 +389,7 @@ Classification and regression model files can be viewed in [`models/`](./models)
 (Default: not set, which does not use predicted activity during design.)
 * `--predict-activity-model-path MODEL_C MODEL_R`: Models that predict activity of guide-target pairs.
 MODEL_C gives a classification model that predicts whether a guide-target pair is active, and MODEL_R gives a regression model that predicts a measure of activity on active pairs.
+This does not need to be set if `--predict-cas13a-activity-model` is specified, but it is useful for custom models.
 Each argument is a path to a serialized model in TensorFlow's SavedModel format.
 With `--obj maximize-activity`, the models are essential because they inform ADAPT of the measurements it aims to maximize.
 With `--obj minimize-guides`, the models constrain the design such that a guide must be highly active to detect a sequence (specified by `--predict-activity-thres`).
@@ -469,7 +470,8 @@ Likewise, synthesized primer sequences should account for this.
 This is the most simple example.
 **It does not download genomes, search for genomic regions to target, or use a predictive model of activity; for these features, see the next example.**
 
-The repository includes an alignment of Lassa virus sequences (S segment) from Sierra Leone in `examples/SLE_S.aligned.fasta`. If you have installed ADAPT via Bioconda or PyPI, you'll need to download the alignment from [`here`](./examples/SLE_S.aligned.fasta).
+The repository includes an alignment of Lassa virus sequences (S segment) from Sierra Leone in `examples/SLE_S.aligned.fasta`.
+If you have installed ADAPT via Bioconda or PyPI, you'll need to download the alignment from [`here`](https://raw.githubusercontent.com/broadinstitute/adapt/main/examples/SLE_S.aligned.fasta).
 Run:
 ```bash
 design.py sliding-window fasta FASTA_PATH -o probes.tsv -w 200 -gl 28 -gm 1 -gp 0.95
