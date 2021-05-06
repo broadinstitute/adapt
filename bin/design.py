@@ -25,7 +25,7 @@ from adapt.utils import log
 from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
-from adapt.utils.version import get_project_path
+from adapt.utils.version import get_project_path, get_model_version
 
 try:
     import boto3
@@ -634,13 +634,31 @@ def design_for_id(args):
                     allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs)
         elif (args.predict_activity_model_path or
-                args.predict_cas13a_activity_model):
+                args.predict_cas13a_activity_model is not None):
             if args.predict_activity_model_path:
                 cla_path, reg_path = args.predict_activity_model_path
             else:
                 dir_path = get_project_path()
-                cla_path = os.path.join(dir_path, 'models', 'classify', 'cas13a', 'latest')
-                reg_path = os.path.join(dir_path, 'models', 'regress', 'cas13a', 'latest')
+                cla_path_all = os.path.join(dir_path, 'models', 'classify',
+                                        'cas13a')
+                reg_path_all = os.path.join(dir_path, 'models', 'regress',
+                                        'cas13a')
+                if len(args.predict_cas13a_activity_model) not in (0,2):
+                    raise Exception(("If setting versions for "
+                        "--predict-cas13a-activity-model, both a version for "
+                        "the classifier and the regressor must be set."))
+                if (len(args.predict_cas13a_activity_model) == 0 or
+                        args.predict_cas13a_activity_model[0] == 'latest'):
+                    cla_version = get_model_version(cla_path_all)
+                else:
+                    cla_version = args.predict_cas13a_activity_model[0]
+                if (len(args.predict_cas13a_activity_model) == 0 or
+                        args.predict_cas13a_activity_model[1] == 'latest'):
+                    reg_version = get_model_version(reg_path_all)
+                else:
+                    reg_version = args.predict_cas13a_activity_model[1]
+                cla_path = os.path.join(cla_path_all, cla_version)
+                reg_path = os.path.join(reg_path_all, reg_version)
             if args.predict_activity_thres:
                 # Use specified thresholds on classification and regression
                 cla_thres, reg_thres = args.predict_activity_thres
@@ -1029,11 +1047,13 @@ def argv_to_args(argv):
               "predict-cas13a-activity-model is set, ADAPT does not "
               "predict activities to use during design."))
     base_subparser.add_argument('--predict-cas13a-activity-model',
-        action='store_true',
+        nargs='*',
         help=("If set, use ADAPT's premade Cas13a model to "
               "predict guide-target activity. If neither this nor "
               "predict-activity-model-path is set, ADAPT does not predict "
-              "activities to use during design."))
+              "activities to use during design. Optionally, two arguments can "
+              "be included to indicate version number, in the format 'v1_0' or "
+              "'latest'. Versions will default to latest."))
     base_subparser.add_argument('--predict-activity-thres',
         type=float,
         nargs=2,

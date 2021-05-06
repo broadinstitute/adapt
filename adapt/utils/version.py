@@ -118,6 +118,21 @@ def get_version():
     return __version__
 
 
+def get_model_version(model_path):
+    """Get latest model version, given the model path
+    """
+    # List all model versions in path
+    model_versions = os.listdir(model_path)
+    # Get a list of the versions
+    # Each version is represented as a list of numbers
+    model_versions_numeric = [[int(i) for i in model_version[1:].split('_')]
+                              for model_version in model_versions if
+                              model_version.startswith('v')]
+    # Remake the version string
+    latest_version = [str(i) for i in sorted(model_versions_numeric)[-1]]
+    return 'v' + '_'.join(latest_version)
+
+
 if __name__ == "__main__":
     # Determine and print the package version
     print(get_version())
