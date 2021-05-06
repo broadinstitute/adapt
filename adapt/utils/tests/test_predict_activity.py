@@ -8,7 +8,7 @@ import os
 
 from adapt import alignment
 from adapt.utils import predict_activity
-from adapt.utils.version import get_project_path
+from adapt.utils.version import get_project_path, get_model_version
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -20,8 +20,13 @@ class TestPredictor(unittest.TestCase):
     def setUp(self):
         # Use the provided models with default thresholds
         dir_path = get_project_path()
-        cla_path = os.path.join(dir_path, 'models', 'classify', 'cas13a', 'latest')
-        reg_path = os.path.join(dir_path, 'models', 'regress', 'cas13a', 'latest')
+        cla_path_all = os.path.join(dir_path, 'models', 'classify', 'cas13a')
+        reg_path_all = os.path.join(dir_path, 'models', 'regress', 'cas13a')
+        cla_version = get_model_version(cla_path_all)
+        reg_version = get_model_version(reg_path_all)
+        cla_path = os.path.join(cla_path_all, cla_version)
+        reg_path = os.path.join(reg_path_all, reg_version)
+
         self.predictor = predict_activity.Predictor(cla_path, reg_path)
 
     def test_model_input_from_nt(self):
