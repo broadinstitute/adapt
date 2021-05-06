@@ -6,15 +6,28 @@ from adapt import alignment
 from adapt.utils import predict_activity
 from scipy.linalg import expm
 
-__author__ = 'David K. Yang <yangd5153@gmail.com>'
+__author__ = 'David K. Yang <yangd5153@gmail.com>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
 
 class GTRSubstitutionMutator:
-    """GTR Substitution model to model distribution of future viral sequences
+    """Use the GTR Substitution model to mutate viral sequences
     """
     def __init__(self, aln,
                  rAC, rAG, rAT, rCG, rCT, rGT,
                  mu, t, n):
+        """
+        Args:
+            aln: An alignment of sequences to use to determine base percentages
+            rAC: Relative rate of conversion between A and C
+            rAG: Relative rate of conversion between A and G
+            rAT: Relative rate of conversion between A and T
+            rCG: Relative rate of conversion between C and G
+            rCT: Relative rate of conversion between C and T
+            rGT: Relative rate of conversion between G and T
+            mu: Overall rate of substitutions per site per year
+            t: Years to simulate substitutions over
+            n: Number of sequences to simulate mutations over
+        """
         base_percentages = aln.base_percentages()
         self.piA = base_percentages['A']
         self.piC = base_percentages['C']
@@ -38,6 +51,11 @@ class GTRSubstitutionMutator:
 
         Computes transition rate matrix Q, given base frequencies and
         transition rates under GTR model (Tavaré 1986).
+
+        The transition rate matrix defines the rate each base is mutated to
+        each other base. The rows indicate the starting base; the columns
+        indicate the final base. Bases are ordered A, C, G, T. Diagonal
+        elements are set such that the row sums to 0.
         """
 
         beta = 1 / (2 * (
@@ -74,6 +92,10 @@ class GTRSubstitutionMutator:
 
         Computes transition probability matrix P from rate matrix Q,
         substitution rate m, and time t
+
+        The transition probablility matrix defines the likelihood each base is
+        mutated to each other base. The rows indicate the starting base; the
+        columns indicate the final base. Bases are ordered A, C, G, T.
         """
 
         P = expm(self.Q * self.mu * self.t)
@@ -84,7 +106,7 @@ class GTRSubstitutionMutator:
         return normalized_matrix
 
     def _seq_to_encoding(self, seq):
-        """Encode string sequence into an AA index list
+        """Encode string sequence into a nucleotide index list
 
         Map 'A' to 0, 'C' to 1, 'G' to 2, and 'T' to 3
         (e.g. "ACGT" returns [0, 1, 2, 3])
@@ -93,7 +115,7 @@ class GTRSubstitutionMutator:
             str: nucleotide sequence
 
         Returns:
-            list(int): list of AA idxs.
+            list(int): list of nucleotide indexs.
         """
 
         base_key = "ACGT"
@@ -145,8 +167,8 @@ class GTRSubstitutionMutator:
         sampled_seqs_list = np.array(sampled_seq_matrix).transpose()
         return ["".join(seq) for seq in sampled_seqs_list]
 
-    def computed_mutated_activity(self, predictor, target_seq,
-                                  guide_seq, start=0):
+    def compute_mutated_activity(self, predictor, target_seq,
+                                 guide_seq, start=0):
         """Calculate the activity of the guide after mutating the target
 
         Args:
@@ -154,7 +176,7 @@ class GTRSubstitutionMutator:
             target_seq: string of what sequence the guide targets. Includes
                     context if predictor requires it
             guide_seq: string of what the guide is
-            start: int, start position for the guide sequence in the alignment
+            start: int, start position for the guide sequence in the alignment.
                     Required to use predictor memoization, if it exists
 
         Returns:

@@ -388,8 +388,9 @@ class Predictor:
                 values to return
 
         Returns:
-            activity value for each pair, if percentile is included,
-                activity value for the percentile amongst the pairs
+            If percentile is not defined, list of activity value for each pair
+            If percentile is defined, tuple of (list of activity value for each
+                pair, the percentile of those activities)
         """
         # Determine which pairs do not have memoized results, and call
         # these

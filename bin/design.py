@@ -1068,11 +1068,12 @@ def argv_to_args(argv):
               "(defaults to 5)"))
     base_subparser.add_argument('--predict-activity-degradation-mu',
         type=float, default=0.001,
-        help=("Overall rate of substitutions per year (defaults to 0.001)"))
+        help=("Overall rate of substitutions per site per year (defaults to 0.001)"))
     base_subparser.add_argument('--predict-activity-degradation-n',
         type=int, default=500,
         help=("Number of sequences to simulate mutations over (defaults "
-              "to 500)"))
+              "to 500). Higher values increase accuracy, but also increase"
+              "runtime."))
 
     # Technical options
     base_subparser.add_argument('--do-not-memoize-guide-computations',

@@ -138,14 +138,14 @@ class TargetSearcher:
         mutated_activities = [None] * len(targets)
         for i, (obj_value, target) in enumerate(targets):
             ((p1, p2), (guides_stats, guides)) = target
-            mutated_activities[i] = max([max([np.average(
+            mutated_activities[i] = max(max(np.average(
                         self.gs.aln.compute_activity(
                             start_pos,
                             guide,
                             self.gs.predictor,
                             self.mutator))
-                    for start_pos in self.gs._selected_guide_positions[guide]])
-                for guide in guides])
+                    for start_pos in self.gs._selected_guide_positions[guide])
+                for guide in guides)
         return mutated_activities
 
     def find_targets(self, best_n=10, no_overlap='amplicon'):

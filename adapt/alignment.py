@@ -776,10 +776,10 @@ class Alignment(SequenceList):
                 # have activity=0
                 activities = np.zeros(self.num_sequences)
                 for i, seq_with_context in enumerate(seq_rows_with_context):
-                    activity = mutator.computed_mutated_activity(predictor,
-                                                                 seq_with_context,
-                                                                 gd_sequence,
-                                                                 start=start)
+                    activity = mutator.compute_mutated_activity(predictor,
+                                                                seq_with_context,
+                                                                gd_sequence,
+                                                                start=start)
                     activities[i] = activity
                 return activities
             # Do not use a model; just predict binary activity (1 or 0)
@@ -819,10 +819,10 @@ class Alignment(SequenceList):
 
         if mutator:
             for seq_with_context, seq_idx in seq_rows_with_context:
-                activity = mutator.computed_mutated_activity(predictor,
-                                                             seq_with_context,
-                                                             gd_sequence,
-                                                             start=start)
+                activity = mutator.compute_mutated_activity(predictor,
+                                                            seq_with_context,
+                                                            gd_sequence,
+                                                            start=start)
                 evals.append(activity)
                 pairs_to_eval_seq_idx.append(seq_idx)
         else:

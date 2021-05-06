@@ -64,14 +64,14 @@ class TestGTRSubstitutionMutator(unittest.TestCase):
 
     def test_compute_mutated_activity(self):
         predictor_a = predict_activity.SimpleBinaryPredictor(8, False)
-        activity = self.mutator_a.computed_mutated_activity(predictor_a,
-                                                            self.wild_seq,
-                                                            self.wild_seq)
+        activity = self.mutator_a.compute_mutated_activity(predictor_a,
+                                                           self.wild_seq,
+                                                           self.wild_seq)
         self.assertEqual(activity, 1)
 
         predictor_a.mismatches = 0
         predictor_a.required_flanking_seqs = ('A', None)
-        activity = self.mutator_a.computed_mutated_activity(predictor_a,
-                                                            'A'+self.wild_seq,
-                                                            self.wild_seq)
+        activity = self.mutator_a.compute_mutated_activity(predictor_a,
+                                                           'A'+self.wild_seq,
+                                                           self.wild_seq)
         self.assertEqual(activity, 0)
