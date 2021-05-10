@@ -190,12 +190,12 @@ class GTRSubstitutionMutator:
             if predictor.required_flanking_seqs[0]:
                 left_context = len(predictor.required_flanking_seqs[0])
             _, activity = predictor.compute_activity(left_context, guide_seq,
-                                                     mutated_aln, percentile=5)
+                                                     mutated_aln, percentiles=5)
         else:
             pairs_to_eval = []
             for mutated_target_seq in mutated_target_seqs:
                 pair = (mutated_target_seq, guide_seq)
                 pairs_to_eval.append(pair)
             _, activity = predictor.compute_activity(start, pairs_to_eval,
-                                                     percentile=5)
+                                                     percentiles=5)
         return activity
