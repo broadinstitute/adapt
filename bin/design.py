@@ -25,7 +25,7 @@ from adapt.utils import log
 from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
-from adapt.utils.version import get_project_path, get_model_version
+from adapt.utils.version import get_project_path, get_latest_model_version
 
 try:
     import boto3
@@ -649,12 +649,12 @@ def design_for_id(args):
                         "the classifier and the regressor must be set."))
                 if (len(args.predict_cas13a_activity_model) == 0 or
                         args.predict_cas13a_activity_model[0] == 'latest'):
-                    cla_version = get_model_version(cla_path_all)
+                    cla_version = get_latest_model_version(cla_path_all)
                 else:
                     cla_version = args.predict_cas13a_activity_model[0]
                 if (len(args.predict_cas13a_activity_model) == 0 or
                         args.predict_cas13a_activity_model[1] == 'latest'):
-                    reg_version = get_model_version(reg_path_all)
+                    reg_version = get_latest_model_version(reg_path_all)
                 else:
                     reg_version = args.predict_cas13a_activity_model[1]
                 cla_path = os.path.join(cla_path_all, cla_version)

@@ -118,16 +118,33 @@ def get_version():
     return __version__
 
 
-def get_model_version(model_path):
+def get_latest_model_version(model_path):
     """Get latest model version, given the model path
     """
     # List all model versions in path
     model_versions = os.listdir(model_path)
     # Get a list of the versions
     # Each version is represented as a list of numbers
-    model_versions_numeric = [[int(i) for i in model_version[1:].split('_')]
-                              for model_version in model_versions if
-                              model_version.startswith('v')]
+    model_versions_numeric = []
+    for model_version in model_versions:
+        if model_version.startswith('v'):
+            model_version_numeric = []
+            skip = False
+            for i in model_version[1:].split('_'):
+                if not i.isdecimal():
+                    skip = True
+                    break
+                else:
+                    model_version_numeric.append(int(i))
+            if not skip and len(model_version_numeric) > 0:
+                model_versions_numeric.append(model_version_numeric)
+
+    # If there were no models found on the path, raise an error
+    if len(model_versions_numeric) == 0:
+        raise ValueError("There are no appropriately formatted models in the "
+            "model path. Please make sure the models are in a folder with the "
+            "format 'v_#_#'")
+
     # Remake the version string
     latest_version = [str(i) for i in sorted(model_versions_numeric)[-1]]
     return 'v' + '_'.join(latest_version)
