@@ -4,9 +4,11 @@
 import unittest
 
 import numpy as np
+import os
 
 from adapt import alignment
 from adapt.utils import predict_activity
+from adapt.utils.version import get_project_path, get_latest_model_version
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -17,11 +19,15 @@ class TestPredictor(unittest.TestCase):
 
     def setUp(self):
         # Use the provided models with default thresholds
-        classification_model_path = 'models/classify/model-51373185'
-        regression_model_path = 'models/regress/model-f8b6fd5d'
-        self.predictor = predict_activity.Predictor(
-                classification_model_path,
-                regression_model_path)
+        dir_path = get_project_path()
+        cla_path_all = os.path.join(dir_path, 'models', 'classify', 'cas13a')
+        reg_path_all = os.path.join(dir_path, 'models', 'regress', 'cas13a')
+        cla_version = get_latest_model_version(cla_path_all)
+        reg_version = get_latest_model_version(reg_path_all)
+        cla_path = os.path.join(cla_path_all, cla_version)
+        reg_path = os.path.join(reg_path_all, reg_version)
+
+        self.predictor = predict_activity.Predictor(cla_path, reg_path)
 
     def test_model_input_from_nt(self):
         # Make context (both ends) be all 'A'
@@ -69,7 +75,7 @@ class TestPredictor(unittest.TestCase):
         target_with_context_2 = ('A'*self.predictor.context_nt +
                 'G'*28 + 'A'*self.predictor.context_nt)
         guide_2 = 'G'*28
-        
+
         pairs = [(target_with_context_1, guide_1), (target_with_context_2,
             guide_2)]
         pairs_onehot = self.predictor._model_input_from_nt(pairs)
@@ -91,7 +97,7 @@ class TestPredictor(unittest.TestCase):
         target_with_context_2 = ('A'*self.predictor.context_nt +
                 'A'*28 + 'A'*self.predictor.context_nt)
         guide_2 = 'A'*28
-        
+
         pairs = [(target_with_context_1, guide_1), (target_with_context_2,
             guide_2)]
         pairs_onehot = self.predictor._model_input_from_nt(pairs)

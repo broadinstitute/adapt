@@ -33,7 +33,7 @@ SP_SEQS["genome_5"] = "AA---"
 class TestDesign(object):
     """General class for testing design.py
 
-    Defines helper functions for test cases and basic setUp and 
+    Defines helper functions for test cases and basic setUp and
     tearDown functions.
     """
     class TestDesignCase(unittest.TestCase):
@@ -45,8 +45,8 @@ class TestDesign(object):
             self.input_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
             # Closes the file so that it can be reopened on Windows
             self.input_file.close()
-            
-            # Create a temporary output file 
+
+            # Create a temporary output file
             self.output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
             self.output_file.close()
 
@@ -54,14 +54,14 @@ class TestDesign(object):
 
         def check_results(self, file, expected, header='target-sequences'):
             """Check the results of the test output
-            
+
             Given a TSV file of test output and expected output, fails the test
             if the test output guide target sequences do not equal the expected
             guide target sequences
 
             Args:
                 file: string, path name of the file
-                expected: list of lists of strings, all the expected guide 
+                expected: list of lists of strings, all the expected guide
                     target sequences in each line of the output
                 header: the header of the CSV that contains the guide target
                     sequences
@@ -77,17 +77,17 @@ class TestDesign(object):
                     self.assertLess(i, len(expected) + 1)
                     guide_line = line.split('\t')[col_loc]
                     guides = guide_line.split(' ')
-                    for guide in guides: 
+                    for guide in guides:
                         self.assertIn(guide, expected[i-1])
                     self.assertEqual(len(guides), len(expected[i-1]))
                 self.assertEqual(i, len(expected))
 
-        def baseArgv(self, search_type='sliding-window', input_type='fasta', 
-                     objective='minimize-guides', model=False, specific=None, 
+        def baseArgv(self, search_type='sliding-window', input_type='fasta',
+                     objective='minimize-guides', model=False, specific=None,
                      specificity_file=None, output_loc=None):
             """Get arguments for tests
-            
-            Produces the correct arguments for a test case given details of 
+
+            Produces the correct arguments for a test case given details of
             what the test case is testing. See design.py help for details
             on input
 
@@ -95,11 +95,11 @@ class TestDesign(object):
                 search_type: 'sliding-window' or 'complete-targets'
                 input_type: 'fasta', 'auto-from-args', or 'auto-from-file'
                 objective: 'minimize-guides' or 'maximize-activity'
-                model: boolean, true to use Cas13a built in model, false 
+                model: boolean, true to use Cas13a built in model, false
                     to use simple binary prediction
                 specific: None, 'fasta', or 'taxa'; what sort of input
                     to be specific against
-                output_loc: path to the output file/directory; set to 
+                output_loc: path to the output file/directory; set to
                     self.output_file.name if None
 
             Returns:
@@ -123,7 +123,7 @@ class TestDesign(object):
             if search_type == 'sliding-window':
                 argv.extend(['-w', '3'])
             if search_type == 'complete-targets':
-                argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl', '1', 
+                argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl', '1',
                              '--max-primers-at-site', '2'])
 
             if objective == 'minimize-guides':
@@ -139,8 +139,7 @@ class TestDesign(object):
                 argv.extend(['--specific-against-taxa', specificity_file, '--id-m', '0'])
 
             if model:
-                argv.extend(['--predict-activity-model-path', 'models/classify/model-51373185', 
-                             'models/regress/model-f8b6fd5d'])
+                argv.append('--predict-cas13a-activity-model')
             elif objective =='maximize-activity':
                 argv.extend(['--use-simple-binary-activity-prediction', '-gm', '0'])
 
@@ -187,10 +186,10 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         argv = super().baseArgv(search_type='complete-targets')
         args = design.argv_to_args(argv)
         design.run(args)
-        # Since sequences are short and need 1 base for primer on each side, 
+        # Since sequences are short and need 1 base for primer on each side,
         # only finds 1 target in middle
         expected = [["CT"]]
-        self.check_results(self.output_file.name, expected, 
+        self.check_results(self.output_file.name, expected,
                            header='guide-target-sequences')
 
     def test_specificity_fastas(self):
@@ -203,11 +202,11 @@ class TestDesignFasta(TestDesign.TestDesignCase):
 
         self.files.append(self.sp_fasta.name)
 
-        argv = super().baseArgv(specific='fasta', 
+        argv = super().baseArgv(specific='fasta',
             specificity_file=self.sp_fasta.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        # AA isn't allowed in 1st window by specificity fasta, 
+        # AA isn't allowed in 1st window by specificity fasta,
         # so 1st window changes
         expected = [["AC", "GG"], ["CT"], ["CT"]]
         self.check_results(self.output_file.name, expected)
@@ -226,11 +225,11 @@ class TestDesignAutos(TestDesign.TestDesignCase):
         with open(self.input_file.name, 'w') as f:
             f.write("Zika virus\t64320\tNone\tNC_035889\n")
 
-        # Create a temporary output directory 
+        # Create a temporary output directory
         self.output_dir = tempfile.TemporaryDirectory()
 
     def test_auto_from_file(self):
-        argv = super().baseArgv(input_type='auto-from-file', 
+        argv = super().baseArgv(input_type='auto-from-file',
                         output_loc=self.output_dir.name)
         args = design.argv_to_args(argv)
         try:
@@ -281,12 +280,12 @@ class TestDesignFull(TestDesign.TestDesignCase):
         self.real_output_file = self.output_file.name + '.0'
         self.files.extend([self.sp_file.name, self.real_output_file])
 
-        # We cannot access MAFFT, so override this function; store original so 
+        # We cannot access MAFFT, so override this function; store original so
         # it can be fixed for future tests
         self.set_mafft_exec = align.set_mafft_exec
         align.set_mafft_exec = lambda mafft_path: None
 
-        # Curating requires MAFFT, so override this function; store original so 
+        # Curating requires MAFFT, so override this function; store original so
         # it can be fixed for future tests
         self.curate_against_ref = align.curate_against_ref
 
@@ -296,13 +295,13 @@ class TestDesignFull(TestDesign.TestDesignCase):
 
         align.curate_against_ref = small_curate
 
-        # Aligning requires MAFFT, so override this function and output simple 
+        # Aligning requires MAFFT, so override this function and output simple
         # test sequences; store original so it can be fixed for future tests
         self.align = align.align
         align.align = lambda seqs, am=None: SEQS
 
-        # We don't want to fetch sequences for the specificity file since we're 
-        # doing a simple test case, so override this function; store original 
+        # We don't want to fetch sequences for the specificity file since we're
+        # doing a simple test case, so override this function; store original
         # so it can be fixed for future tests
         self.fetch_sequences_for_taxonomy = prepare_alignment.fetch_sequences_for_taxonomy
 
@@ -318,7 +317,7 @@ class TestDesignFull(TestDesign.TestDesignCase):
         prepare_alignment.fetch_sequences_for_taxonomy = small_fetch
 
     def test_specificity_taxa(self):
-        argv = super().baseArgv(input_type='auto-from-args', specific='taxa', 
+        argv = super().baseArgv(input_type='auto-from-args', specific='taxa',
             specificity_file=self.sp_file.name)
         args = design.argv_to_args(argv)
         design.run(args)

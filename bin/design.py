@@ -21,16 +21,16 @@ from adapt.prepare import prepare_alignment
 from adapt import primer_search
 from adapt.specificity import alignment_query
 from adapt import target_search
-from adapt.utils import guide
 from adapt.utils import log
 from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
+from adapt.utils.version import get_project_path, get_latest_model_version
 
 try:
     import boto3
     from botocore.exceptions import ClientError
-except:
+except ImportError:
     cloud = False
 else:
     cloud = True
@@ -92,6 +92,9 @@ def check_obj_args(args):
             if args.predict_activity_model_path:
                 logger.critical(("When --use-simple-binary-activity-prediction "
                     "is set, --predict-activity-model-path is not used"))
+            if args.predict_cas13a_activity_model:
+                logger.critical(("When --use-simple-binary-activity-prediction "
+                    "is set, --predict-cas13a-activity-model is not used"))
         else:
             if (args.guide_mismatches or args.guide_cover_frac or
                     args.cover_by_year_decay):
@@ -231,8 +234,8 @@ def prepare_alignments(args):
             bucket = args.prep_memoize_dir.split("/")[2]
             try:
                 if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
-                    S3 = boto3.client("s3", aws_access_key_id = args.aws_access_key_id,
-                        aws_secret_access_key = args.aws_secret_access_key)
+                    S3 = boto3.client("s3", aws_access_key_id=args.aws_access_key_id,
+                        aws_secret_access_key=args.aws_secret_access_key)
                 else:
                     S3 = boto3.client("s3")
                 S3.head_bucket(Bucket=bucket)
@@ -246,11 +249,11 @@ def prepare_alignments(args):
             except ConnectionError as e:
                 raise Exception(("Cannot connect to Amazon S3")) from e
             if args.prep_memoize_dir[-1] == "/":
-                align_memoize_dir = '%saln' %args.prep_memoize_dir
-                align_stat_memoize_dir = '%sstats' %args.prep_memoize_dir
+                align_memoize_dir = '%saln' % args.prep_memoize_dir
+                align_stat_memoize_dir = '%sstats' % args.prep_memoize_dir
             else:
-                align_memoize_dir = '%s/aln' %args.prep_memoize_dir
-                align_stat_memoize_dir = '%s/stats' %args.prep_memoize_dir
+                align_memoize_dir = '%s/aln' % args.prep_memoize_dir
+                align_stat_memoize_dir = '%s/stats' % args.prep_memoize_dir
         else:
             if not os.path.isdir(args.prep_memoize_dir):
                 raise Exception(("Path '%s' does not exist") %
@@ -263,11 +266,11 @@ def prepare_alignments(args):
                 os.makedirs(align_stat_memoize_dir)
 
         am = align.AlignmentMemoizer(align_memoize_dir,
-            aws_access_key_id = args.aws_access_key_id,
-            aws_secret_access_key = args.aws_secret_access_key)
+            aws_access_key_id=args.aws_access_key_id,
+            aws_secret_access_key=args.aws_secret_access_key)
         asm = align.AlignmentStatMemoizer(align_stat_memoize_dir,
-            aws_access_key_id = args.aws_access_key_id,
-            aws_secret_access_key = args.aws_secret_access_key)
+            aws_access_key_id=args.aws_access_key_id,
+            aws_secret_access_key=args.aws_secret_access_key)
     else:
         am = None
         asm = None
@@ -630,8 +633,32 @@ def design_for_id(args):
                     args.guide_mismatches,
                     allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs)
-        elif args.predict_activity_model_path:
-            cla_path, reg_path = args.predict_activity_model_path
+        elif (args.predict_activity_model_path or
+                args.predict_cas13a_activity_model is not None):
+            if args.predict_activity_model_path:
+                cla_path, reg_path = args.predict_activity_model_path
+            else:
+                dir_path = get_project_path()
+                cla_path_all = os.path.join(dir_path, 'models', 'classify',
+                                        'cas13a')
+                reg_path_all = os.path.join(dir_path, 'models', 'regress',
+                                        'cas13a')
+                if len(args.predict_cas13a_activity_model) not in (0,2):
+                    raise Exception(("If setting versions for "
+                        "--predict-cas13a-activity-model, both a version for "
+                        "the classifier and the regressor must be set."))
+                if (len(args.predict_cas13a_activity_model) == 0 or
+                        args.predict_cas13a_activity_model[0] == 'latest'):
+                    cla_version = get_latest_model_version(cla_path_all)
+                else:
+                    cla_version = args.predict_cas13a_activity_model[0]
+                if (len(args.predict_cas13a_activity_model) == 0 or
+                        args.predict_cas13a_activity_model[1] == 'latest'):
+                    reg_version = get_latest_model_version(reg_path_all)
+                else:
+                    reg_version = args.predict_cas13a_activity_model[1]
+                cla_path = os.path.join(cla_path_all, cla_version)
+                reg_path = os.path.join(reg_path_all, reg_version)
             if args.predict_activity_thres:
                 # Use specified thresholds on classification and regression
                 cla_thres, reg_thres = args.predict_activity_thres
@@ -644,10 +671,12 @@ def design_for_id(args):
         else:
             if args.predict_activity_thres:
                 raise Exception(("Cannot set --predict-activity-thres without "
-                    "setting --predict-activity-model-path"))
+                    "setting --predict-activity-model-path or "
+                    "--predict-cas13a-activity-model"))
             if args.obj == 'maximize-activity':
-                raise Exception(("--predict-activity-model-path must be "
-                    "specified if --obj is 'maximize-activity' (unless "
+                raise Exception(("Either --predict-activity-model-path or "
+                    "--predict-cas13a-activity-model must be specified if "
+                    "--obj is 'maximize-activity' (unless "
                     "--use-simple-binary-activity-prediction is set)"))
             # Do not predict activity
             predictor = None
@@ -694,7 +723,7 @@ def design_for_id(args):
                 args.out_tsv[i],
                 window_step=args.window_step,
                 sort=args.sort_out,
-                print_analysis=(args.log_level==logging.INFO))
+                print_analysis=(args.log_level == logging.INFO))
         elif args.search_cmd == 'complete-targets':
             # Find optimal targets (primer and guide set combinations),
             # and write them to a file
@@ -1014,8 +1043,17 @@ def argv_to_args(argv):
               "model to determine which guides are active; (2) regression "
               "model, which is used to determine which guides (among "
               "active ones) are highly active. The models/ directory "
-              "contains example models. If not set, ADAPT does not predict "
-              "activities to use during design."))
+              "contains example models. If neither this nor "
+              "predict-cas13a-activity-model is set, ADAPT does not "
+              "predict activities to use during design."))
+    base_subparser.add_argument('--predict-cas13a-activity-model',
+        nargs='*',
+        help=("If set, use ADAPT's premade Cas13a model to "
+              "predict guide-target activity. If neither this nor "
+              "predict-activity-model-path is set, ADAPT does not predict "
+              "activities to use during design. Optionally, two arguments can "
+              "be included to indicate version number, in the format 'v1_0' or "
+              "'latest'. Versions will default to latest."))
     base_subparser.add_argument('--predict-activity-thres',
         type=float,
         nargs=2,
@@ -1026,8 +1064,8 @@ def argv_to_args(argv):
             "(2) regression threshold for deciding which guide-target pairs "
             "are highly active (>= 0, where higher values limit the number "
             "determined to be highly active). If not set but --predict-"
-            "activity-model-path is set, then ADAPT uses default thresholds "
-            "stored with the models."))
+            "activity-model-path or --predict-cas13a-activity-model is set, "
+            "then ADAPT uses default thresholds stored with the models."))
     base_subparser.add_argument('--use-simple-binary-activity-prediction',
         action='store_true',
         help=("If set, predict activity using a simple binary prediction "
@@ -1035,7 +1073,8 @@ def argv_to_args(argv):
               "the threshold determined based on --guide-mismatches. This "
               "is only applicable when OBJ is 'maxmimize-activity'. This "
               "does not use a serialized model for predicting activity, so "
-              "--predict-activity-model-path should not be set when this "
+              "neither --predict-activity-model-path nor "
+              "--predict-cas13a-activity-model should be set when this "
               "is set."))
 
     # Technical options
@@ -1303,7 +1342,7 @@ def argv_to_args(argv):
         help=("Path to output TSVs, with one per cluster; output TSVs are "
               "OUT_TSV.{cluster-number}"))
     input_autoargs_subparser.add_argument('--ref-accs', nargs='+',
-        help=("Accession(s) of reference sequence(s) to use for curation (comma-"
+        help=("Accession(s) of reference sequence(s) to use for curation (space-"
               "separated). If not set, ADAPT will automatically get accessions "
               "for reference sequences from NCBI based on the taxonomic ID"))
     input_autoargs_subparser.add_argument('--metadata-filter', nargs='+',

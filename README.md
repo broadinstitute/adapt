@@ -101,14 +101,23 @@ You will need to activate the environment each time you use ADAPT.
 ## Downloading and installing
 
 ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for GNU/Linux and Windows operating systems and via [PyPI](https://pypi.org/project/adapt-diagnostics/) for all operating systems.
+
 Before installing ADAPT via Bioconda, we suggest you follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda and activate the environment. To install via Bioconda, run the following command:
 ```bash
 conda install -c bioconda adapt
 ```
+If you want to be able to use AWS cloud features through ADAPT, run the following instead:
+```bash
+conda install -c bioconda "adapt[AWS]"
+```
 
-Before installing ADAPT via PyPI, we suggest you follow the instructions in the [Python documentation](https://docs.python.org/3/tutorial/venv.html) to set up and activate a virtual environment for ADAPT. To install via PyPI, run the following command:
+Before installing ADAPT via PyPI, we suggest you follow the instructions in either the [Python documentation](https://docs.python.org/3/tutorial/venv.html) or [Setting up a conda environment](#setting-up-a-conda-environment) to set up and activate a virtual environment for ADAPT. To install via PyPI, run the following command:
 ```bash
 pip install adapt-diagnostics
+```
+If you want to be able to use AWS cloud features through ADAPT, run the following instead:
+```bash
+pip install "adapt-diagnostics[AWS]"
 ```
 
 If you wish to modify ADAPT's code, ADAPT can be installed by cloning the repository and installing the package with `pip`:
@@ -265,7 +274,7 @@ The value depends on the output values of the activity model and reflects a tole
 'random-greedy' uses a randomized greedy algorithm (Buchbinder 2014) for constrained non-monotone submodular maximization, which has good worst-case guarantees.
 (Default: 'random-greedy'.)
 
-Note that, when the objective is to maximize activity, this objective requires a predictive model of activity and thus `--predict-activity-model-path` should be specified (details in [Miscellaneous key arguments](#miscellaneous-key-arguments)).
+Note that, when the objective is to maximize activity, this objective requires a predictive model of activity and thus `--predict-activity-model-path` or `--predict-cas13a-activity-model` should be specified (details in [Miscellaneous key arguments](#miscellaneous-key-arguments)).
 If you wish to use this objective but cannot use our pre-trained Cas13a model nor another model, see the help message for the argument `--use-simple-binary-activity-prediction`.
 
 ### Objective: minimizing complexity
@@ -275,7 +284,7 @@ With this objective, the following arguments to [`design.py`](./bin/design.py) a
 
 * `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide detects a sequence.
 This argument is mainly meant to be helpful in the absence of a predictive model of activity.
-When using a predictive model of activity (via `--predict-activity-model-path` and `--predict-activity-thres`), this argument serves as an additional requirement for evaluating detection on top of the model; it can be effectively ignored by setting MISMATCHES to be sufficiently high.
+When using a predictive model of activity (via `--predict-activity-model-path` or `--predict-cas13a-activity-model`), this argument serves as an additional requirement for evaluating detection on top of the model; it can be effectively ignored by setting MISMATCHES to be sufficiently high.
 (Default: 0.)
 * `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
 THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
@@ -283,7 +292,7 @@ Higher values have higher precision and less recall.
 THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
 Higher values limit the number of pairs determined to be highly active.
 To count as detecting a target sequence, a guide must be: (i) within MISMATCHES mismatches of the target sequence; (ii) classified as active; and (iii) predicted to be highly active.
-Using this argument requires also setting `--predict-activity-model-path` (see [Miscellaneous key arguments](#miscellaneous-key-arguments)).
+Using this argument requires also setting `--predict-activity-model-path` or `--predict-cas13a-activity-model` (see [Miscellaneous key arguments](#miscellaneous-key-arguments)).
 As noted above, MISMATCHES can be set to be sufficiently high to effectively ignore `-gm`.
 (Default: use the default thresholds included with the model.)
 * `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are detected by the guides.
@@ -375,10 +384,13 @@ If AWS CLI has been installed and configured and these arguments are passed, the
 
 In addition to the arguments above, there are others that are often important when running [`design.py`](./bin/design.py):
 
-* `--predict-activity-model-path MODEL_C MODEL_R`: Modles that predict activity of guide-target pairs.
+* `--predict-cas13a-activity-model`: If set, use ADAPT's pre-trained Cas13 model to predict activity of guide-target pairs.
+Classification and regression model files can be viewed in [`models/`](./models).
+(Default: not set, which does not use predicted activity during design.)
+* `--predict-activity-model-path MODEL_C MODEL_R`: Models that predict activity of guide-target pairs.
 MODEL_C gives a classification model that predicts whether a guide-target pair is active, and MODEL_R gives a regression model that predicts a measure of activity on active pairs.
+This does not need to be set if `--predict-cas13a-activity-model` is specified, but it is useful for custom models.
 Each argument is a path to a serialized model in TensorFlow's SavedModel format.
-Pre-trained classification and regression models are in [`models/`](./models).
 With `--obj maximize-activity`, the models are essential because they inform ADAPT of the measurements it aims to maximize.
 With `--obj minimize-guides`, the models constrain the design such that a guide must be highly active to detect a sequence (specified by `--predict-activity-thres`).
 (Default: not set, which does not use predicted activity during design.)
@@ -459,9 +471,10 @@ This is the most simple example.
 **It does not download genomes, search for genomic regions to target, or use a predictive model of activity; for these features, see the next example.**
 
 The repository includes an alignment of Lassa virus sequences (S segment) from Sierra Leone in `examples/SLE_S.aligned.fasta`.
+If you have installed ADAPT via Bioconda or PyPI, you'll need to download the alignment from [`here`](https://raw.githubusercontent.com/broadinstitute/adapt/main/examples/SLE_S.aligned.fasta).
 Run:
 ```bash
-design.py sliding-window fasta examples/SLE_S.aligned.fasta -o probes.tsv -w 200 -gl 28 -gm 1 -gp 0.95
+design.py sliding-window fasta FASTA_PATH -o probes.tsv -w 200 -gl 28 -gm 1 -gp 0.95
 ```
 
 From this alignment, ADAPT scans each 200 nt window (`-w 200`) to find the smallest collection of probes that:
@@ -479,7 +492,7 @@ It identifies Cas13a guides using a pre-trained predictive model of activity.
 
 Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
+design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-cas13a-activity-model --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
 This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable of MAFFT.
