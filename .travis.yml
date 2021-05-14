@@ -29,6 +29,7 @@ script: python3 -m unittest discover || python -m unittest discover
 deploy:
   provider: pypi
   username: "__token__"
+  distributions: "sdist bdist_wheel"
   skip_existing: true
   edge: true
   password:
