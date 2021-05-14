@@ -349,7 +349,7 @@ class GuideSearcher:
         """Compute percentiles of activity across target sequences for
         a guide set in a window.
 
-        For example, when percentiles is 0.5, this returns the median
+        For example, when percentiles is 50, this returns the median
         activity across the target sequences that the guide set provides.
 
         Args:

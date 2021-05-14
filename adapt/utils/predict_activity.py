@@ -377,16 +377,20 @@ class Predictor:
         mem = self._memoized_evaluations[start_pos]
         return [mem[pair][1] for pair in pairs]
 
-    def compute_activity(self, start_pos, pairs):
+    def compute_activity(self, start_pos, pairs, percentiles=None):
         """Compute a single activity measurement for pairs.
 
         Args:
             start_pos: start position of all guides in pairs; used for
                 memoizations
             pairs: list of tuples (target with context, guide)
+            percentiles: single percentile or list of percentiles to compute,
+                each in [0,100] (0 is minimum, 100 is maximum)
 
         Returns:
-            activity value for each pair
+            If percentile is not defined, list of activity value for each pair
+            If percentile is defined, tuple of (list of activity value for each
+                pair, the percentile(s) of those activities)
         """
         # Determine which pairs do not have memoized results, and call
         # these
@@ -397,7 +401,11 @@ class Predictor:
                 if pair not in mem]
         self._run_models_and_memoize(start_pos, unique_pairs_to_evaluate)
 
-        return [mem[pair][0] for pair in pairs]
+        activities = [mem[pair][0] for pair in pairs]
+        if percentiles:
+            percentile_activity = np.percentile(activities, percentiles)
+            return (activities, percentile_activity)
+        return activities
 
     def cleanup_memoized(self, start_pos):
         """Cleanup memoizations no longer needed at a start position.
@@ -438,7 +446,7 @@ class SimpleBinaryPredictor:
 
         self.rough_max_activity = 1.0
 
-    def compute_activity(self, start_pos, gd_sequence, aln):
+    def compute_activity(self, start_pos, gd_sequence, aln, percentiles=None):
         """Compute activity by checking hybridization across an alignment.
 
         This says the activity is 1.0 if a guide is deemed to bind to
@@ -448,10 +456,15 @@ class SimpleBinaryPredictor:
             start_pos: start position of guide sequence in aln
             gd_sequence: str representing guide sequence
             aln: alignment.Alignment object
+            percentiles: single percentile or list of percentiles to compute,
+                each in [0,100] (0 is minimum, 100 is maximum)
 
         Returns:
-            numpy array x where x[i] gives the activity (1 or 0) between
-            gd_sequence and the sequence in the alignment at index i
+            If percentile is not defined, numpy array x where x[i] gives the
+                activity (1 or 0) between gd_sequence and the sequence in the
+                alignment at index i
+            If percentile is defined, tuple of (the above, the percentile(s) of
+                the activities)
         """
         # Start with all 0s
         activities = np.zeros(aln.num_sequences)
@@ -464,6 +477,10 @@ class SimpleBinaryPredictor:
         # Set activity to 1 when bound
         for seq_idx in seqs_bound:
             activities[seq_idx] = 1.0
+
+        if percentiles:
+            percentile_activity = np.percentile(activities, percentiles)
+            return (activities, percentile_activity)
 
         return activities
 

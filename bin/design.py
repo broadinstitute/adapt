@@ -25,6 +25,7 @@ from adapt.utils import log
 from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
+from adapt.utils import mutate
 from adapt.utils.version import get_project_path, get_latest_model_version
 
 try:
@@ -678,8 +679,21 @@ def design_for_id(args):
                     "--predict-cas13a-activity-model must be specified if "
                     "--obj is 'maximize-activity' (unless "
                     "--use-simple-binary-activity-prediction is set)"))
+            if args.predict_activity_degradation:
+                raise Exception(("--predict-activity-model-path must be "
+                    "specified if --predict-activity-degradation is set "
+                    "(unless --use-simple-binary-activity-prediction is set)"))
             # Do not predict activity
             predictor = None
+
+        # Construct mutator, if necessary
+        if args.predict_activity_degradation:
+            mutator = mutate.GTRSubstitutionMutator(aln, *args.predict_activity_degradation,
+                           args.predict_activity_degradation_mu,
+                           args.predict_activity_degradation_t,
+                           args.predict_activity_degradation_n)
+        else:
+            mutator = None
 
         # Find an optimal set of guides for each window in the genome,
         # and write them to a file; ensure that the selected guides are
@@ -723,7 +737,7 @@ def design_for_id(args):
                 args.out_tsv[i],
                 window_step=args.window_step,
                 sort=args.sort_out,
-                print_analysis=(args.log_level == logging.INFO))
+                print_analysis=(args.log_level<=logging.INFO))
         elif args.search_cmd == 'complete-targets':
             # Find optimal targets (primer and guide set combinations),
             # and write them to a file
@@ -748,7 +762,7 @@ def design_for_id(args):
                 max_target_length=args.max_target_length,
                 obj_weights=args.obj_fn_weights,
                 only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
-                halt_early=args.halt_search_early)
+                halt_early=args.halt_search_early, mutator=mutator)
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets, no_overlap=args.do_not_overlap)
         else:
@@ -1076,6 +1090,29 @@ def argv_to_args(argv):
               "neither --predict-activity-model-path nor "
               "--predict-cas13a-activity-model should be set when this "
               "is set."))
+    # Predict activity degradation
+    base_subparser.add_argument('--predict-activity-degradation',
+        nargs=6, type=float,
+        help=("If set, predict the degradation in activity over time due to "
+              "substitution using the General Time-Reversible model. Six "
+              "arguments should be set: the relative rates of substitutions "
+              "per year between (1) A and C, (2) A and G, (3) A and T, "
+              "(4) C and G, (5) C and T, & (6) G and T. Each of these should "
+              "be between 0 and 1. Base pair frequencies will be calculated "
+              "from input sequences. The 5th percentile of simulated activities "
+              "will be reported."))
+    base_subparser.add_argument('--predict-activity-degradation-t',
+        type=int, default=5,
+        help=("Amount of time to simulate substitutions over, in years "
+              "(defaults to 5)"))
+    base_subparser.add_argument('--predict-activity-degradation-mu',
+        type=float, default=0.001,
+        help=("Overall rate of substitutions per site per year (defaults to 0.001)"))
+    base_subparser.add_argument('--predict-activity-degradation-n',
+        type=int, default=500,
+        help=("Number of sequences to simulate mutations over (defaults "
+              "to 500). Higher values increase accuracy, but also increase"
+              "runtime."))
 
     # Technical options
     base_subparser.add_argument('--do-not-memoize-guide-computations',

@@ -12,6 +12,7 @@ import itertools
 import logging
 import math
 import os
+import numpy as np
 
 from adapt import guide_search
 from adapt import primer_search
@@ -28,7 +29,8 @@ class TargetSearcher:
             max_primers_at_site=None,
             max_target_length=None, obj_weights=None,
             only_account_for_amplified_seqs=False,
-            halt_early=False, obj_value_shift=None):
+            halt_early=False, obj_value_shift=None,
+            mutator=None):
         """
         Args:
             ps: PrimerSearcher object
@@ -62,6 +64,8 @@ class TargetSearcher:
                 positive so that there is not confusion about differences
                 between positive/negative. If None (default), defaults are
                 set below based on obj_type.
+            mutator: a adapt.utils.mutate Mutator object. If None (default),
+                do not predict activity after mutations.
         """
         self.ps = ps
         self.gs = gs
@@ -99,6 +103,8 @@ class TargetSearcher:
                 # negative, so shift all up so that most are positive
                 self.obj_value_shift = 4.0
 
+        self.mutator = mutator
+
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.ps.
 
@@ -114,6 +120,33 @@ class TargetSearcher:
             for j in range(i + 1, len(primers)):
                 p2 = primers[j]
                 yield (p1, p2)
+
+    def _find_mutated_activity(self, targets):
+        """Find the activities of the guides after mutation
+
+        For each target, find the activity of the best of the guide
+        set across each potential starting location after mutation,
+        averaged across the sequences.
+
+        Args:
+            targets: list of tuples (obj_value, target) where target is a tuple
+                ((p1, p2), (guides_stats, guides))
+        Returns:
+            list of mutated activities, ordered by target's ordering.
+
+        """
+        mutated_activities = [None] * len(targets)
+        for i, (obj_value, target) in enumerate(targets):
+            ((p1, p2), (guides_stats, guides)) = target
+            mutated_activities[i] = max(max(np.average(
+                        self.gs.aln.compute_activity(
+                            start_pos,
+                            guide,
+                            self.gs.predictor,
+                            self.mutator))
+                    for start_pos in self.gs._selected_guide_positions[guide])
+                for guide in guides)
+        return mutated_activities
 
     def find_targets(self, best_n=10, no_overlap='amplicon'):
         """Find targets across an alignment.
@@ -520,10 +553,12 @@ class TargetSearcher:
                 When 'none', many targets in the best_n may be very similar
         """
         targets = self.find_targets(best_n=best_n, no_overlap=no_overlap)
+        if self.mutator:
+            mutated_activity = self._find_mutated_activity(targets)
 
         with open(out_fn, 'w') as outf:
             # Write a header
-            outf.write('\t'.join(['objective-value', 'target-start', 'target-end',
+            headers = ['objective-value', 'target-start', 'target-end',
                 'target-length',
                 'left-primer-start', 'left-primer-num-primers',
                 'left-primer-frac-bound', 'left-primer-target-sequences',
@@ -533,10 +568,13 @@ class TargetSearcher:
                 'guide-set-expected-activity',
                 'guide-set-median-activity', 'guide-set-5th-pctile-activity',
                 'guide-expected-activities',
-                'guide-target-sequences', 'guide-target-sequence-positions']) +
-                '\n')
+                'guide-target-sequences', 'guide-target-sequence-positions']
+            if self.mutator:
+                headers.append('guide-set-5th-pctile-mutated-activity')
 
-            for (obj_value, target) in targets:
+            outf.write('\t'.join(headers) + '\n')
+
+            for i, (obj_value, target) in enumerate(targets):
                 ((p1, p2), (guides_stats, guides)) = target
 
                 # Break out guides_stats
@@ -585,6 +623,8 @@ class TargetSearcher:
                     guides_activity_median, guides_activity_5thpctile,
                     expected_activities_per_guide_str,
                     guides_seqs_str, guides_positions_str]
+                if self.mutator:
+                    line.append(mutated_activity[i])
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')
 
