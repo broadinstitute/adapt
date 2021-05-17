@@ -663,7 +663,7 @@ def design_for_id(args):
                     guide_cover_frac,
                     args.missing_thres,
                     seq_groups=seq_groups,
-                    guide_is_suitable_fn=guide_is_suitable,
+                    is_suitable_fns=[guide_is_suitable],
                     required_guides=required_guides_for_aln,
                     blacklisted_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
@@ -679,7 +679,7 @@ def design_for_id(args):
                     args.penalty_strength,
                     args.missing_thres,
                     algorithm=args.maximization_algorithm,
-                    guide_is_suitable_fn=guide_is_suitable,
+                    is_suitable_fns=[guide_is_suitable],
                     required_guides=required_guides_for_aln,
                     blacklisted_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
@@ -702,12 +702,16 @@ def design_for_id(args):
                 primer_gc_content_bounds = None
             else:
                 primer_gc_content_bounds = tuple(args.primer_gc_content_bounds)
+            primer_is_suitable = []
+            # if args.pcr:
+            #     primer_is_suitable = pcr_suitable_filters
             ps = primer_search.PrimerSearcher(aln, args.primer_length,
                                               args.primer_mismatches,
                                               primer_cover_frac,
                                               args.missing_thres,
                                               seq_groups=seq_groups,
-                                              primer_gc_content_bounds=primer_gc_content_bounds)
+                                              primer_gc_content_bounds=primer_gc_content_bounds,
+                                              is_suitable_fns=primer_is_suitable)
 
             if args.obj == 'minimize-guides':
                 obj_type = 'min'

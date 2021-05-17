@@ -30,7 +30,7 @@ class GuideSearcher:
     """
 
     def __init__(self, aln, guide_length, missing_data_params,
-                 guide_is_suitable_fn=None,
+                 is_suitable_fns=[],
                  required_guides={}, blacklisted_ranges={},
                  allow_gu_pairs=False, required_flanking_seqs=(None, None),
                  do_not_memoize_guides=False,
@@ -44,9 +44,9 @@ class GuideSearcher:
                 sequences with missing data is > min(a, max(b, c*m), where m is
                 the median fraction of sequences with missing data over the
                 alignment
-            guide_is_suitable_fn: if set, the value of this argument is a
-                function f(x) such that this will only construct a guide x
-                for which f(x) is True
+            is_suitable_fns: if set, the value of this argument is a list
+                of functions f(x) such that this will only construct a guide x
+                for which each f(x) is True
             required_guides: dict that maps guide sequences to their position
                 in the alignment; all of these guide sequences are immediately
                 placed in the set of covering guides for their appropriate
@@ -95,7 +95,7 @@ class GuideSearcher:
         self.missing_threshold = min(missing_max, max(missing_min,
             missing_coeff * self.aln.median_sequences_with_missing_data()))
 
-        self.guide_is_suitable_fn = guide_is_suitable_fn
+        self.is_suitable_fns = is_suitable_fns
 
         self.required_guides = required_guides
 
@@ -334,7 +334,7 @@ class GuideSearcher:
                 try:
                     gd_activities = self.aln.compute_activity(start, gd_seq,
                             self.predictor)
-                except alignment.CannotConstructGuideError:
+                except alignment.CannotConstructOligoError:
                     # Most likely this site is too close to an endpoint and
                     # does not have enough context_nt; skip it
                     continue
@@ -441,7 +441,7 @@ class GuideSearcher:
             try:
                 gd_activities = self.aln.compute_activity(start, gd_seq,
                         self.predictor)
-            except alignment.CannotConstructGuideError:
+            except alignment.CannotConstructOligoError:
                 # Most likely this site is too close to an endpoint and
                 # does not have enough context_nt; skip it
                 continue
@@ -635,10 +635,10 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                         seqs_to_consider, self.mismatches, self.allow_gu_pairs,
                         self.guide_clusterer, num_needed=num_needed,
                         missing_threshold=self.missing_threshold,
-                        guide_is_suitable_fn=self.guide_is_suitable_fn,
+                        is_suitable_fns=self.is_suitable_fns,
                         required_flanking_seqs=self.required_flanking_seqs,
                         predictor=self.predictor)
-            except alignment.CannotConstructGuideError:
+            except alignment.CannotConstructOligoError:
                 p = None
             return p
 
@@ -1400,9 +1400,9 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                     start, self.guide_length, seqs_to_consider,
                     self.guide_clusterer,
                     missing_threshold=self.missing_threshold,
-                    guide_is_suitable_fn=self.guide_is_suitable_fn,
+                    is_suitable_fns=self.is_suitable_fns,
                     required_flanking_seqs=self.required_flanking_seqs)
-        except alignment.CannotConstructGuideError:
+        except alignment.CannotConstructOligoError:
             # There may be too much missing data or a related issue
             # at this site; do not have a ground set here
             ground_set = set()
@@ -1414,7 +1414,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             try:
                 activities = self.aln.compute_activity(start, gd_seq,
                         self.predictor)
-            except alignment.CannotConstructGuideError:
+            except alignment.CannotConstructOligoError:
                 # Most likely this site is too close to an endpoint
                 # and does not have enough context_nt -- there will be
                 # no ground set at this site -- but skip this guide and

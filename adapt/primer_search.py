@@ -98,7 +98,7 @@ class PrimerSearcher(guide_search.GuideSearcherMinimizeGuides):
 
     def __init__(self, aln, primer_length, mismatches, cover_frac,
                  missing_data_params, seq_groups=None,
-                 primer_gc_content_bounds=None):
+                 primer_gc_content_bounds=None, **kwargs):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -121,11 +121,33 @@ class PrimerSearcher(guide_search.GuideSearcherMinimizeGuides):
                 yields sites where all primers have a GC content fraction in
                 [lo, hi]; or None for no bounds
         """
+        if 'is_suitable_fns' not in kwargs:
+            kwargs['is_suitable_fns'] = []
+        if primer_gc_content_bounds:
+            lo, hi = primer_gc_content_bounds
+            assert lo <= hi
+            def check_gc_content(primer_seq):
+                """Determine whether primer meets bounds on GC content.
+
+                Args:
+                    primer_seq: primer sequence
+
+                Returns:
+                    True/False indicating whether all primers meet the bounds on
+                    GC content
+                """
+                gc_frac = guide.gc_frac(primer_seq)
+                if gc_frac < lo or gc_frac > hi:
+                    return False
+                return True
+            kwargs['is_suitable_fns'].append(check_gc_content)
+
         super().__init__(aln, primer_length, mismatches,
                          cover_frac, missing_data_params,
                          seq_groups=seq_groups,
                          allow_gu_pairs=False,
-                         do_not_memoize_guides=True)
+                         do_not_memoize_guides=True,
+                         **kwargs)
         self.primer_gc_content_bounds = primer_gc_content_bounds
 
     def seqs_bound_by_primers(self, primers):
@@ -139,24 +161,6 @@ class PrimerSearcher(guide_search.GuideSearcherMinimizeGuides):
             a primer
         """
         return super()._seqs_bound_by_guides(primers)
-
-    def check_gc_content(self, primers):
-        """Determine whether all primers in primer set meet bounds on GC content.
-
-        Args:
-            primers: collection of str representing primer sequences
-
-        Returns:
-            True/False indicating whether all primers meet the bounds on
-            GC content
-        """
-        lo, hi = self.primer_gc_content_bounds
-        assert lo <= hi
-        for primer_seq in primers:
-            gc_frac = guide.gc_frac(primer_seq)
-            if gc_frac < lo or gc_frac > hi:
-                return False
-        return True
 
     def find_primers(self, max_at_site=None):
         """Find primers across the alignment.
@@ -185,9 +189,6 @@ class PrimerSearcher(guide_search.GuideSearcherMinimizeGuides):
 
             # Check constraints
             if max_at_site is not None and num_primers > max_at_site:
-                continue
-            if (self.primer_gc_content_bounds is not None and
-                    self.check_gc_content(primers_in_cover) is False):
                 continue
 
             yield PrimerResult(

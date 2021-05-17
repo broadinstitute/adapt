@@ -240,16 +240,16 @@ class TestAlignment(unittest.TestCase):
                          ('CGAC', {2,4}))
         self.assertIn(self.b.construct_guide(2, 4, {0: {2,3,4}}, 2, False, None),
                       [('CGAC', {2,4}), ('CGAT', {2,3})])
-        with self.assertRaises(alignment.CannotConstructGuideError):
+        with self.assertRaises(alignment.CannotConstructOligoError):
             # Should fail when 'N' is all that exists at a position
             self.b.construct_guide(0, 4, {0: {1,3,4}}, 0, False, None)
-        with self.assertRaises(alignment.CannotConstructGuideError):
+        with self.assertRaises(alignment.CannotConstructOligoError):
             # Should fail when a potential guide (here, 'CGAC') cannot
             # bind to any sequence because they all have 'N' somewhere
             self.b.construct_guide(2, 4, {0: {2,4}}, 1, False, None)
 
     def test_construct_guide_c(self):
-        with self.assertRaises(alignment.CannotConstructGuideError):
+        with self.assertRaises(alignment.CannotConstructOligoError):
             # Should fail when the only sequence given (1) has an indel
             self.c.construct_guide(0, 4, {0: {1}}, 0, False, self.gc)
 
@@ -315,7 +315,7 @@ class TestAlignment(unittest.TestCase):
                 return True
         # Now the best guide is 'CTACCA'
         p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-            guide_is_suitable_fn=f)
+            is_suitable_fns=[f])
         gd, covered_seqs = p
         self.assertEqual(gd, 'CTACCA')
         self.assertEqual(covered_seqs, {1})
@@ -327,9 +327,9 @@ class TestAlignment(unittest.TestCase):
             else:
                 return True
         # Now there is no suitable guide
-        with self.assertRaises(alignment.CannotConstructGuideError):
+        with self.assertRaises(alignment.CannotConstructOligoError):
             aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-                guide_is_suitable_fn=f)
+                is_suitable_fns=[f])
 
     def test_construct_guide_with_predictor(self):
         seqs = ['GTATCAAAT',
@@ -378,7 +378,7 @@ class TestAlignment(unittest.TestCase):
                 return y
         predictor = PredictorTest()
         # With early stopping, it will not find a guide
-        with self.assertRaises(alignment.CannotConstructGuideError):
+        with self.assertRaises(alignment.CannotConstructOligoError):
             aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
                 predictor=predictor, stop_early=True)
 
@@ -393,7 +393,7 @@ class TestAlignment(unittest.TestCase):
                 return y
         predictor = PredictorTest()
         # Now there is no suitable guide
-        with self.assertRaises(alignment.CannotConstructGuideError):
+        with self.assertRaises(alignment.CannotConstructOligoError):
             aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
                 predictor=predictor)
 
@@ -572,8 +572,8 @@ class TestAlignment(unittest.TestCase):
                 'AAAAA']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
         all_ps = [[1],
-                  [0.25, 0.75], 
-                  [0.25, 0.25, .5], 
+                  [0.25, 0.75],
+                  [0.25, 0.25, .5],
                   [0.25, 0.25, 0.25, 0.25],
                   [0.5, 0.5]]
 
@@ -590,10 +590,10 @@ class TestAlignment(unittest.TestCase):
                   [0.5, 0.5],
                   [0.5, 0.5],
                   [0.5, 0.5],
-                  [1/3.0, 1/3.0, 1/3.0], 
-                  [1/3.0, 1/3.0, 1/3.0], 
-                  [1/3.0, 1/3.0, 1/3.0], 
-                  [1/3.0, 1/3.0, 1/3.0], 
+                  [1/3.0, 1/3.0, 1/3.0],
+                  [1/3.0, 1/3.0, 1/3.0],
+                  [1/3.0, 1/3.0, 1/3.0],
+                  [1/3.0, 1/3.0, 1/3.0],
                   [0.25, 0.25, 0.25, 0.25]]
 
         entropy = [sum([-p*log2(p) for p in ps]) for ps in all_ps]

@@ -213,7 +213,7 @@ class Alignment(SequenceList):
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
             allow_gu_pairs, guide_clusterer, num_needed=None,
-            missing_threshold=1, guide_is_suitable_fn=None,
+            missing_threshold=1, is_suitable_fns=[],
             required_flanking_seqs=(None, None),
             predictor=None, stop_early=True):
         """Construct a single guide to target a set of sequences in the alignment.
@@ -243,8 +243,9 @@ class Alignment(SequenceList):
             missing_threshold: do not construct a guide if the fraction of
                 sequences with missing data, at any position in the target
                 range, exceeds this threshold
-            guide_is_suitable_fn: if set, a function f(x) such that this
-                will only construct a guide x for which f(x) is True
+            is_suitable_fns: if set, the value of this argument is a list
+                of functions f(x) such that this will only construct a guide x
+                for which each f(x) is True
             required_flanking_seqs: tuple (s5, s3) that specifies sequences
                 on the 5' (left; s5) end and 3' (right; s3) end flanking
                 the guide (in the target, not the guide) that must be
@@ -284,7 +285,7 @@ class Alignment(SequenceList):
 
         for pos in range(start, start + guide_length):
             if self.frac_missing_at_pos(pos) > missing_threshold:
-                raise CannotConstructGuideError(("Too much missing data at "
+                raise CannotConstructOligoError(("Too much missing data at "
                     "a position in the target range"))
 
         aln_for_guide = self.extract_range(start, start + guide_length)
@@ -294,7 +295,7 @@ class Alignment(SequenceList):
             # prediction
             if (start - predictor.context_nt < 0 or
                     start + guide_length + predictor.context_nt > self.seq_length):
-                raise CannotConstructGuideError(("The context needed for "
+                raise CannotConstructOligoError(("The context needed for "
                     "the target to predict activity falls outside the "
                     "range of the alignment at this position"))
             aln_for_guide_with_context = self.extract_range(
@@ -331,7 +332,7 @@ class Alignment(SequenceList):
         # If every sequence in this region has a gap or does not contain
         # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise CannotConstructGuideError(("All sequences in region have "
+            raise CannotConstructOligoError(("All sequences in region have "
                 "a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
@@ -444,10 +445,14 @@ class Alignment(SequenceList):
                 # Skip this; all sequences at a position in this cluster
                 # are 'N'
                 continue
-            if guide_is_suitable_fn is not None:
-                if guide_is_suitable_fn(gd) is False:
+            skip_cluster = False
+            for is_suitable_fn in is_suitable_fns:
+                if is_suitable_fn(gd) is False:
                     # Skip this cluster
-                    continue
+                    skip_cluster = True
+                    break
+            if skip_cluster:
+                continue
             # Determine the sequences that are bound by this guide (and
             # where it is 'active', if predictor is set)
             binding_seqs, num_bound, num_passed_predict_active = \
@@ -485,9 +490,13 @@ class Alignment(SequenceList):
                 if not set(s).issubset(set(['A', 'C', 'G', 'T'])):
                     # s has ambiguity; skip it
                     continue
-                if (guide_is_suitable_fn is not None and
-                        guide_is_suitable_fn(s) is False):
-                    # Skip s, which is not suitable
+                skip_cluster = False
+                for is_suitable_fn in is_suitable_fns:
+                    if is_suitable_fn(s) is False:
+                        # Skip this cluster
+                        skip_cluster = True
+                        break
+                if skip_cluster:
                     continue
                 if predictor is not None:
                     s_with_context, _ = seq_rows_with_context[i]
@@ -500,7 +509,7 @@ class Alignment(SequenceList):
                 break
 
         if gd is None:
-            raise CannotConstructGuideError(("No guides are suitable or "
+            raise CannotConstructOligoError(("No guides are suitable or "
                 "active"))
 
         return (gd, binding_seqs)
@@ -638,8 +647,7 @@ class Alignment(SequenceList):
 
     def determine_representative_guides(self, start, guide_length,
             seqs_to_consider, guide_clusterer, missing_threshold=1,
-            guide_is_suitable_fn=None,
-            required_flanking_seqs=(None, None)):
+            is_suitable_fns=[], required_flanking_seqs=(None, None)):
         """Construct a set of guides representative of the target sequences.
 
         This is similar to construct_guide(), except returns a set of
@@ -658,8 +666,9 @@ class Alignment(SequenceList):
             missing_threshold: do not construct representative sequences if
                 the fraction of sequences with missing data, at any position
                 in the target range, exceeds this threshold
-            guide_is_suitable_fn: if set, a function f(x) such that this
-                will only construct a guide x for which f(x) is True
+            is_suitable_fns: if set, the value of this argument is a list
+                of functions f(x) such that this will only construct a guide x
+                for which each f(x) is True
             required_flanking_seqs: tuple (s5, s3) that specifies sequences
                 on the 5' (left; s5) end and 3' (right; s3) end flanking
                 the guide (in the target, not the guide) that must be
@@ -674,7 +683,7 @@ class Alignment(SequenceList):
 
         for pos in range(start, start + guide_length):
             if self.frac_missing_at_pos(pos) > missing_threshold:
-                raise CannotConstructGuideError(("Too much missing data at "
+                raise CannotConstructOligoError(("Too much missing data at "
                     "a position in the target range"))
 
         aln_for_guide = self.extract_range(start, start + guide_length)
@@ -706,7 +715,7 @@ class Alignment(SequenceList):
         # If every sequence in this region has a gap or does not contain
         # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise CannotConstructGuideError(("All sequences in region have "
+            raise CannotConstructOligoError(("All sequences in region have "
                 "a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
@@ -724,11 +733,14 @@ class Alignment(SequenceList):
                 # Skip this; all sequences at a position in this cluster
                 # are 'N'
                 continue
-            if guide_is_suitable_fn is not None:
-                if guide_is_suitable_fn(gd) is False:
-                    # Skip this cluster; it is not suitable (e.g., may
-                    # not be specific)
-                    continue
+            skip_cluster = False
+            for is_suitable_fn in is_suitable_fns:
+                if is_suitable_fn(gd) is False:
+                    # Skip this cluster
+                    skip_cluster = True
+                    break
+            if skip_cluster:
+                continue
             representatives.add(gd)
         return representatives
 
@@ -760,7 +772,7 @@ class Alignment(SequenceList):
         # prediction
         if (start - predictor.context_nt < 0 or
                 start + guide_length + predictor.context_nt > self.seq_length):
-            raise CannotConstructGuideError(("The context needed for "
+            raise CannotConstructOligoError(("The context needed for "
                 "the target to predict activity falls outside the "
                 "range of the alignment at this position"))
         aln_for_guide_with_context = self.extract_range(
@@ -892,7 +904,7 @@ class Alignment(SequenceList):
         return Alignment(seqs_col)
 
 
-class CannotConstructGuideError(Exception):
+class CannotConstructOligoError(Exception):
     def __init__(self, value):
         self.value = value
     def __str__(self):

@@ -170,7 +170,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.assertIsNone(self.b._construct_guide_memoized(0, {0: {1}}))
         self.assertEqual(self.b._construct_guide_memoized(0, {0: {0,1}}),
                          ('ATCG', {0}))
-        
+
         self.assertIsNone(self.b._construct_guide_memoized(0, {0: {1}}))
         self.assertEqual(self.b._construct_guide_memoized(0, {0: {0,1}}),
                          ('ATCG', {0}))
@@ -287,7 +287,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # It should be able to find a guide in a window without a gap
         self.i._find_guides_in_window(10, 10 + self.i_window_size)
 
-    def test_guide_is_suitable_fn(self):
+    def test_is_suitable_fns(self):
         seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
                 'CTACCAAAAAACCTGCTAGGGGGCGTAC',
                 'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
@@ -306,7 +306,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
             else:
                 return True
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
-            guide_is_suitable_fn=f)
+            is_suitable_fns=[f])
         self.assertEqual(gs._find_guides_in_window(0, 28),
                          set(['CCCCC', 'GGGGG']))
 
@@ -561,7 +561,7 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
 
     def make_gs(self, seqs, soft_guide_constraint=1, hard_guide_constraint=3,
             penalty_strength=0.1, algorithm='random-greedy',
-            guide_is_suitable_fn=None):
+            is_suitable_fns=[]):
         # Predict guides matching target to have activity 1, and
         # starting with 'A' to have activity 2 (otherwise, 0)
         class PredictorTest:
@@ -569,10 +569,10 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
                 self.context_nt = 1
             def compute_activity(self, start_pos, pairs):
                 y = []
-                for target, guide in pairs:
+                for target, guide_seq in pairs:
                     target_without_context = target[self.context_nt:len(target)-self.context_nt]
-                    if guide == target_without_context:
-                        if guide[0] == 'A':
+                    if guide_seq == target_without_context:
+                        if guide_seq[0] == 'A':
                             y += [2]
                         else:
                             y += [1]
@@ -588,7 +588,7 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
                 soft_guide_constraint, hard_guide_constraint,
                 penalty_strength, (1, 1, 100), algorithm=algorithm,
                 predictor=predictor,
-                guide_is_suitable_fn=guide_is_suitable_fn)
+                is_suitable_fns=is_suitable_fns)
         return gs
 
     def test_obj_value_from_params(self):
@@ -859,29 +859,29 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
     def test_find_guides_in_window_high_penalty_random_greedy(self):
         self.find_guides_in_window_high_penalty('random-greedy')
 
-    def find_guides_in_window_with_guide_is_suitable_fn(self, algo):
+    def find_guides_in_window_with_is_suitable_fns(self, algo):
         def f(guide):
             if 'AA' in guide:
                 return False
             else:
                 return True
-        
+
         gs = self.make_gs(['ATCGAATTCG',
                            'GGGGGGGGGG',
                            'CCCCCCCCCC',
                            'AACGAATTCG'],
                            hard_guide_constraint=1,
                            algorithm=algo,
-                           guide_is_suitable_fn=f)
+                           is_suitable_fns=[f])
         o = gs._find_guides_in_window(2, 8)
         self.assertEqual(len(o), 1)
         self.assertIn(list(o)[0], {'CGAA', 'GAAT', 'GGGG', 'CCCC'})
 
-    def test_find_guides_in_window_with_guide_is_suitable_fn_greedy(self):
-        self.find_guides_in_window_with_guide_is_suitable_fn('greedy')
+    def test_find_guides_in_window_with_is_suitable_fns_greedy(self):
+        self.find_guides_in_window_with_is_suitable_fns('greedy')
 
-    def test_find_guides_in_window_with_guide_is_suitable_fn_random_greedy(self):
-        self.find_guides_in_window_with_guide_is_suitable_fn('random-greedy')
+    def test_find_guides_in_window_with_is_suitable_fns_random_greedy(self):
+        self.find_guides_in_window_with_is_suitable_fns('random-greedy')
 
     def find_guides_in_window_with_gaps_and_missing_data(self, algo):
         gs = self.make_gs(['ATCGAATTCG',
@@ -926,7 +926,7 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
         o = gs._find_guides_in_window(0, 5)
         self.assertEqual(len(o), 1)
         self.assertIn(list(o)[0], {'TCGA', 'GGGG', 'CCCC', 'ACGA'})
-        
+
         # No guides should end at the end of the alignment, since it
         # does not permit a context_nt of 1 for evaluating activity
         o = gs._find_guides_in_window(5, 10)

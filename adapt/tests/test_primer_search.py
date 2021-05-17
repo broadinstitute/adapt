@@ -131,14 +131,6 @@ class TestPrimerSearch(unittest.TestCase):
                      self._pr(2, 2, 5.0/5.0, set(['CGAA', 'CGAT']))]
         self.assertIn(covers, [expected1, expected2])
 
-    def test_check_gc_content(self):
-        self.assertTrue(self.a_gc_bounds.check_gc_content({'ATCG', 'GGTT'}))
-        self.assertTrue(self.a_gc_bounds.check_gc_content({'ATCG', 'AGCT'}))
-        self.assertFalse(self.a_gc_bounds.check_gc_content({'ATCA', 'AGCT'}))
-        self.assertFalse(self.a_gc_bounds.check_gc_content({'ATCG', 'AGAT'}))
-        self.assertFalse(self.a_gc_bounds.check_gc_content({'ATCA', 'AGAT'}))
-        self.assertFalse(self.a_gc_bounds.check_gc_content({'GGCA', 'AGCT'}))
-
     def tearDown(self):
         # Re-enable logging
         logging.disable(logging.NOTSET)
