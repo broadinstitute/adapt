@@ -8,7 +8,7 @@ from adapt import alignment
 from adapt.prepare import cluster
 from adapt import target_search
 from adapt.utils import formatting
-from adapt.utils import guide
+from adapt.utils import oligo
 from adapt.utils import log
 from adapt.utils import seq_io
 
@@ -39,7 +39,7 @@ def find_test_targets(design_target, aln, args):
     """
     logger.info(("Finding test targets for design option with endpoints "
         "[%d, %d)"), design_target.target_start, design_target.target_end)
-    
+
     # Expand the extracted range to the minimum
     # Note that this extracts to get a target length of args.min_target_len
     # *in the alignment*; if there are gaps in the alignment within the
@@ -106,10 +106,10 @@ def find_test_targets(design_target, aln, args):
     for rep_seq in rep_seqs:
         primer_seqs = (design_target.left_primer_seqs +
                 design_target.right_primer_seqs)
-        primer_overlap = guide.guide_overlap_in_seq(primer_seqs,
+        primer_overlap = oligo.overlap_in_seq(primer_seqs,
                 rep_seq, args.pm, False)
         guide_seqs = design_target.guide_seqs
-        guide_overlap = guide.guide_overlap_in_seq(guide_seqs,
+        guide_overlap = oligo.overlap_in_seq(guide_seqs,
                 rep_seq, args.gm, guide_allow_gu_pairs)
         overlap_labels = {'primer': primer_overlap, 'guide': guide_overlap}
 

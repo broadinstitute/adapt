@@ -14,8 +14,8 @@ import math
 import os
 import numpy as np
 
+from adapt.utils import search
 from adapt import guide_search
-from adapt import primer_search
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -25,12 +25,10 @@ logger = logging.getLogger(__name__)
 class TargetSearcher:
     """Methods to search for targets over a genome."""
 
-    def __init__(self, ps, gs, obj_type='min',
-            max_primers_at_site=None,
+    def __init__(self, ps, gs, obj_type='min', max_primers_at_site=None,
             max_target_length=None, obj_weights=None,
-            only_account_for_amplified_seqs=False,
-            halt_early=False, obj_value_shift=None,
-            mutator=None):
+            only_account_for_amplified_seqs=False, halt_early=False,
+            obj_value_shift=None, mutator=None):
         """
         Args:
             ps: PrimerSearcher object
@@ -239,7 +237,7 @@ class TargetSearcher:
             window_length = window_end - window_start
 
             # To consider this window, a guide must fit within it
-            if window_length < self.gs.guide_length:
+            if window_length < self.gs.min_oligo_length:
                 continue
 
             # If here, the window passed basic checks
@@ -250,7 +248,7 @@ class TargetSearcher:
             # and current start
             assert window_start >= last_window_start
             for pos in range(last_window_start, window_start):
-                self.gs._cleanup_memoized_guides(pos)
+                self.gs._cleanup_memo(pos)
             last_window_start = window_start
 
             # Calculate a cost of the primers
@@ -357,8 +355,8 @@ class TargetSearcher:
                 # instance of GuideSearcherMinimizeGuides (i.e., not for
                 # MaximizeActivity -- mostly for technical implementation
                 # reasons)
-                p1_bound_seqs = self.ps.seqs_bound_by_primers(p1.primers_in_cover)
-                p2_bound_seqs = self.ps.seqs_bound_by_primers(p2.primers_in_cover)
+                p1_bound_seqs = self.ps.seqs_bound(p1.primers_in_cover)
+                p2_bound_seqs = self.ps.seqs_bound(p2.primers_in_cover)
                 primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
                 guide_seqs_to_consider = primer_bound_seqs
             else:
@@ -379,12 +377,12 @@ class TargetSearcher:
             else:
                 extra_args = {}
             try:
-                guides = self.gs._find_guides_in_window(
+                guides = self.gs._find_oligos_in_window(
                     window_start, window_end, **extra_args)
             except guide_search.CannotAchieveDesiredCoverageError:
                 # No more suitable guides; skip this window
                 continue
-            except guide_search.CannotFindAnyGuidesError:
+            except search.CannotFindAnyOligosError:
                 # No suitable guides in this window; skip it
                 continue
 
@@ -397,13 +395,13 @@ class TargetSearcher:
             # Compute activities across target sequences, and expected, median,
             # and 5th percentile of activities
             if self.gs.predictor is not None:
-                activities = self.gs.guide_set_activities(window_start,
+                activities = self.gs.oligo_set_activities(window_start,
                         window_end, guides)
-                guides_activity_expected = self.gs.guide_set_activities_expected_value(
+                guides_activity_expected = self.gs.oligo_set_activities_expected_value(
                         window_start, window_end, guides,
                         activities=activities)
                 guides_activity_median, guides_activity_5thpctile = \
-                        self.gs.guide_set_activities_percentile(
+                        self.gs.oligo_set_activities_percentile(
                                 window_start, window_end, guides, [50, 5],
                                 activities=activities)
             else:
@@ -417,9 +415,9 @@ class TargetSearcher:
                         math.nan, math.nan
             # Calculate fraction of sequences bound by the guides
             if isinstance(self.gs, guide_search.GuideSearcherMinimizeGuides):
-                guides_frac_bound = self.gs.total_frac_bound_by_guides(guides)
+                guides_frac_bound = self.gs.total_frac_bound(guides)
             elif isinstance(self.gs, guide_search.GuideSearcherMaximizeActivity):
-                guides_frac_bound = self.gs.total_frac_bound_by_guides(
+                guides_frac_bound = self.gs.total_frac_bound(
                         window_start, window_end, guides,
                         activities=activities)
             guides_stats = (guides_frac_bound, guides_activity_expected,
@@ -594,7 +592,7 @@ class TargetSearcher:
                 guides_seqs_str = ' '.join(guides_seqs_sorted)
 
                 # Find positions of the guides
-                guides_positions = [self.gs._selected_guide_positions[gd_seq]
+                guides_positions = [self.gs._selected_positions[gd_seq]
                                     for gd_seq in guides_seqs_sorted]
                 guides_positions_str = ' '.join(str(p) for p in guides_positions)
 
@@ -603,7 +601,7 @@ class TargetSearcher:
                 window_end = p2.start
                 if self.gs.predictor is not None:
                     expected_activities_per_guide = \
-                            [self.gs.guide_activities_expected_value(
+                            [self.gs.oligo_activities_expected_value(
                                 window_start, window_end, gd_seq)
                                 for gd_seq in guides_seqs_sorted]
                 else:

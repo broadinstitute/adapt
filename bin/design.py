@@ -707,12 +707,12 @@ def design_for_id(args):
                     args.missing_thres,
                     seq_groups=seq_groups,
                     is_suitable_fns=[guide_is_suitable],
-                    required_guides=required_guides_for_aln,
-                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    required_oligos=required_guides_for_aln,
+                    ignored_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_guide_computations)
         elif args.obj == 'maximize-activity':
             gs = guide_search.GuideSearcherMaximizeActivity(
                     aln,
@@ -723,12 +723,12 @@ def design_for_id(args):
                     args.missing_thres,
                     algorithm=args.maximization_algorithm,
                     is_suitable_fns=[guide_is_suitable],
-                    required_guides=required_guides_for_aln,
-                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    required_oligos=required_guides_for_aln,
+                    ignored_ranges=blacklisted_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_guide_computations)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
