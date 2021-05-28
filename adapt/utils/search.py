@@ -1785,7 +1785,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
 
         # The output of analyze() is already dense, so do not compress
         p = super()._compute_memoized(start, analyze, make_key,
-                use_last=use_last, compress=False)
+                use_last=use_last)
         return p
 
 
