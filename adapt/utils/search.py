@@ -31,7 +31,7 @@ class OligoSearcher:
         missing_data_params, is_suitable_fns=[], required_oligos={},
         ignored_ranges={}, allow_gu_pairs=False,
         required_flanking_seqs=(None, None), do_not_memoize=True,
-        predictor=None, left_index=True):
+        predictor=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -131,8 +131,7 @@ class OligoSearcher:
 
         self.predictor = predictor
 
-    def _compute_memoized(self, start, call_fn, key_fn,
-        use_last=False, compress=True):
+    def _compute_memoized(self, start, call_fn, key_fn, use_last=False):
         """Make a memoized call to compute an oligo.
 
         The actual computation is defined in a subclass and passed as
@@ -147,8 +146,6 @@ class OligoSearcher:
             use_last: if set, check for a memoized result by using the last
                 key constructed (it is assumed that key is identical to
                 the last provided values)
-            compress: if True, compress the output of call_fn() before
-                memoizing and decompress the memo before returning
 
         Returns:
             result of call_fn()
@@ -177,10 +174,7 @@ class OligoSearcher:
             if p_memoized is None:
                 p = None
             else:
-                if compress:
-                    p = self._decompress_result(p_memoized)
-                else:
-                    p = p_memoized
+                p = self._decompress_result(p_memoized)
         else:
             # The result is not memoized; compute it and memoize it
 
@@ -189,11 +183,8 @@ class OligoSearcher:
             if p is None:
                 p_to_memoize = None
             else:
-                if compress:
-                    # Compress p before memoizing it
-                    p_to_memoize = self._compress_result(p)
-                else:
-                    p_to_memoize = p
+                # Compress p before memoizing it.
+                p_to_memoize = self._compress_result(p)
 
             inner_dict[start] = p_to_memoize
 
@@ -454,8 +445,8 @@ class OligoSearcher:
 
         return np.mean(activities)
 
-    def _find_oligos_for_each_window(self, window_size,
-        window_step=1, hide_warnings=False):
+    def _find_oligos_for_each_window(self, window_size, window_step=1,
+        hide_warnings=False):
         """Find a collection of oligos in each window.
 
         This runs a sliding window across the aligned sequences and, in each
@@ -516,23 +507,55 @@ class OligoSearcher:
             # this position
             self._cleanup_memo(start)
 
-    def compress_result(self, *args, **kwargs):
-        raise NotImplementedError("Subclasses of OligoSearcher must implement "
-                                  "compress_result")
+    def _compress_result(self, p):
+        """Compress the information to be stored in self._memo
 
-    def decompress_result(self, *args, **kwargs):
-        raise NotImplementedError("Subclasses of OligoSearcher must implement "
-                                  "decompress_result")
+        By default, this doesn't compress the information in self._memo.
+        Override this in subclasses if compression is needed
+
+        Args:
+            p: information to be stored in self._memo
+
+        Returns:
+            compressed version of p
+        """
+        return p
+
+    def _decompress_result(self, p_compressed):
+        """Decompress the information stored in self._memo
+
+        By default, this doesn't decompress the information in self._memo.
+        Override this in subclasses if decompression is needed
+
+        Args:
+            p_compressed: compressed information stored in self._memo
+
+        Returns:
+            decompressed version of p_compressed
+        """
+        return p_compressed
 
     def obj_value(self, *args, **kwargs):
+        """Compute objective value for an oligo set
+
+        Must be implemented by subclasses.
+        """
         raise NotImplementedError("Subclasses of OligoSearcher must implement "
                                   "obj_value")
 
     def best_obj_value(self, *args, **kwargs):
+        """Estimate the best possible objective value of an oligo
+
+        Must be implemented by subclasses.
+        """
         raise NotImplementedError("Subclasses of OligoSearcher must implement "
                                   "best_obj_value")
 
     def _find_oligos_in_window(self, *args, **kwargs):
+        """Find a collection of oligos with the best objective in a given window
+
+        Must be implemented by subclasses.
+        """
         raise NotImplementedError("Subclasses of OligoSearcher must implement "
                                   "_find_optimal_oligo_in_window")
 
@@ -596,7 +619,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
 
     def _construct_memoized(self, start, seqs_to_consider,
         num_needed=None, use_last=False, memoize_threshold=0.1):
-        """Make a memoized call to alignment.Alignment.construct_oligo().
+        """Make a memoized call to get the next oligo to add to an oligo set
 
         Args:
             start: start position in alignment at which to target
@@ -613,7 +636,14 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                 alignment) exceeds this threshold
 
         Returns:
-            result of construct_oligo()
+            tuple (x, y, z) where:
+                x is the sequence of the constructed oligo
+                y is a set of indices of sequences (a subset of
+                    values in seqs_to_consider) to which the guide x will
+                    hybridize
+                z is the marginal contribution of the oligo to the objective
+            (Note that it is possible that x binds to no sequences and that
+            y will be empty.)
         """
         def construct_p():
             p_best = (None, None, 0)
@@ -1075,7 +1105,12 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
         return frac_bound
 
-    def construct_oligo(self, start, oligo_length, seqs_to_consider, num_needed=None):
+    def construct_oligo(self, start, oligo_length, seqs_to_consider,
+        num_needed=None):
+        """Construct a single oligo to target a set of sequences
+
+        Must be implemented by subclasses
+        """
         raise NotImplementedError("Subclasses of OligoSearcherMinimizeGuides "
                                   "must implement construct_oligo.")
 
@@ -1092,9 +1127,6 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         algorithm='random-greedy', **kwargs):
         """
         Args:
-            aln: alignment.Alignment representing an alignment of sequences
-            min_oligo_length: minimum length of the oligo to construct
-            max_oligo_length: maximum length of the oligo to construct
             soft_constraint: number of oligos for the soft constraint
             hard_constraint: number of oligos for the hard constraint
             penalty_strength: coefficient in front of the soft penalty term

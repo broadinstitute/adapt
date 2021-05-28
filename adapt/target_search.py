@@ -117,7 +117,13 @@ class TargetSearcher:
             p1 = primers[i]
             for j in range(i + 1, len(primers)):
                 p2 = primers[j]
-                yield (p1, p2)
+                target_length = p2.start + p2.primer_length - p1.start
+                if (self.max_target_length is not None and
+                    target_length > self.max_target_length):
+                    # This is longer than allowed, so skip it and anything later
+                    break
+                else:
+                    yield (p1, p2)
 
     def _find_mutated_activity(self, targets):
         """Find the activities of the guides after mutation
@@ -379,7 +385,7 @@ class TargetSearcher:
             try:
                 guides = self.gs._find_oligos_in_window(
                     window_start, window_end, **extra_args)
-            except guide_search.CannotAchieveDesiredCoverageError:
+            except search.CannotAchieveDesiredCoverageError:
                 # No more suitable guides; skip this window
                 continue
             except search.CannotFindAnyOligosError:

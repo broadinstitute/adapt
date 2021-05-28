@@ -1,6 +1,4 @@
 """Methods for searching for optimal primers through a genome.
-
-This makes heavy use of the guide_search module.
 """
 
 import logging
@@ -17,8 +15,8 @@ logger = logging.getLogger(__name__)
 class PrimerResult:
     """Store results of a primer cover at a site."""
 
-    def __init__(self, start, num_primers, primer_length,
-        frac_bound, primers_in_cover):
+    def __init__(self, start, num_primers, primer_length, frac_bound,
+        primers_in_cover):
         """
         Args:
             start: start position of the primer
@@ -116,6 +114,9 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
             primer_gc_content_bounds: a tuple (lo, hi) such that this only
                 yields sites where all primers have a GC content fraction in
                 [lo, hi]; or None for no bounds
+            is_suitable_fns: if set, the value of this argument is a list
+                of functions f(x) such that this will only construct a primer x
+                for which each f(x) is True
         """
         if primer_gc_content_bounds:
             lo, hi = primer_gc_content_bounds
@@ -136,8 +137,6 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                 return True
             is_suitable_fns.append(check_gc_content)
 
-        self.primer_gc_content_bounds = primer_gc_content_bounds
-
         super().__init__(aln=aln, min_oligo_length=primer_length,
             max_oligo_length=primer_length, cover_frac=cover_frac,
             mismatches=mismatches, missing_data_params=missing_data_params,
@@ -145,40 +144,41 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
 
     def construct_oligo(self, start, oligo_length, seqs_to_consider,
         num_needed=None, stop_early=True):
-        """Construct a single guide to target a set of sequences in the alignment.
+        """Construct a single primer to target a set of sequences in the alignment.
 
-        This constructs a guide to target sequence within the range [start,
-        start+guide_length]. It only considers the sequences with indices given in
+        This constructs a primer to target sequence within the range [start,
+        start+primer_length]. It only considers the sequences with indices given in
         seqs_to_consider.
 
         Args:
             start: start position in alignment at which to target
             seqs_to_consider: dict mapping universe group ID to collection of
-                indices to use when constructing the guide
+                indices to use when constructing the primer
             num_needed: dict mapping universe group ID to the number of sequences
                 from the group that are left to cover in order to achieve
                 a desired coverage; these are used to help construct a
-                guide
+                primer
             stop_early: if True, impose early stopping criteria while iterating
                 over clusters to improve runtime
 
         Returns:
-            tuple (x, y) where:
-                x is the sequence of the constructed guide
+            tuple (x, y, z) where:
+                x is the sequence of the constructed primer
                 y is a set of indices of sequences (a subset of
-                    values in seqs_to_consider) to which the guide x will
+                    values in seqs_to_consider) to which the primer x will
                     hybridize
+                z is the marginal contribution of the primer to the objective
             (Note that it is possible that x binds to no sequences and that
             y will be empty.)
         """
         # TODO: There are several optimizations that can be made to
         # this function that take advantage of G-U pairing in order
-        # to lower the number of guides that need to be designed.
+        # to lower the number of primers that need to be designed.
         # Two are:
         #  1) The function SequenceClusterer.cluster(..), which is
         #     used here, can cluster accounting for G-U pairing (e.g.,
         #     such that 'A' hashes to 'G' and 'C' hashes to 'T',
-        #     so that similar guide sequences hash to the same
+        #     so that similar primer sequences hash to the same
         #     value tolerating G-U similarity).
         #  2) Instead of taking a consensus sequence across a
         #     cluster, this can take a pseudo-consensus that
@@ -194,7 +194,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                 raise alignment.CannotConstructOligoError(("Too much missing "
                     "data at a position in the target range"))
 
-        aln_for_guide = self.aln.extract_range(start, start + oligo_length)
+        aln_for_primer = self.aln.extract_range(start, start + oligo_length)
 
         if self.predictor is not None:
             # Extract the target sequences, including context to use with
@@ -205,7 +205,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                 raise alignment.CannotConstructOligoError(("The context needed "
                     "for the target to predict activity falls outside the "
                     "range of the alignment at this position"))
-            aln_for_guide_with_context = self.aln.extract_range(
+            aln_for_primer_with_context = self.aln.extract_range(
                     start - self.predictor.context_nt,
                     start + oligo_length + self.predictor.context_nt)
 
@@ -220,10 +220,10 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
         # Ignore any sequences in the alignment that have a gap in
         # this region
         if self.predictor is not None:
-            seqs_with_gap = set(aln_for_guide_with_context.seqs_with_gap(
+            seqs_with_gap = set(aln_for_primer_with_context.seqs_with_gap(
                 all_seqs_to_consider))
         else:
-            seqs_with_gap = set(aln_for_guide.seqs_with_gap(
+            seqs_with_gap = set(aln_for_primer.seqs_with_gap(
                 all_seqs_to_consider))
         for group_id in seqs_to_consider.keys():
             seqs_to_consider[group_id].difference_update(seqs_with_gap)
@@ -244,16 +244,16 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
             raise alignment.CannotConstructOligoError(("All sequences in region "
                 "have a gap and/or do not contain required flanking sequences"))
 
-        seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
+        seq_rows = aln_for_primer.make_list_of_seqs(all_seqs_to_consider,
             include_idx=True)
         if self.predictor is not None:
-            seq_rows_with_context = aln_for_guide_with_context.make_list_of_seqs(
+            seq_rows_with_context = aln_for_primer_with_context.make_list_of_seqs(
                     all_seqs_to_consider, include_idx=True)
 
         if self.predictor is not None:
             # Memoize activity evaluations
             pair_eval = {}
-        def determine_binding_and_active_seqs(gd_sequence):
+        def determine_binding_and_active_seqs(pr_sequence):
             binding_seqs = set()
             num_bound = 0
             if self.predictor is not None:
@@ -263,10 +263,10 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                 # is best to batch these
                 pairs_to_eval = []
                 for i, (seq, seq_idx) in enumerate(seq_rows):
-                    if oligo.binds(gd_sequence, seq, self.mismatches,
+                    if oligo.binds(pr_sequence, seq, self.mismatches,
                             self.allow_gu_pairs):
                         seq_with_context, _ = seq_rows_with_context[i]
-                        pair = (seq_with_context, gd_sequence)
+                        pair = (seq_with_context, pr_sequence)
                         pairs_to_eval += [pair]
                 # Evaluate activity
                 evals = self.predictor.determine_highly_active(start, pairs_to_eval)
@@ -274,25 +274,25 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                     pair_eval[pair] = y
                 # Fill in binding_seqs
                 for i, (seq, seq_idx) in enumerate(seq_rows):
-                    if oligo.binds(gd_sequence, seq, self.mismatches,
+                    if oligo.binds(pr_sequence, seq, self.mismatches,
                             self.allow_gu_pairs):
                         num_bound += 1
                         seq_with_context, _ = seq_rows_with_context[i]
-                        pair = (seq_with_context, gd_sequence)
+                        pair = (seq_with_context, pr_sequence)
                         if pair_eval[pair]:
                             num_passed_predict_active += 1
                             binding_seqs.add(seq_idx)
             else:
                 num_passed_predict_active = None
                 for i, (seq, seq_idx) in enumerate(seq_rows):
-                    if oligo.binds(gd_sequence, seq, self.mismatches,
+                    if oligo.binds(pr_sequence, seq, self.mismatches,
                             self.allow_gu_pairs):
                         num_bound += 1
                         binding_seqs.add(seq_idx)
             return binding_seqs, num_bound, num_passed_predict_active
 
         # Define a score function (higher is better) for a collection of
-        # sequences covered by a guide
+        # sequences covered by a primer
         if num_needed is not None:
             # This is the number of sequences it contains that are needed to
             # achieve the partial cover; we can compute this by summing over
@@ -316,12 +316,12 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
             def seq_idxs_score(seq_idxs):
                 return len(seq_idxs)
 
-        # First construct the optimal guide to cover the sequences. This would be
+        # First construct the optimal primer to cover the sequences. This would be
         # a string x that maximizes the number of sequences s_i such that x and
         # s_i are equal to within 'mismatches' mismatches; it's called the "max
         # close string" or "close to most strings" problem. For simplicity, let's
         # do the following: cluster the sequences (just the portion with
-        # potential guides) with LSH, choose a guide for each cluster to be
+        # potential primers) with LSH, choose a primer for each cluster to be
         # the consensus of that cluster, and choose the one (across clusters)
         # that has the highest score
         if self.clusterer is None:
@@ -337,47 +337,47 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
             # Here, the score is determined by the sequences in the cluster
             clusters_ordered = sorted(clusters, key=seq_idxs_score, reverse=True)
 
-        best_gd = None
-        best_gd_binding_seqs = None
-        best_gd_score = 0
+        best_pr = None
+        best_pr_binding_seqs = None
+        best_pr_score = 0
         stopped_early = False
         for cluster_idxs in clusters_ordered:
-            if stop_early and best_gd_score > seq_idxs_score(cluster_idxs):
-                # The guide from this cluster is unlikely to exceed the current
+            if stop_early and best_pr_score > seq_idxs_score(cluster_idxs):
+                # The primer from this cluster is unlikely to exceed the current
                 # score; stop early
                 stopped_early = True
                 break
 
-            gd = aln_for_guide.determine_consensus_sequence(
+            pr = aln_for_primer.determine_consensus_sequence(
                 cluster_idxs)
-            if 'N' in gd:
+            if 'N' in pr:
                 # Skip this; all sequences at a position in this cluster
                 # are 'N'
                 continue
             skip_cluster = False
             for is_suitable_fn in self.is_suitable_fns:
-                if is_suitable_fn(gd) is False:
+                if is_suitable_fn(pr) is False:
                     # Skip this cluster
                     skip_cluster = True
                     break
             if skip_cluster:
                 continue
-            # Determine the sequences that are bound by this guide (and
+            # Determine the sequences that are bound by this primer (and
             # where it is 'active', if self.predictor is set)
             binding_seqs, num_bound, num_passed_predict_active = \
-                    determine_binding_and_active_seqs(gd)
+                    determine_binding_and_active_seqs(pr)
             score = seq_idxs_score(binding_seqs)
-            if score > best_gd_score:
-                best_gd = gd
-                best_gd_binding_seqs = binding_seqs
-                best_gd_score = score
+            if score > best_pr_score:
+                best_pr = pr
+                best_pr_binding_seqs = binding_seqs
+                best_pr_score = score
 
             # Impose an early stopping criterion if self.predictor is
             # used, because using it is slow
             if self.predictor is not None and stop_early:
                 if (num_bound >= 0.5*len(cluster_idxs) and
                         num_passed_predict_active < 0.1*len(cluster_idxs)):
-                    # gd binds (according to guide.guide_binds()) many
+                    # pr binds (according to binds()) many
                     # sequences, but is not predicted to be active against
                     # many; it is likely that this region is poor according to
                     # the self.predictor (e.g., due to sequence composition).
@@ -387,15 +387,15 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                     # and may hurt the optimality of the solution
                     stopped_early = True
                     break
-        gd = best_gd
-        binding_seqs = best_gd_binding_seqs
-        score = best_gd_score
+        pr = best_pr
+        binding_seqs = best_pr_binding_seqs
+        score = best_pr_score
 
-        # It's possible that the consensus sequence (guide) of no cluster
+        # It's possible that the consensus sequence (primer) of no cluster
         # binds to any of the sequences. In this case, simply go through all
         # sequences and find the first that has no ambiguity and is suitable
-        # and active, and make this the guide
-        if gd is None and not stopped_early:
+        # and active, and make this the primer
+        if pr is None and not stopped_early:
             for i, (s, idx) in enumerate(seq_rows):
                 if not set(s).issubset(set(['A', 'C', 'G', 'T'])):
                     # s has ambiguity; skip it
@@ -414,16 +414,16 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                             [(s_with_context, s)])[0]:
                         # s is not active against itself; skip it
                         continue
-                # s has no ambiguity and is a suitable guide; use it
-                gd = s
-                binding_seqs, _, _ = determine_binding_and_active_seqs(gd)
+                # s has no ambiguity and is a suitable primer; use it
+                pr = s
+                binding_seqs, _, _ = determine_binding_and_active_seqs(pr)
                 break
 
-        if gd is None:
-            raise alignment.CannotConstructOligoError(("No guides are suitable "
+        if pr is None:
+            raise alignment.CannotConstructOligoError(("No primers are suitable "
                 "or active"))
 
-        return (gd, binding_seqs, score)
+        return (pr, binding_seqs, score)
 
     def find_primers(self, max_at_site=None):
         """Find primers across the alignment.

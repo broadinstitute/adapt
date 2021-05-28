@@ -43,7 +43,8 @@ COMPLEMENTS = {
     'V': 'B',
     'H': 'D',
     'D': 'H',
-    'N': 'N'
+    'N': 'N',
+    '-': '-'
 }
 
 BINDS_EARLY_TERMINATE_SUBSTR_LEN = 5
@@ -128,6 +129,61 @@ def seq_mismatches_with_gu_pairs(oligo_seq, target_seq):
                    )
                )
            )
+
+
+def get_complement(oligo):
+    """Get the complementary sequence of an oligo
+
+    Args:
+        oligo: str of an oligo sequence. May be ambiguous
+
+    Returns:
+        str of the complementary sequence
+    """
+    return ''.join(COMPLEMENTS[b] for b in oligo)
+
+
+def complementary(oligo_a, oligo_b):
+    """Find what fraction of possible oligos of 2 ambiguous oligos complement
+
+    Args:
+        oligo_a: oligo sequence. Length should equal oligo_b's; may be ambiguous
+        oligo_b: oligo sequence. Length should equal oligo_a's; may be ambiguous
+
+    Returns:
+        Fraction of the possible sequences of this oligo that complement
+    """
+    if len(oligo_a) != len(oligo_b):
+        raise ValueError("To check for complementarity, sequences must be "
+            "equal lengths.")
+    complementary = 1
+    for i in range(len(oligo_a)):
+        bases1 = FASTA_CODES[oligo_a[i]]
+        bases2 = FASTA_CODES[COMPLEMENTS[oligo_b[i]]]
+        total = 0
+        for base1 in bases1:
+            for base2 in bases2:
+                if base1 == base2:
+                    total += 1
+        if total == 0:
+            return 0
+        total /= len(bases1)*len(bases2)
+        complementary *= total
+    return complementary
+
+
+def symmetric(oligo):
+    """Find what fraction of possible oligos of an ambiguous oligo are symmetric
+
+    Args:
+        oligo: oligo sequence. Must be >1bp long, may be ambiguous
+
+    Returns:
+        Fraction of the possible sequences of this oligo that are symmetric
+    """
+    half_len = int(len(oligo)/2)
+    return complementary(oligo[:half_len], oligo[-half_len:][::-1])
+
 
 def query_target_eq(query_seq, target_seq):
     """Determine if a query sequence equals a target.
@@ -263,189 +319,11 @@ def overlap_in_seq(oligo_seqs, target_seq, mismatches, allow_gu_pairs):
     for i in range(0, len(target_seq) - len(oligo_seq) + 1):
         target_seq_at_i = target_seq[i:(i + len(oligo_seq))]
         for oligo_seq in oligo_seqs:
-            binds = guide_binds(oligo_seq, target_seq_at_i, mismatches,
+            binding = binds(oligo_seq, target_seq_at_i, mismatches,
                     allow_gu_pairs)
-            if binds:
+            if binding:
                 for j in range(0, len(oligo_seq)):
                     indices_bound.add(i + j)
 
     return indices_bound
 
-
-
-
-# class Oligo:
-#     """
-#     """
-#     def __init__(self, seq):
-#         self.seq = seq
-
-#     def equals_target(self, target_seq):
-#         """Determine if an oligo equals a target.
-
-#         This tolerates 'N' in the query sequence but not in the target
-#         sequence. As a result, it is different than checking if
-#         seq_mismatches(query_seq, target_seq) == 0. For example,
-#         a query of 'AN' equals a target of 'AT' (but a query of 'AT'
-#         does not equal a target of 'AN'). The reason is the same
-#         as in seq_mismatches() -- 'N' in a target usually signals
-#         missing data rather than ambiguity.
-
-#         Args:
-#             target_seq: str of a target sequence, same length as
-#                 query_seq
-
-#         Returns:
-#             True if self.seq equals target_seq, tolerating all
-#             non-N ambiguity codes in the query and target, and
-#             tolerating 'N' in the query; otherwise, False
-#         """
-#         assert len(self.seq) == len(target_seq)
-
-#         if 'N' in target_seq:
-#             return False
-
-#         return sum(1 for i in range(len(self.seq))
-#                    if not (FASTA_CODES[self.seq[i]] &
-#                            FASTA_CODES[target_seq[i]])) == 0
-
-#     def seq_mismatches(self, other):
-#         """Count number of mismatches between two sequences, tolerating ambiguity.
-
-#         Note that because 'N' usually signals missing data (and not necessarily
-#         ambiguity about what the genome actually is), this considers 'N' with
-#         any other base to be a mismatch.
-
-#         Args:
-#             other: Oligo, where other.seq is the same length as self.seq
-
-#         Returns:
-#             number of mismatches between self and other, tolerating ambiguity
-#             between them (e.g., 'Y' and 'T' is not a mismatch) but considering
-#             'N' to be a mismatch (e.g., 'N' and 'T' is a mismatch)
-#         """
-#         assert len(self.seq) == len(other.seq)
-
-#         return sum(1 for i in range(len(self.seq))
-#                    if (self.seq[i] == 'N' or other.seq[i] == 'N' or
-#                        not (FASTA_CODES[self.seq[i]] &
-#                             FASTA_CODES[other.seq[i]])))
-
-#     def seq_mismatches_with_gu_pairs(self, target_seq):
-#         """Count number of mismatches between an oligo and target, allowing G-U
-#         pairs, and tolerating ambiguity.
-
-#         As in seq_mismatches(..), this considers 'N' with any other base to
-#         be a mismatch.
-
-#         This also tolerates G-U base pairing:
-#         An RNA oligo with U can bind to target RNA with G, and vice-versa.
-#         Note that a oligo sequence that ends up being synthesized to RNA
-#         is the reverse-complement of the oligo sequence constructed here, so
-#         that it will hybridize to the target (here, the oligo sequences
-#         are designed to match the target). If the RNA oligo were to have U and
-#         the RNA target were to have G, then the oligo sequence here would be
-#         A and the target would be G. If the RNA oligo were to have G
-#         and the RNA target were to have U, then the oligo sequence here were
-#         would be C and the target would be T. Thus, to allow G-U pairing,
-#         we count a base X in the oligo sequence as matching a base Y in
-#         the target if either of the following is true:
-#           - X == 'A' and Y == 'G'
-#           - X == 'C' and Y == 'T'
-
-#         Unlike in seq_mismatches(..), it is important to know which sequence
-#         here represents the oligo and which represents the target, so we
-#         cannot just refer to them interchangeably as seq_a and seq_b.
-
-#         Args:
-#             target_seq: str of target sequence, same length as self.seq
-
-#         Returns:
-#             number of mismatches between oligo and target sequence, counting
-#             G-U pairs as matching, and tolerating ambiguity between them
-#         """
-#         assert len(self.seq) == len(target_seq)
-
-#         # Since this function is low-level and called so often, it
-#         # may be better to ensure it is efficient by keeping all
-#         # conditionals inside the sum(..), even if it is messy, rather
-#         # than defining and using subfunctions
-#         return sum(1 for i in range(len(self.seq)) if (
-#                        # mismatch if either oligo or target is 'N'
-#                        (self.seq[i] == 'N' or target_seq[i] == 'N') or
-#                        # mismatch if not a match
-#                        not (
-#                            # both bases match
-#                            (FASTA_CODES[self.seq[i]] & FASTA_CODES[target_seq[i]]) or
-#                            # oligo is 'A' and target is 'G'
-#                            ('A' in FASTA_CODES[self.seq[i]] and
-#                             'G' in FASTA_CODES[target_seq[i]]) or
-#                            # oligo is 'C' and target is 'T'
-#                            ('C' in FASTA_CODES[self.seq[i]] and
-#                             'T' in FASTA_CODES[target_seq[i]])
-#                        )
-#                    )
-#                )
-
-#     def binds(self, target_seq, mismatches, allow_gu_pairs):
-#         """Determine whether a oligo binds to a target sequence.
-
-#         Args:
-#             self.seq: str of a oligo sequence
-#             target_seq: str of a target sequence, same length as self.seq
-#             mismatches: int giving threshold on number of mismatches for binding
-#             allow_gu_pairs: if True, tolerate G-U base pairs when
-#                 counting mismatches between self.seq and target_seq
-
-#         Returns:
-#             True iff the number of mismatches between self.seq and target_seq
-#             is <= mismatches
-#         """
-#         raise NotImplementedError("Subclasses of Oligo must implement binds()")
-
-#     def gc_frac(self):
-#         """Compute fraction of oligo that is GC.
-
-#         Returns:
-#             fraction of oligo sequence that is G or C
-#         """
-#         gc = self.seq.count('G') + self.seq.count('C')
-#         return float(gc) / len(self.seq)
-
-#     @staticmethod
-#     def overlap_in_seq(oligo_seqs, target_seq, mismatches, allow_gu_pairs):
-#         """Use a simple sliding strategy to find where oligos bind in a sequence.
-
-#         This computes binding according to binds().
-
-#         This uses a naive sliding strategy over target_seq, computing binding at
-#         every position. Since this is slow, this assumes target_seq is short (~100s
-#         of nt). Similarly, this returns a set of indices -- rather than ranges --
-#         which are easier to work with downstream even though they are less
-#         efficient.
-
-#         Args:
-#             oligo_seqs: list of Oligo objects
-#             target_seq: str of a target sequence, at least the length of oligo_seq
-#             mismatches: int giving threshold on number of mismatches for binding
-#             allow_gu_pairs: if True, tolerate G-U base pairs when
-#                 counting mismatches between oligo_seq and target_seq
-
-#         Returns:
-#             set of indices in target_seq to which oligo_seq binds
-#         """
-#         for oligo_seq in oligo_seqs:
-#             assert len(target_seq) >= len(oligo_seq)
-
-#         indices_bound = set()
-
-#         for i in range(0, len(target_seq) - len(oligo_seq) + 1):
-#             target_seq_at_i = target_seq[i:(i + len(oligo_seq))]
-#             for oligo_seq in oligo_seqs:
-#                 binds = oligo_seq.binds(oligo_seq, target_seq_at_i, mismatches,
-#                         allow_gu_pairs)
-#                 if binds:
-#                     for j in range(0, len(oligo_seq)):
-#                         indices_bound.add(i + j)
-
-#         return indices_bound

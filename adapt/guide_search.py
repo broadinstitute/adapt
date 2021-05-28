@@ -32,6 +32,7 @@ class GuideSearcher(search.OligoSearcher):
         Args:
             guide_length: integer length of the guide. Sets guide length to
                 min_oligo_length and max_oligo_length.
+            kwargs: see search.OligoSearcher.__init__()
         """
         if 'min_oligo_length' in kwargs or 'max_oligo_length' in kwargs:
             raise ValueError("Variable oligo lengths are not yet implemented "
@@ -39,38 +40,6 @@ class GuideSearcher(search.OligoSearcher):
                 "max_oligo_length.")
         super().__init__(min_oligo_length=guide_length,
             max_oligo_length=guide_length, **kwargs)
-
-    def _compress_result(self, p):
-        """Compress the result of alignment.Alignment.construct_guide().
-
-        Args:
-            p: result of calling construct_guide()
-
-        Returns:
-            compressed version of p
-        """
-        gd, covered_seqs, score = p
-
-        # covered_seqs may contain mostly contiguous indices
-        covered_seqs_compressed = index_compress.compress_mostly_contiguous(covered_seqs)
-
-        return (gd, covered_seqs_compressed, score)
-
-    def _decompress_result(self, p_compressed):
-        """Decompress the compressed version of an output of construct_guide().
-
-        Args:
-            p_compressed: output of _compress_construct_guide_result()
-
-        Returns:
-            decompressed version of p_compressed
-        """
-        gd, covered_seqs_compressed, score = p_compressed
-
-        # Decompress covered_seqs
-        covered_seqs = index_compress.decompress_ranges(covered_seqs_compressed)
-
-        return (gd, covered_seqs, score)
 
 
 class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
@@ -105,6 +74,38 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
             mismatches=mismatches, missing_data_params=missing_data_params,
             cover_frac=cover_frac, **kwargs)
 
+    def _compress_result(self, p):
+        """Compress the information to be stored in self._memo
+
+        Args:
+            p: result of calling construct_oligo()
+
+        Returns:
+            compressed version of p
+        """
+        gd, covered_seqs, score = p
+
+        # covered_seqs may contain mostly contiguous indices
+        covered_seqs_compressed = index_compress.compress_mostly_contiguous(covered_seqs)
+
+        return (gd, covered_seqs_compressed, score)
+
+    def _decompress_result(self, p_compressed):
+        """"Decompress the information stored in self._memo
+
+        Args:
+            p_compressed: output of _compress__result()
+
+        Returns:
+            decompressed version of p_compressed
+        """
+        gd, covered_seqs_compressed, score = p_compressed
+
+        # Decompress covered_seqs
+        covered_seqs = index_compress.decompress_ranges(covered_seqs_compressed)
+
+        return (gd, covered_seqs, score)
+
     def construct_oligo(self, start, oligo_length, seqs_to_consider,
         num_needed=None, stop_early=True):
         """Construct a single guide to target a set of sequences in the alignment.
@@ -125,11 +126,12 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
                 over clusters to improve runtime
 
         Returns:
-            tuple (x, y) where:
+            tuple (x, y, z) where:
                 x is the sequence of the constructed guide
                 y is a set of indices of sequences (a subset of
                     values in seqs_to_consider) to which the guide x will
                     hybridize
+                z is the marginal contribution of the guide to the objective
             (Note that it is possible that x binds to no sequences and that
             y will be empty.)
         """
@@ -594,24 +596,3 @@ class GuideSearcherMaximizeActivity(search.OligoSearcherMaximizeActivity,
                 pad_spaces = max_stat_name_len - len(name)
                 name_padded = " "*pad_spaces + name + ":"
                 print(name_padded, str(val))
-
-
-class CannotAchieveDesiredCoverageError(Exception):
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
-
-
-class CannotFindPositiveMarginalContributionError(Exception):
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
-
-
-class NoPredictorError(Exception):
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
