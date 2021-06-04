@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def process_fasta(f, replace_degenerate=False,
                skip_gaps=False, make_uppercase=True,
                replace_U=True):
-    
+
     degenerate_pattern = re.compile('[YRWSMKBDHV]')
     m = OrderedDict()
     curr_seq_name = ""
@@ -158,8 +158,8 @@ def read_required_guides(fn, expected_guide_length, num_alignments):
     return required_guides
 
 
-def read_blacklisted_ranges(fn, num_alignments):
-    """Read list of blacklisted ranges.
+def read_ignored_ranges(fn, num_alignments):
+    """Read list of ignored ranges.
 
     There must be 3 columns in the file:
         1 - an identifier for an alignment that the guide should be
@@ -173,13 +173,13 @@ def read_blacklisted_ranges(fn, num_alignments):
         fn: path to file, with the format given above
         num_alignments: the number of alignments that the ranges might
             correspond to
-   
+
     Returns:
         list x of length num_alignments such that x[i] corresponds
         to the i'th alignment, as given in column 1. x[i] is a set
         of tuples (start, end) corresponding to the values in columns 2 and 3
     """
-    blacklisted_ranges = [set() for _ in range(num_alignments)]
+    ignored_ranges = [set() for _ in range(num_alignments)]
     with open(fn) as f:
         for line in f:
             ls = line.rstrip().split('\t')
@@ -189,22 +189,22 @@ def read_blacklisted_ranges(fn, num_alignments):
 
             # Check aln_id
             if aln_id < 0 or aln_id > num_alignments - 1:
-                raise Exception(("Alignment id %d in column 1 of blacklisted "
+                raise Exception(("Alignment id %d in column 1 of ignored "
                     "ranges file is invalid; must be in [0, %d]") %
                     (aln_id, num_alignments - 1))
 
             # Check that end > start
             if start < 0 or end <= start:
-                raise Exception(("Blacklisted range [%d, %d) is invalid; "
+                raise Exception(("Ignored range [%d, %d) is invalid; "
                     "values must be >= 0 and end > start") % (start, end))
 
-            blacklisted_ranges[aln_id].add((start, end))
+            ignored_ranges[aln_id].add((start, end))
 
-    return blacklisted_ranges
+    return ignored_ranges
 
 
-def read_blacklisted_kmers(fn, min_len_warning=5, max_len_warning=28):
-    """Read file of blacklisted k-mers.
+def read_ignored_kmers(fn, min_len_warning=5, max_len_warning=28):
+    """Read file of ignored k-mers.
 
     Args:
         fn: path to FASTA file, where each sequence is a k-mer (names
@@ -219,11 +219,11 @@ def read_blacklisted_kmers(fn, min_len_warning=5, max_len_warning=28):
     kmers = set()
     for name, kmer in seqs.items():
         if len(kmer) < min_len_warning:
-            logger.warning(("Blacklisted k-mer '%s' might be shorter than "
+            logger.warning(("Ignored k-mer '%s' might be shorter than "
                 "desired and may lead to many guides being treated as "
                 "unsuitable") % kmer)
         if len(kmer) > max_len_warning:
-            logger.warning(("Blacklisted k-mer '%s' might be longer than "
+            logger.warning(("Ignored k-mer '%s' might be longer than "
                 "desired") % kmer)
         kmers.add(kmer)
     return kmers
@@ -238,12 +238,12 @@ def read_taxonomies(fn):
         3) a segment label, or 'None' if unsegmented
         4) one or more accessions of reference sequences (comma-separated)
         5) (optional) metadata filters to only design for a subset of a taxa,
-            format: 'metadata=value' or 'metadata!=value', 
+            format: 'metadata=value' or 'metadata!=value',
                     commas to separate values, semicolons to separate filters
 
         6) (optional) metadata filters to exclude from a taxa and be specific against,
             column 5 must be included to include this column,
-            format: 'metadata=value' or 'metadata!=value', 
+            format: 'metadata=value' or 'metadata!=value',
                     commas to separate values, semicolons to separate filters
 
     Args:
@@ -439,9 +439,9 @@ def read_taxonomy_specificity_ignore(fn):
 
 def read_metadata_filters(meta_filts):
     """Create dictionaries of metadata filters from a list.
-    
+
     Args:
-        meta_filts: list of filters in the format 'key=values' or 
+        meta_filts: list of filters in the format 'key=values' or
             'key!=values' with a comma separated list of values
 
     Returns:

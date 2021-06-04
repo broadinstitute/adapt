@@ -28,10 +28,10 @@ class OligoSearcher:
     """
 
     def __init__(self, aln, min_oligo_length, max_oligo_length,
-        missing_data_params, is_suitable_fns=[], required_oligos={},
-        ignored_ranges={}, allow_gu_pairs=False,
-        required_flanking_seqs=(None, None), do_not_memoize=True,
-        predictor=None):
+            missing_data_params, is_suitable_fns=[], required_oligos={},
+            ignored_ranges={}, allow_gu_pairs=False,
+            required_flanking_seqs=(None, None), do_not_memoize=True,
+            predictor=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -339,7 +339,7 @@ class OligoSearcher:
         return activities
 
     def oligo_set_activities_percentile(self, window_start, window_end,
-        oligo_set, q, activities=None):
+            oligo_set, q, activities=None):
         """Compute percentiles of activity across target sequences for
         a oligo set in a window.
 
@@ -368,7 +368,7 @@ class OligoSearcher:
         return list(p)
 
     def oligo_set_activities_expected_value(self, window_start, window_end,
-        oligo_set, activities=None):
+            oligo_set, activities=None):
         """Compute expected activity across target sequences for
         a oligo set in a window.
 
@@ -393,7 +393,7 @@ class OligoSearcher:
         return np.mean(activities)
 
     def oligo_activities_expected_value(self, window_start, window_end,
-        olg_seq):
+            olg_seq):
         """Compute expected activity across target sequences for a single
         oligo in a window.
 
@@ -446,7 +446,7 @@ class OligoSearcher:
         return np.mean(activities)
 
     def _find_oligos_for_each_window(self, window_size, window_step=1,
-        hide_warnings=False):
+            hide_warnings=False):
         """Find a collection of oligos in each window.
 
         This runs a sliding window across the aligned sequences and, in each
@@ -618,7 +618,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             self.cover_frac = {0: cover_frac}
 
     def _construct_memoized(self, start, seqs_to_consider,
-        num_needed=None, use_last=False, memoize_threshold=0.1):
+            num_needed=None, use_last=False, memoize_threshold=0.1):
         """Make a memoized call to get the next oligo to add to an oligo set
 
         Args:
@@ -723,7 +723,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         return 1.0
 
     def _find_optimal_oligo_in_window(self, start, end, seqs_to_consider,
-        num_needed):
+            num_needed):
         """Find the oligo that hybridizes to the most sequences in a given window.
 
         This considers each position within the specified window at which a oligo
@@ -1106,7 +1106,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         return frac_bound
 
     def construct_oligo(self, start, oligo_length, seqs_to_consider,
-        num_needed=None):
+            num_needed=None):
         """Construct a single oligo to target a set of sequences
 
         Must be implemented by subclasses
@@ -1124,7 +1124,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
     """
 
     def __init__(self, soft_constraint, hard_constraint, penalty_strength,
-        algorithm='random-greedy', **kwargs):
+            algorithm='random-greedy', **kwargs):
         """
         Args:
             soft_constraint: number of oligos for the soft constraint
@@ -1233,7 +1233,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
                 1)
 
     def _find_optimal_oligo_in_window(self, start, end, curr_oligo_set,
-        curr_activities):
+            curr_activities):
         """Select a oligo from the ground set in the given window based on
         its marginal contribution.
 
@@ -1261,7 +1261,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             it). This is only raised when the algorithm is 'greedy'; it
             can also be the case when the algorithm is 'random-greedy', but
             in that case this returns None (or can raise the error if
-            all sites are blacklisted)
+            all sites are ignored)
         """
         if start < 0:
             raise ValueError("window start must be >= 0")
@@ -1301,7 +1301,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         possible_oligos_to_select = []
         for pos in range(search_start, search_end):
             if self._overlaps_ignored_range(pos):
-                # oligo starting at pos would overlap a blacklisted range,
+                # oligo starting at pos would overlap a ignored range,
                 # so skip this site
                 continue
             else:
@@ -1324,7 +1324,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
                     possible_oligos_to_select += [(mc, new_oligo, pos)]
 
         if len(possible_oligos_to_select) == 0:
-            # All sites are blacklisted in this window
+            # All sites are ignored in this window
             raise CannotFindPositiveMarginalContributionError(("There are "
                 "no possible oligos; most likely all sites are set to be "
                 "ignored or the ground set is empty (no potential oligos are "
@@ -1501,7 +1501,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             except CannotFindPositiveMarginalContributionError:
                 # No oligo adds marginal contribution
                 # This should only happen in the greedy case (or if
-                # all sites are blacklisted), and the objective function
+                # all sites are ignored), and the objective function
                 # is such that its value would continue to decrease if
                 # we were to continue (i.e., it would continue to be
                 # the case that no oligos give a positive marginal
@@ -1537,7 +1537,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         return curr_oligo_set
 
     def total_frac_bound(self, window_start, window_end, oligo_set,
-        activities=None):
+            activities=None):
         """Calculate the total fraction of sequences in the alignment
         bound by the oligos.
 
@@ -1693,7 +1693,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             del self._memoized_ground_sets[start]
 
     def _activities_after_adding_oligo(self, curr_activities,
-        new_oligo_activities):
+            new_oligo_activities):
         """Compute activities after adding a oligo to a oligo set.
 
         Let S be the set of target sequences (not just in the piece

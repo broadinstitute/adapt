@@ -29,7 +29,7 @@ SOFTWARE.
 import random
 import unittest
 
-from adapt.utils import guide
+from adapt.utils import oligo
 from adapt.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -202,7 +202,7 @@ class TestMinHashFamilySignatures(unittest.TestCase):
     """Tests family of hash functions for MinHash, where the hash function
     returns a signature (multiple hash values).
     """
-    
+
     def setUp(self):
         # Set a random seed so hash functions are always the same
         random.seed(0)
@@ -377,7 +377,7 @@ class TestHammingWithGUPairsNearNeighborLookup(unittest.TestCase):
 
         self.family = lsh.HammingWithGUPairsDistanceFamily(20)
         self.dist_thres = 5
-        self.dist_fn = guide.seq_mismatches_with_gu_pairs
+        self.dist_fn = oligo.seq_mismatches_with_gu_pairs
 
     def test_varied_k_without_gu_pairs(self):
         a = 'ATCGATATGGGCACTGCTAT'

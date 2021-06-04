@@ -43,12 +43,12 @@ class GuideSearcher(search.OligoSearcher):
 
 
 class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
-    GuideSearcher):
+        GuideSearcher):
     """Methods to minimize the number of guides.
     """
 
     def __init__(self, aln, guide_length, mismatches, cover_frac,
-        missing_data_params, **kwargs):
+            missing_data_params, **kwargs):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -94,7 +94,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
         """"Decompress the information stored in self._memo
 
         Args:
-            p_compressed: output of _compress__result()
+            p_compressed: output of _compress_result()
 
         Returns:
             decompressed version of p_compressed
@@ -107,7 +107,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
         return (gd, covered_seqs, score)
 
     def construct_oligo(self, start, oligo_length, seqs_to_consider,
-        num_needed=None, stop_early=True):
+            num_needed=None, stop_early=True):
         """Construct a single guide to target a set of sequences in the alignment.
 
         This constructs a guide to target sequence within the range [start,
@@ -390,7 +390,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
         return (gd, binding_seqs, score)
 
     def find_guides_with_sliding_window(self, window_size, out_fn,
-        window_step=1, sort=False, print_analysis=True):
+            window_step=1, sort=False, print_analysis=True):
         """Find the smallest collection of guides that cover sequences, across
         all windows.
 
@@ -479,13 +479,13 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
 
 
 class GuideSearcherMaximizeActivity(search.OligoSearcherMaximizeActivity,
-    GuideSearcher):
+        GuideSearcher):
     """Methods to maximize expected activity of the guide set.
     """
 
     def __init__(self, aln, guide_length, soft_guide_constraint,
-        hard_guide_constraint, penalty_strength,
-        missing_data_params, **kwargs):
+            hard_guide_constraint, penalty_strength,
+            missing_data_params, **kwargs):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -509,7 +509,7 @@ class GuideSearcherMaximizeActivity(search.OligoSearcherMaximizeActivity,
             missing_data_params=missing_data_params, **kwargs)
 
     def find_guides_with_sliding_window(self, window_size, out_fn,
-        window_step=1, sort=False, print_analysis=True):
+            window_step=1, sort=False, print_analysis=True):
         """Find a collection of guides that maximizes expected activity,
         across all windows.
 

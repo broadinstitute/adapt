@@ -47,6 +47,8 @@ COMPLEMENTS = {
     '-': '-'
 }
 
+# Specify the substring length to use for checking whether
+# to terminate early in binds()
 BINDS_EARLY_TERMINATE_SUBSTR_LEN = 5
 
 
@@ -131,8 +133,8 @@ def seq_mismatches_with_gu_pairs(oligo_seq, target_seq):
            )
 
 
-def get_complement(oligo):
-    """Get the complementary sequence of an oligo
+def make_complement(oligo):
+    """Make the complementary sequence of an oligo
 
     Args:
         oligo: str of an oligo sequence. May be ambiguous
@@ -143,7 +145,7 @@ def get_complement(oligo):
     return ''.join(COMPLEMENTS[b] for b in oligo)
 
 
-def complementary(oligo_a, oligo_b):
+def is_complement(oligo_a, oligo_b):
     """Find what fraction of possible oligos of 2 ambiguous oligos complement
 
     Args:
@@ -151,7 +153,8 @@ def complementary(oligo_a, oligo_b):
         oligo_b: oligo sequence. Length should equal oligo_a's; may be ambiguous
 
     Returns:
-        Fraction of the possible sequences of this oligo that complement
+        Fraction of the possible sequences of this oligo that complement. If
+            oligos are unambiguous, this will be either 0 or 1.
     """
     if len(oligo_a) != len(oligo_b):
         raise ValueError("To check for complementarity, sequences must be "
@@ -172,7 +175,7 @@ def complementary(oligo_a, oligo_b):
     return complementary
 
 
-def symmetric(oligo):
+def is_symmetric(oligo):
     """Find what fraction of possible oligos of an ambiguous oligo are symmetric
 
     Args:
@@ -182,7 +185,7 @@ def symmetric(oligo):
         Fraction of the possible sequences of this oligo that are symmetric
     """
     half_len = int(len(oligo)/2)
-    return complementary(oligo[:half_len], oligo[-half_len:][::-1])
+    return is_complement(oligo[:half_len], oligo[-half_len:][::-1])
 
 
 def query_target_eq(query_seq, target_seq):

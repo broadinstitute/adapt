@@ -16,7 +16,7 @@ class PrimerResult:
     """Store results of a primer cover at a site."""
 
     def __init__(self, start, num_primers, primer_length, frac_bound,
-        primers_in_cover):
+            primers_in_cover):
         """
         Args:
             start: start position of the primer
@@ -96,8 +96,8 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
     """
 
     def __init__(self, aln, primer_length, mismatches, cover_frac,
-        missing_data_params, primer_gc_content_bounds=None,
-        is_suitable_fns=[], **kwargs):
+            missing_data_params, primer_gc_content_bounds=None,
+            is_suitable_fns=[], **kwargs):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -143,7 +143,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
             is_suitable_fns=is_suitable_fns, **kwargs)
 
     def construct_oligo(self, start, oligo_length, seqs_to_consider,
-        num_needed=None, stop_early=True):
+            num_needed=None, stop_early=True):
         """Construct a single primer to target a set of sequences in the alignment.
 
         This constructs a primer to target sequence within the range [start,

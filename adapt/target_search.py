@@ -73,7 +73,8 @@ class TargetSearcher:
         self.obj_type = obj_type
 
         self.max_primers_at_site = max_primers_at_site
-        self.max_target_length = max_target_length
+        self.max_target_length = max_target_length if (max_target_length is not
+                None) else math.inf
 
         if obj_weights is None:
             obj_weights = (0.50, 0.25)
@@ -118,8 +119,7 @@ class TargetSearcher:
             for j in range(i + 1, len(primers)):
                 p2 = primers[j]
                 target_length = p2.start + p2.primer_length - p1.start
-                if (self.max_target_length is not None and
-                    target_length > self.max_target_length):
+                if target_length > self.max_target_length:
                     # This is longer than allowed, so skip it and anything later
                     break
                 else:
@@ -228,10 +228,6 @@ class TargetSearcher:
             num_primer_pairs += 1
 
             target_length = p2.start + p2.primer_length - p1.start
-            if (self.max_target_length is not None and
-                    target_length > self.max_target_length):
-                # This is longer than allowed, so skip it
-                continue
 
             # Determine a window between the two primers
             window_start = p1.start + p1.primer_length
