@@ -148,7 +148,7 @@ class TargetSearcher:
                             guide,
                             self.gs.predictor,
                             self.mutator))
-                    for start_pos in self.gs._selected_guide_positions[guide])
+                    for start_pos in self.gs._selected_positions[guide])
                 for guide in guides)
         return mutated_activities
 

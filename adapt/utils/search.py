@@ -30,7 +30,7 @@ class OligoSearcher:
     def __init__(self, aln, min_oligo_length, max_oligo_length,
             missing_data_params, is_suitable_fns=[], required_oligos={},
             ignored_ranges={}, allow_gu_pairs=False,
-            required_flanking_seqs=(None, None), do_not_memoize=True,
+            required_flanking_seqs=(None, None), do_not_memoize=False,
             predictor=None):
         """
         Args:
@@ -1270,13 +1270,26 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         if end > self.aln.seq_length:
             raise ValueError("window end must be <= alignment length")
 
-        search_end = end
         search_start = start
+        search_end = end
         # If there's a predictor, it needs enough context on each end.
-        if self.predictor:
-            search_start = max(self.predictor.context_nt, search_start)
-            search_end = min(self.aln.seq_length-self.predictor.context_nt,
-                             end)
+        if self.predictor is not None:
+            min_search_start = 0
+            max_search_end = self.aln.seq_length
+            if isinstance(self.predictor,
+                    predict_activity.SimpleBinaryPredictor):
+                # If it's a SimpleBinaryPredictor, use the length of the
+                # flanking sequences as the length of necessary contexts
+                if self.predictor.required_flanking_seqs[0] is not None:
+                    min_search_start = len(self.predictor.required_flanking_seqs[0])
+                if self.predictor.required_flanking_seqs[1] is not None:
+                    max_search_end = (self.aln.seq_length-
+                        len(self.predictor.required_flanking_seqs[1]))
+            else:
+                min_search_start = self.predictor.context_nt
+                max_search_end = self.aln.seq_length-self.predictor.context_nt
+            search_start = max(min_search_start, search_start)
+            search_end = min(max_search_end, search_end)
         # Calculate the end of the search (exclusive), which is the last
         # position in the window at which a oligo can start; a oligo needs to
         # fit completely within the window

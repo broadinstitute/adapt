@@ -135,7 +135,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                 if gc_frac < lo or gc_frac > hi:
                     return False
                 return True
-            is_suitable_fns.append(check_gc_content)
+            is_suitable_fns = is_suitable_fns + [check_gc_content]
 
         super().__init__(aln=aln, min_oligo_length=primer_length,
             max_oligo_length=primer_length, cover_frac=cover_frac,

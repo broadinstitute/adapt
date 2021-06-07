@@ -163,15 +163,24 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
         if self.predictor is not None:
             # Extract the target sequences, including context to use with
             # prediction
-            if (start - self.predictor.context_nt < 0 or
-                    start + oligo_length + self.predictor.context_nt >
-                    self.aln.seq_length):
+            start_context = 0
+            end_context = 0
+            if isinstance(self.predictor, predict_activity.SimpleBinaryPredictor):
+                if self.predictor.required_flanking_seqs[0] is not None:
+                    start_context = len(self.predictor.required_flanking_seqs[0])
+                if self.predictor.required_flanking_seqs[1] is not None:
+                    end_context = len(self.predictor.required_flanking_seqs[1])
+            else:
+                start_context = self.predictor.context_nt
+                end_context = self.predictor.context_nt
+            if (start - start_context < 0 or
+                    start + oligo_length + end_context > self.aln.seq_length):
                 raise alignment.CannotConstructOligoError(("The context needed "
                     "for the target to predict activity falls outside the "
                     "range of the alignment at this position"))
             aln_for_guide_with_context = self.aln.extract_range(
-                    start - self.predictor.context_nt,
-                    start + oligo_length + self.predictor.context_nt)
+                    start - start_context,
+                    start + oligo_length + end_context)
 
         # Before modifying seqs_to_consider, make a copy of it
         seqs_to_consider_cp = {}
@@ -381,6 +390,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
                 # s has no ambiguity and is a suitable guide; use it
                 gd = s
                 binding_seqs, _, _ = determine_binding_and_active_seqs(gd)
+                score = seq_idxs_score(binding_seqs)
                 break
 
         if gd is None:

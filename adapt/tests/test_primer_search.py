@@ -7,7 +7,6 @@ import unittest
 
 from adapt import alignment
 from adapt import primer_search
-from adapt.utils import guide
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
