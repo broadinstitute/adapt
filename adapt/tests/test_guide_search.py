@@ -11,6 +11,7 @@ from adapt import alignment
 from adapt import guide_search
 from adapt.utils import search
 from adapt.utils import index_compress
+from adapt.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -28,12 +29,11 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
 
         self.a_seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
-        self.a_window_size = 5
         self.a = guide_search.GuideSearcherMinimizeGuides(self.a_aln, 4, 0, 1.0, (1, 1, 100))
+
 
         self.b_seqs = ['ATCGAA', 'ATC-AA']
         self.b_aln = alignment.Alignment.from_list_of_seqs(self.b_seqs)
-        self.b_window_size = 5
         self.b = guide_search.GuideSearcherMinimizeGuides(self.b_aln, 4, 0, 1.0, (1, 1, 100))
 
         self.c_seqs = ['GTATCATCGGCCATGNAC',
@@ -95,6 +95,12 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.i_window_size = 5
         self.i = guide_search.GuideSearcherMinimizeGuides(self.i_aln, 5, 1, 1.0, (0.5, 0, 1))
 
+        # Create a generic guide clusterer that can have its alignment overriden
+        # (for testing construct_oligo)
+        gen_seqs = ['AAAA']
+        gen_aln = alignment.Alignment.from_list_of_seqs(gen_seqs)
+        self.gen_gs = guide_search.GuideSearcherMinimizeGuides(gen_aln, 4, 0, 1.0, (1, 1, 100))
+
         # Skip guide clustering, which may not work well when the guides
         # are so short in these tests
         self.a.clusterer = None
@@ -106,6 +112,10 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.g.clusterer = None
         self.h.clusterer = None
         self.i.clusterer = None
+        self.gen_gs.clusterer = None
+
+        # Some tests do require a guide clusterer, so store here
+        self.gc = alignment.SequenceClusterer(lsh.HammingDistanceFamily(4), k=2)
 
     def test_construct_memoized_a(self):
         self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}}),
@@ -542,6 +552,258 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
 
         # All sequences are bound by a guide
         self.assertEqual(gs.total_frac_bound(guides), 1.0)
+
+    def test_construct_oligo_a(self):
+        self.a.clusterer = self.gc
+        self.assertEqual(self.a.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
+                         ('ATCG', {0,1,2,3}, 4))
+        self.assertIn(self.a.construct_oligo(0, 4, {0: {2,3}}),
+                      [('ATCG', {2,3}, 2), ('ACCG', {2,3}, 2)])
+        self.assertEqual(self.a.construct_oligo(1, 4, {0: {0,1,2,3,4}}),
+                         ('TCGA', {0,1,2,3}, 4))
+        self.assertEqual(self.a.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
+                         ('CGAA', {0,2,4}, 3))
+        self.assertIn(self.a.construct_oligo(2, 4, {0: {0,1,2,3}}),
+                      [('CGAA', {0,2}, 2), ('CGAT', {1,3}, 2)])
+        self.a.mismatches = 1
+        self.assertEqual(self.a.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
+                         ('ATCG', {0,1,2,3,4}, 5))
+        self.assertEqual(self.a.construct_oligo(0, 4, {0: {4}}),
+                         ('AGCG', {4}, 1))
+        self.assertEqual(self.a.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
+                         ('CGAA', {0,1,2,3,4}, 5))
+        self.assertIn(self.a.construct_oligo(2, 4, {0: {0,1,2,3}}),
+                      [('CGAA', {0,1,2,3}, 4), ('CGAT', {0,1,2,3}, 4)])
+        self.a.mismatches = 2
+        self.assertEqual(self.a.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
+                         ('CGAA', {0,1,2,3,4}, 5))
+
+    def test_construct_oligo_b(self):
+        self.b.clusterer = self.gc
+        with self.assertRaises(alignment.CannotConstructOligoError):
+            # Should fail when the only sequence given (1) has an indel
+            self.b.construct_oligo(0, 4, {0: {1}})
+
+    def test_construct_oligo_ambiguous(self):
+        # Alignment has many Ns, which makes it difficult to write test cases
+        # when clustering (the clusters tend to consist of guides in
+        # which a position only has N); so pass None to guide_clusterer in
+        # construct_oligo() to skip clustering
+        seqs = ['ATCGAA', 'ATNNAT', 'ATCGNN', 'ATNNAT', 'ATNNAC']
+        self.gen_gs.aln = alignment.Alignment.from_list_of_seqs(seqs)
+        self.assertEqual(self.gen_gs.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
+                         ('ATCG', {0,2}, 2))
+        self.assertEqual(self.gen_gs.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
+                         ('CGAA', {0}, 1))
+        with self.assertRaises(alignment.CannotConstructOligoError):
+            # Should fail when 'N' is all that exists at a position
+            self.gen_gs.construct_oligo(0, 4, {0: {1,3,4}})
+        self.gen_gs.mismatches = 1
+        self.assertEqual(self.gen_gs.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
+                         ('ATCG', {0,2}, 2))
+        self.assertEqual(self.gen_gs.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
+                         ('CGAT', {0}, 1))
+        with self.assertRaises(alignment.CannotConstructOligoError):
+            # Should fail when a potential guide (here, 'CGAC') cannot
+            # bind to any sequence because they all have 'N' somewhere
+            self.gen_gs.construct_oligo(2, 4, {0: {2,4}})
+        self.gen_gs.mismatches = 2
+        self.assertEqual(self.gen_gs.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
+                         ('ATCG', {0,1,2,3,4}, 5))
+        self.assertEqual(self.gen_gs.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
+                         ('CGAT', {0,1,2,3}, 4))
+        self.assertIn(self.gen_gs.construct_oligo(2, 4, {0: {2,3,4}}),
+                      [('CGAC', {2,4}, 2), ('CGAT', {2,3}, 2)])
+        self.assertEqual(self.gen_gs.construct_oligo(2, 4, {0: {2,4}}),
+                         ('CGAC', {2,4}, 2))
+        self.gen_gs.mismatches = 3
+        self.assertEqual(self.gen_gs.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
+                         ('CGAT', {0,1,2,3,4}, 5))
+
+    def test_construct_oligo_with_large_group_needed(self):
+        seqs = ['ATCGAA',
+                'ATCGAA',
+                'GGGCCC',
+                'ATCGAA',
+                'ATCGAA',
+                'ATCGAA',
+                'GGGCCC']
+        self.gen_gs.aln = alignment.Alignment.from_list_of_seqs(seqs)
+        self.gen_gs.clusterer = self.gc
+
+        seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
+        num_needed = {0: 3, 1: 1}
+        # 'ATCGAA' is most sequences, and let's construct a guide by
+        # needing more from the group consisting of these sequences
+        self.assertEqual(self.gen_gs.construct_oligo(0, 4, seqs_to_consider,
+                                                     num_needed=num_needed),
+                         ('ATCG', {0, 1, 3, 4, 5}, 3))
+
+    def test_construct_oligo_with_small_group_needed(self):
+        seqs = ['ATCGAA',
+                'ATCGAA',
+                'GGGCCC',
+                'ATCGAA',
+                'ATCGAA',
+                'ATCGAA',
+                'GGGCCC']
+        self.gen_gs.aln = alignment.Alignment.from_list_of_seqs(seqs)
+        self.gen_gs.clusterer = self.gc
+
+        seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
+        num_needed = {0: 1, 1: 2}
+        # 'ATCGAA' is most sequences, but let's construct a guide by
+        # needing more from a group consisting of the 'GGGCCC' sequences
+        self.assertEqual(self.gen_gs.construct_oligo(0, 4, seqs_to_consider,
+                                                     num_needed=num_needed),
+                         ('GGGC', {2, 6}, 2))
+
+    def test_construct_oligo_with_suitable_fn(self):
+        seqs = ['GTATCAAAT',
+                'CTACCAAAA',
+                'GTATCAAAT',
+                'GTATCAAAT']
+        self.gen_gs.aln = alignment.Alignment.from_list_of_seqs(seqs)
+        guide_length = 6
+        self.gen_gs.min_oligo_length = guide_length
+        self.gen_gs.max_oligo_length = guide_length
+        seqs_to_consider = {0: {0, 1, 2, 3}}
+        self.gen_gs.clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length), k=3)
+        self.gen_gs.mismatches = 1
+
+        # The best guide is 'GTATCA'
+        self.assertEqual(self.gen_gs.construct_oligo(0, guide_length,
+                                                     seqs_to_consider),
+                         ('GTATCA', {0, 2, 3}, 3))
+
+        # Do not allow guides with 'TAT' in them
+        def f(guide):
+            if 'TAT' in guide:
+                return False
+            else:
+                return True
+        prev_suitable_fns = self.gen_gs.is_suitable_fns
+        self.gen_gs.is_suitable_fns = prev_suitable_fns + [f]
+
+        # Now the best guide is 'CTACCA'
+        self.assertEqual(self.gen_gs.construct_oligo(0, guide_length,
+                                                     seqs_to_consider),
+                         ('CTACCA', {1}, 1))
+
+        # Do not allow guides with 'A' in them
+        def f(guide):
+            if 'A' in guide:
+                return False
+            else:
+                return True
+        self.gen_gs.is_suitable_fns = prev_suitable_fns + [f]
+
+        # Now there is no suitable guide
+        with self.assertRaises(alignment.CannotConstructOligoError):
+            self.gen_gs.construct_oligo(0, guide_length, seqs_to_consider)
+
+    # def test_construct_oligo_with_predictor(self):
+    #     seqs = ['GTATCAAAT',
+    #             'ATACCAAAA',
+    #             'GTATCAAAT',
+    #             'GTATCAAAT']
+    #     aln = alignment.Alignment.from_list_of_seqs(seqs)
+    #     guide_length = 6
+    #     seqs_to_consider = {0: {0, 1, 2, 3}}
+    #     guide_clusterer = alignment.SequenceClusterer(
+    #         lsh.HammingDistanceFamily(guide_length),
+    #         k=3)
+
+    #     # The best guide is 'GTATCA'
+    #     p = aln.construct_oligo(0, guide_length, seqs_to_consider, 1, False, guide_clusterer)
+    #     gd, covered_seqs = p
+    #     self.assertEqual(gd, 'GTATCA')
+    #     self.assertEqual(covered_seqs, {0, 2, 3})
+
+    #     # Only predict guides starting with 'A' to be active
+    #     class PredictorTest:
+    #         def __init__(self):
+    #             self.context_nt = 0
+    #         def determine_highly_active(self, start_pos, pairs):
+    #             y = []
+    #             for target, guide in pairs:
+    #                 y += [guide[0] == 'A']
+    #             return y
+    #     predictor = PredictorTest()
+    #     # Now the best guide is 'ATACCA'
+    #     p = aln.construct_oligo(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
+    #         predictor=predictor, stop_early=False)
+    #     gd, covered_seqs = p
+    #     self.assertEqual(gd, 'ATACCA')
+    #     self.assertEqual(covered_seqs, {1})
+
+    #     # Only predict guides starting with 'A' to be active, and impose an
+    #     # early stopping criterion
+    #     class PredictorTest:
+    #         def __init__(self):
+    #             self.context_nt = 0
+    #         def determine_highly_active(self, start_pos, pairs):
+    #             y = []
+    #             for target, guide in pairs:
+    #                 y += [guide[0] == 'A']
+    #             return y
+    #     predictor = PredictorTest()
+    #     # With early stopping, it will not find a guide
+    #     with self.assertRaises(alignment.CannotConstructOligoError):
+    #         aln.construct_oligo(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
+    #             predictor=predictor, stop_early=True)
+
+    #     # Only predictor guides starting with 'C' to be active
+    #     class PredictorTest:
+    #         def __init__(self):
+    #             self.context_nt = 0
+    #         def determine_highly_active(self, start_pos, pairs):
+    #             y = []
+    #             for target, guide in pairs:
+    #                 y += [guide[0] == 'C']
+    #             return y
+    #     predictor = PredictorTest()
+    #     # Now there is no suitable guide
+    #     with self.assertRaises(alignment.CannotConstructOligoError):
+    #         aln.construct_oligo(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
+    #             predictor=predictor)
+
+    # def test_construct_oligo_with_required_flanking(self):
+    #     seqs = ['TCAAAT',
+    #             'CCAAAA',
+    #             'CATTTT',
+    #             'CATTTT',
+    #             'CATTTT',
+    #             'CATTTT',
+    #             'CATTTT',
+    #             'CATTTT',
+    #             'CATTTT',
+    #             'TCAAAT',
+    #             'TCAAAT']
+    #     aln = alignment.Alignment.from_list_of_seqs(seqs)
+    #     guide_length = 2
+    #     guide_clusterer = alignment.SequenceClusterer(
+    #         lsh.HammingDistanceFamily(guide_length),
+    #         k=2)
+    #     seqs_to_consider = {0: set(range(len(seqs)))}
+
+    #     # The best guide at start=2 is 'TT', but if we require
+    #     # 'C' to flank on the 5' end, the best is 'AA'
+    #     p = aln.construct_oligo(2, guide_length, seqs_to_consider, 1, False,
+    #         guide_clusterer, required_flanking_seqs=('C', None))
+    #     gd, covered_seqs = p
+    #     self.assertEqual(gd, 'AA')
+    #     self.assertEqual(covered_seqs, {0,1,9,10})
+
+    #     # The best guide at start=2 is 'TT', but if we require
+    #     # 'C' to flank on the 5' end, the best is 'AA'
+    #     # Now if we require 'M' on the 5' end, 'TT' will be the best guide
+    #     p = aln.construct_oligo(2, guide_length, seqs_to_consider, 1, False,
+    #         guide_clusterer, required_flanking_seqs=('M', None))
+    #     gd, covered_seqs = p
+    #     self.assertEqual(gd, 'TT')
+    #     self.assertEqual(covered_seqs, {2,3,4,5,6,7,8})
 
     def tearDown(self):
         # Re-enable logging
@@ -1001,244 +1263,6 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
 
         # 3 of the 4 sequences should be bound
         self.assertEqual(gs.total_frac_bound(2, 8, guides), 0.75)
-
-    # def test_construct_guide_a(self):
-    #     self.assertEqual(self.a.construct_guide(0, 4, {0: {0,1,2,3,4}}, 0, False, self.gc),
-    #                      ('ATCG', {0,1,2,3}))
-    #     self.assertEqual(self.a.construct_guide(0, 4, {0: {0,1,2,3,4}}, 1, False, self.gc),
-    #                      ('ATCG', {0,1,2,3,4}))
-    #     self.assertEqual(self.a.construct_guide(0, 4, {0: {4}}, 1, False, self.gc),
-    #                      ('AGCG', {4}))
-    #     self.assertIn(self.a.construct_guide(0, 4, {0: {2,3}}, 0, False, self.gc),
-    #                   [('ATCG', {2,3}), ('ACCG', {2,3})])
-    #     self.assertEqual(self.a.construct_guide(1, 4, {0: {0,1,2,3,4}}, 0, False, self.gc),
-    #                      ('TCGA', {0,1,2,3}))
-    #     self.assertEqual(self.a.construct_guide(2, 4, {0: {0,1,2,3,4}}, 0, False, self.gc),
-    #                      ('CGAA', {0,2,4}))
-    #     self.assertEqual(self.a.construct_guide(2, 4, {0: {0,1,2,3,4}}, 1, False, self.gc),
-    #                      ('CGAA', {0,1,2,3,4}))
-    #     self.assertEqual(self.a.construct_guide(2, 4, {0: {0,1,2,3,4}}, 2, False, self.gc),
-    #                      ('CGAA', {0,1,2,3,4}))
-    #     self.assertIn(self.a.construct_guide(2, 4, {0: {0,1,2,3}}, 0, False, self.gc),
-    #                   [('CGAA', {0,2}), ('CGAT', {1,3})])
-    #     self.assertIn(self.a.construct_guide(2, 4, {0: {0,1,2,3}}, 1, False, self.gc),
-    #                   [('CGAA', {0,1,2,3}), ('CGAT', {0,1,2,3})])
-
-    # def test_construct_guide_b(self):
-    #     # self.b has many Ns, which makes it difficult to write test cases
-    #     # when clustering (the clusters tend to consist of guides in
-    #     # which a position only has N); so pass None to guide_clusterer in
-    #     # construct_guide() to skip clustering
-    #     self.assertEqual(self.b.construct_guide(0, 4, {0: {0,1,2,3,4}}, 0, False, None),
-    #                      ('ATCG', {0,2}))
-    #     self.assertEqual(self.b.construct_guide(0, 4, {0: {0,1,2,3,4}}, 1, False, None),
-    #                      ('ATCG', {0,2}))
-    #     self.assertEqual(self.b.construct_guide(0, 4, {0: {0,1,2,3,4}}, 2, False, None),
-    #                      ('ATCG', {0,1,2,3,4}))
-    #     self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 0, False, None),
-    #                      ('CGAA', {0}))
-    #     self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 1, False, None),
-    #                      ('CGAT', {0}))
-    #     self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 2, False, None),
-    #                      ('CGAT', {0,1,2,3}))
-    #     self.assertEqual(self.b.construct_guide(2, 4, {0: {0,1,2,3,4}}, 3, False, None),
-    #                      ('CGAT', {0,1,2,3,4}))
-    #     self.assertEqual(self.b.construct_guide(2, 4, {0: {2,4}}, 2, False, None),
-    #                      ('CGAC', {2,4}))
-    #     self.assertIn(self.b.construct_guide(2, 4, {0: {2,3,4}}, 2, False, None),
-    #                   [('CGAC', {2,4}), ('CGAT', {2,3})])
-    #     with self.assertRaises(alignment.CannotConstructGuideError):
-    #         # Should fail when 'N' is all that exists at a position
-    #         self.b.construct_guide(0, 4, {0: {1,3,4}}, 0, False, None)
-    #     with self.assertRaises(alignment.CannotConstructGuideError):
-    #         # Should fail when a potential guide (here, 'CGAC') cannot
-    #         # bind to any sequence because they all have 'N' somewhere
-    #         self.b.construct_guide(2, 4, {0: {2,4}}, 1, False, None)
-
-    # def test_construct_guide_c(self):
-    #     with self.assertRaises(alignment.CannotConstructGuideError):
-    #         # Should fail when the only sequence given (1) has an indel
-    #         self.c.construct_guide(0, 4, {0: {1}}, 0, False, self.gc)
-
-    # def test_construct_guide_with_large_group_needed(self):
-    #     seqs = ['ATCGAA',
-    #             'ATCGAA',
-    #             'GGGCCC',
-    #             'ATCGAA',
-    #             'ATCGAA',
-    #             'ATCGAA',
-    #             'GGGCCC']
-    #     seqs_aln = alignment.Alignment.from_list_of_seqs(seqs)
-
-    #     seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
-    #     num_needed = {0: 3, 1: 1}
-    #     # 'ATCGAA' is most sequences, and let's construct a guide by
-    #     # needing more from the group consisting of these sequences
-    #     self.assertEqual(seqs_aln.construct_guide(0, 4, seqs_to_consider, 0,
-    #                         False, self.gc, num_needed=num_needed),
-    #                      ('ATCG', {0, 1, 3, 4, 5}))
-
-    # def test_construct_guide_with_small_group_needed(self):
-    #     seqs = ['ATCGAA',
-    #             'ATCGAA',
-    #             'GGGCCC',
-    #             'ATCGAA',
-    #             'ATCGAA',
-    #             'ATCGAA',
-    #             'GGGCCC']
-    #     seqs_aln = alignment.Alignment.from_list_of_seqs(seqs)
-
-    #     seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
-    #     num_needed = {0: 1, 1: 2}
-    #     # 'ATCGAA' is most sequences, but let's construct a guide by
-    #     # needing more from a group consisting of the 'GGGCCC' sequences
-    #     self.assertEqual(seqs_aln.construct_guide(0, 4, seqs_to_consider, 0,
-    #                         False, self.gc, num_needed=num_needed),
-    #                      ('GGGC', {2, 6}))
-
-    # def test_construct_guide_with_suitable_fn(self):
-    #     seqs = ['GTATCAAAT',
-    #             'CTACCAAAA',
-    #             'GTATCAAAT',
-    #             'GTATCAAAT']
-    #     aln = alignment.Alignment.from_list_of_seqs(seqs)
-    #     guide_length = 6
-    #     seqs_to_consider = {0: {0, 1, 2, 3}}
-    #     guide_clusterer = alignment.SequenceClusterer(
-    #         lsh.HammingDistanceFamily(guide_length),
-    #         k=3)
-
-    #     # The best guide is 'GTATCA'
-    #     p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer)
-    #     gd, covered_seqs = p
-    #     self.assertEqual(gd, 'GTATCA')
-    #     self.assertEqual(covered_seqs, {0, 2, 3})
-
-    #     # Do not allow guides with 'TAT' in them
-    #     def f(guide):
-    #         if 'TAT' in guide:
-    #             return False
-    #         else:
-    #             return True
-    #     # Now the best guide is 'CTACCA'
-    #     p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-    #         guide_is_suitable_fn=f)
-    #     gd, covered_seqs = p
-    #     self.assertEqual(gd, 'CTACCA')
-    #     self.assertEqual(covered_seqs, {1})
-
-    #     # Do not allow guides with 'A' in them
-    #     def f(guide):
-    #         if 'A' in guide:
-    #             return False
-    #         else:
-    #             return True
-    #     # Now there is no suitable guide
-    #     with self.assertRaises(alignment.CannotConstructGuideError):
-    #         aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-    #             guide_is_suitable_fn=f)
-
-    # def test_construct_guide_with_predictor(self):
-    #     seqs = ['GTATCAAAT',
-    #             'ATACCAAAA',
-    #             'GTATCAAAT',
-    #             'GTATCAAAT']
-    #     aln = alignment.Alignment.from_list_of_seqs(seqs)
-    #     guide_length = 6
-    #     seqs_to_consider = {0: {0, 1, 2, 3}}
-    #     guide_clusterer = alignment.SequenceClusterer(
-    #         lsh.HammingDistanceFamily(guide_length),
-    #         k=3)
-
-    #     # The best guide is 'GTATCA'
-    #     p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer)
-    #     gd, covered_seqs = p
-    #     self.assertEqual(gd, 'GTATCA')
-    #     self.assertEqual(covered_seqs, {0, 2, 3})
-
-    #     # Only predict guides starting with 'A' to be active
-    #     class PredictorTest:
-    #         def __init__(self):
-    #             self.context_nt = 0
-    #         def determine_highly_active(self, start_pos, pairs):
-    #             y = []
-    #             for target, guide in pairs:
-    #                 y += [guide[0] == 'A']
-    #             return y
-    #     predictor = PredictorTest()
-    #     # Now the best guide is 'ATACCA'
-    #     p = aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-    #         predictor=predictor, stop_early=False)
-    #     gd, covered_seqs = p
-    #     self.assertEqual(gd, 'ATACCA')
-    #     self.assertEqual(covered_seqs, {1})
-
-    #     # Only predict guides starting with 'A' to be active, and impose an
-    #     # early stopping criterion
-    #     class PredictorTest:
-    #         def __init__(self):
-    #             self.context_nt = 0
-    #         def determine_highly_active(self, start_pos, pairs):
-    #             y = []
-    #             for target, guide in pairs:
-    #                 y += [guide[0] == 'A']
-    #             return y
-    #     predictor = PredictorTest()
-    #     # With early stopping, it will not find a guide
-    #     with self.assertRaises(alignment.CannotConstructGuideError):
-    #         aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-    #             predictor=predictor, stop_early=True)
-
-    #     # Only predictor guides starting with 'C' to be active
-    #     class PredictorTest:
-    #         def __init__(self):
-    #             self.context_nt = 0
-    #         def determine_highly_active(self, start_pos, pairs):
-    #             y = []
-    #             for target, guide in pairs:
-    #                 y += [guide[0] == 'C']
-    #             return y
-    #     predictor = PredictorTest()
-    #     # Now there is no suitable guide
-    #     with self.assertRaises(alignment.CannotConstructGuideError):
-    #         aln.construct_guide(0, guide_length, seqs_to_consider, 1, False, guide_clusterer,
-    #             predictor=predictor)
-
-    # def test_construct_guide_with_required_flanking(self):
-    #     seqs = ['TCAAAT',
-    #             'CCAAAA',
-    #             'CATTTT',
-    #             'CATTTT',
-    #             'CATTTT',
-    #             'CATTTT',
-    #             'CATTTT',
-    #             'CATTTT',
-    #             'CATTTT',
-    #             'TCAAAT',
-    #             'TCAAAT']
-    #     aln = alignment.Alignment.from_list_of_seqs(seqs)
-    #     guide_length = 2
-    #     guide_clusterer = alignment.SequenceClusterer(
-    #         lsh.HammingDistanceFamily(guide_length),
-    #         k=2)
-    #     seqs_to_consider = {0: set(range(len(seqs)))}
-
-    #     # The best guide at start=2 is 'TT', but if we require
-    #     # 'C' to flank on the 5' end, the best is 'AA'
-    #     p = aln.construct_guide(2, guide_length, seqs_to_consider, 1, False,
-    #         guide_clusterer, required_flanking_seqs=('C', None))
-    #     gd, covered_seqs = p
-    #     self.assertEqual(gd, 'AA')
-    #     self.assertEqual(covered_seqs, {0,1,9,10})
-
-    #     # The best guide at start=2 is 'TT', but if we require
-    #     # 'C' to flank on the 5' end, the best is 'AA'
-    #     # Now if we require 'M' on the 5' end, 'TT' will be the best guide
-    #     p = aln.construct_guide(2, guide_length, seqs_to_consider, 1, False,
-    #         guide_clusterer, required_flanking_seqs=('M', None))
-    #     gd, covered_seqs = p
-    #     self.assertEqual(gd, 'TT')
-    #     self.assertEqual(covered_seqs, {2,3,4,5,6,7,8})
 
     def tearDown(self):
         # Re-enable logging
