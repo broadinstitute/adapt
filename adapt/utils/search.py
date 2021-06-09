@@ -328,7 +328,7 @@ class OligoSearcher:
                 try:
                     olg_activities = self.aln.compute_activity(start, seq,
                             self.predictor)
-                except alignment.CannotConstructOligoError:
+                except CannotConstructOligoError:
                     # Most likely this site is too close to an endpoint and
                     # does not have enough context_nt; skip it
                     continue
@@ -436,7 +436,7 @@ class OligoSearcher:
             try:
                 olg_activities = self.aln.compute_activity(start, olg_seq,
                         self.predictor)
-            except alignment.CannotConstructOligoError:
+            except CannotConstructOligoError:
                 # Most likely this site is too close to an endpoint and
                 # does not have enough context_nt; skip it
                 continue
@@ -655,7 +655,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                     # Defaults to smallest oligo to break ties (make a setting?)
                     if p[2] > p_best[2]:
                         p_best = p
-                except alignment.CannotConstructOligoError:
+                except CannotConstructOligoError:
                     continue
             if p_best[0] is None:
                 return None
@@ -1647,7 +1647,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
                     self.clusterer, missing_threshold=self.missing_threshold,
                     is_suitable_fns=self.is_suitable_fns,
                     required_flanking_seqs=self.required_flanking_seqs)
-        except alignment.CannotConstructOligoError:
+        except CannotConstructOligoError:
             # There may be too much missing data or a related issue
             # at this site; do not have a ground set here
             ground_set = set()
@@ -1663,7 +1663,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
                 try:
                     activities = self.aln.compute_activity(start, short_olg_seq,
                             self.predictor)
-                except alignment.CannotConstructOligoError:
+                except CannotConstructOligoError:
                     # Most likely this site is too close to an endpoint
                     # and does not have enough context_nt -- there will be
                     # no ground set at this site -- but skip this oligo and
@@ -1819,6 +1819,14 @@ class CannotFindPositiveMarginalContributionError(Exception):
 
 
 class NoPredictorError(Exception):
+    def __init__(self, value):
+        self.value = value
+
+    def __str__(self):
+        return repr(self.value)
+
+
+class CannotConstructOligoError(Exception):
     def __init__(self, value):
         self.value = value
 

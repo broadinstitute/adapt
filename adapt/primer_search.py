@@ -191,7 +191,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
 
         for pos in range(start, start + oligo_length):
             if self.aln.frac_missing_at_pos(pos) > self.missing_threshold:
-                raise alignment.CannotConstructOligoError(("Too much missing "
+                raise search.CannotConstructOligoError(("Too much missing "
                     "data at a position in the target range"))
 
         aln_for_primer = self.aln.extract_range(start, start + oligo_length)
@@ -202,7 +202,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
             if (start - self.predictor.context_nt < 0 or
                     start + oligo_length + self.predictor.context_nt >
                     self.aln.seq_length):
-                raise alignment.CannotConstructOligoError(("The context needed "
+                raise search.CannotConstructOligoError(("The context needed "
                     "for the target to predict activity falls outside the "
                     "range of the alignment at this position"))
             aln_for_primer_with_context = self.aln.extract_range(
@@ -241,7 +241,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
         # If every sequence in this region has a gap or does not contain
         # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise alignment.CannotConstructOligoError(("All sequences in region "
+            raise search.CannotConstructOligoError(("All sequences in region "
                 "have a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_primer.make_list_of_seqs(all_seqs_to_consider,
@@ -420,7 +420,7 @@ class PrimerSearcher(search.OligoSearcherMinimizeNumber):
                 break
 
         if pr is None:
-            raise alignment.CannotConstructOligoError(("No primers are suitable "
+            raise search.CannotConstructOligoError(("No primers are suitable "
                 "or active"))
 
         return (pr, binding_seqs, score)

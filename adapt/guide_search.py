@@ -155,7 +155,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
 
         for pos in range(start, start + oligo_length):
             if self.aln.frac_missing_at_pos(pos) > self.missing_threshold:
-                raise alignment.CannotConstructOligoError(("Too much missing "
+                raise search.CannotConstructOligoError(("Too much missing "
                     "data at a position in the target range"))
 
         aln_for_guide = self.aln.extract_range(start, start + oligo_length)
@@ -175,7 +175,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
                 end_context = self.predictor.context_nt
             if (start - start_context < 0 or
                     start + oligo_length + end_context > self.aln.seq_length):
-                raise alignment.CannotConstructOligoError(("The context needed "
+                raise search.CannotConstructOligoError(("The context needed "
                     "for the target to predict activity falls outside the "
                     "range of the alignment at this position"))
             aln_for_guide_with_context = self.aln.extract_range(
@@ -214,7 +214,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
         # If every sequence in this region has a gap or does not contain
         # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise alignment.CannotConstructOligoError(("All sequences in region "
+            raise search.CannotConstructOligoError(("All sequences in region "
                 "have a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
@@ -394,7 +394,7 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
                 break
 
         if gd is None:
-            raise alignment.CannotConstructOligoError(("No guides are suitable "
+            raise search.CannotConstructOligoError(("No guides are suitable "
                 "or active"))
 
         return (gd, binding_seqs, score)

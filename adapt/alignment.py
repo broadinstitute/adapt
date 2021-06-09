@@ -11,6 +11,7 @@ from math import log2
 from adapt.utils import oligo
 from adapt.utils import lsh
 from adapt.utils import predict_activity
+from adapt.utils import search
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -380,7 +381,7 @@ class Alignment(SequenceList):
 
         for pos in range(start, start + oligo_length):
             if self.frac_missing_at_pos(pos) > missing_threshold:
-                raise CannotConstructOligoError(("Too much missing data at "
+                raise search.CannotConstructOligoError(("Too much missing data at "
                     "a position in the target range"))
 
         aln_for_oligo = self.extract_range(start, start + oligo_length)
@@ -412,7 +413,7 @@ class Alignment(SequenceList):
         # If every sequence in this region has a gap or does not contain
         # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise CannotConstructOligoError(("All sequences in region have "
+            raise search.CannotConstructOligoError(("All sequences in region have "
                 "a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_oligo.make_list_of_seqs(all_seqs_to_consider,
@@ -498,7 +499,7 @@ class Alignment(SequenceList):
         # prediction
         if (start - predictor.context_nt < 0 or
                 start + oligo_length + predictor.context_nt > self.seq_length):
-            raise CannotConstructOligoError(("The context needed for "
+            raise search.CannotConstructOligoError(("The context needed for "
                 "the target to predict activity falls outside the "
                 "range of the alignment at this position"))
         aln_for_oligo_with_context = self.extract_range(
@@ -662,13 +663,6 @@ class Alignment(SequenceList):
             seqs_col[j] = ''.join(seqs[i][j] for i in range(num_sequences))
 
         return Alignment(seqs_col)
-
-
-class CannotConstructOligoError(Exception):
-    def __init__(self, value):
-        self.value = value
-    def __str__(self):
-        return repr(self.value)
 
 
 class SequenceClusterer:
