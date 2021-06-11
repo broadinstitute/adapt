@@ -8,7 +8,7 @@ import unittest
 from adapt import alignment
 from adapt import primer_search
 
-__author__ = 'Hayden Metsky <hayden@mit.edu>'
+__author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
 
 class TestPrimerResult(unittest.TestCase):

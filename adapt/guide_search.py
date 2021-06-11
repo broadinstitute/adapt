@@ -15,7 +15,7 @@ from adapt.utils import index_compress
 from adapt.utils import lsh
 from adapt.utils import predict_activity
 
-__author__ = 'Hayden Metsky <hayden@mit.edu>'
+__author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
 logger = logging.getLogger(__name__)
 

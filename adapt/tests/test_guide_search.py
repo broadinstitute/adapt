@@ -95,7 +95,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.i_window_size = 5
         self.i = guide_search.GuideSearcherMinimizeGuides(self.i_aln, 5, 1, 1.0, (0.5, 0, 1))
 
-        # Create a generic guide clusterer that can have its alignment overriden
+        # Create a generic guide searcher that can have its alignment overriden
         # (for testing construct_oligo)
         gen_seqs = ['AAAA']
         gen_aln = alignment.Alignment.from_list_of_seqs(gen_seqs)
@@ -266,12 +266,12 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.assertEqual(gd_score, 1)
 
     def test_find_oligos_in_window(self):
-        # self.assertEqual(self.c._find_oligos_in_window(
-        #                     1, 1 + self.c_window_size),
-        #                  set(['ATCGG', 'AAAAA']))
-        # self.assertIn(self.c_partial._find_oligos_in_window(
-        #                 1, 1 + self.c_window_size),
-        #               {frozenset(['ATCGG']), frozenset(['TCATC'])})
+        self.assertEqual(self.c._find_oligos_in_window(
+                            1, 1 + self.c_window_size),
+                         set(['ATCGG', 'AAAAA']))
+        self.assertIn(self.c_partial._find_oligos_in_window(
+                        1, 1 + self.c_window_size),
+                      {frozenset(['ATCGG']), frozenset(['TCATC'])})
 
         self.assertIn(self.g._find_oligos_in_window(
                         0, 0 + self.g_window_size),
@@ -474,24 +474,6 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # in the output
         self.assertEqual(guides_in_cover,
                          {'ATGCC', 'TCGAA', 'AAAAA'})
-
-    def test_overlaps_ignored_range(self):
-        seqs = ['AAAAAAAAAAAAAAAAAAAA']
-        aln = alignment.Alignment.from_list_of_seqs(seqs)
-
-        ignored_ranges = {(3, 8), (14, 18)}
-
-        gs = guide_search.GuideSearcherMinimizeGuides(aln, 3, 0, 1.0, (1, 1, 100),
-            ignored_ranges=ignored_ranges)
-
-        # For each position i, encode 1 if the guide (of length 3)
-        # starting at i overlaps a ignored range, and 0 otherwise
-        does_overlap = '01111111000011111100'
-        for i in range(len(does_overlap)):
-            if does_overlap[i] == '0':
-                self.assertFalse(gs._overlaps_ignored_range(i))
-            elif does_overlap[i] == '1':
-                self.assertTrue(gs._overlaps_ignored_range(i))
 
     def test_optimal_guide_with_ignored_range(self):
         seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
@@ -1198,39 +1180,6 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
             gs._find_oligos_in_window(0, 4)
         with self.assertRaises(search.CannotFindAnyOligosError):
             gs._find_oligos_in_window(6, 10)
-
-    def test_oligo_set_activities(self):
-        gs = self.make_gs(['ATCGAATTCG',
-                           'GGGAGGGGGG',
-                           'CCCCCCCCCC',
-                           'AACGAATTCG'],
-                           hard_constraint=2,
-                           algorithm='greedy')
-        # Guides should be 'AATT' and 'AGGG'
-        guides = gs._find_oligos_in_window(2, 8)
-
-        activities = gs.oligo_set_activities(2, 8, guides)
-        np.testing.assert_equal(activities, np.array([2, 2, 0, 2]))
-
-        activities_percentile = gs.oligo_set_activities_percentile(2, 8,
-                guides, [5, 50])
-        self.assertEqual(activities_percentile, [0, 2])
-
-    def test_oligo_activities_expected_value(self):
-        gs = self.make_gs(['ATCGAATTCG',
-                           'GGGAGGGGGG',
-                           'CCCCCCCCCC',
-                           'AACGAATTCG'],
-                           hard_constraint=2,
-                           algorithm='greedy')
-        # Guides should be 'AATT' and 'AGGG'
-        guides = gs._find_oligos_in_window(2, 8)
-
-        aatt = gs.oligo_activities_expected_value(2, 8, 'AATT')
-        self.assertEqual(aatt, 1.0)
-
-        aggg = gs.oligo_activities_expected_value(2, 8, 'AGGG')
-        self.assertEqual(aggg, 0.5)
 
     def test_obj_value(self):
         gs = self.make_gs(['ATCGAATTCG',
