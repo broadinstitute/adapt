@@ -182,7 +182,8 @@ def is_symmetric(oligo):
         oligo: oligo sequence. Must be >1bp long, may be ambiguous
 
     Returns:
-        Fraction of the possible sequences of this oligo that are symmetric
+        Fraction of the possible sequences of this oligo that are symmetric. If
+            oligos are unambiguous, this will be either 0 or 1.
     """
     half_len = int(len(oligo)/2)
     return is_complement(oligo[:half_len], oligo[-half_len:][::-1])
