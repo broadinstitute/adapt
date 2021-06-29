@@ -444,6 +444,44 @@ def _collapse_consecutive_gaps(a, b):
     return (a_ccg, b_ccg)
 
 
+def convert_to_index_with_gaps(seq, indexes):
+    """Change indexes of a sequence without gaps to indexes with gaps
+
+    Assumes indexes without gaps are 1-indexed; converts to 0-index
+
+    For example, the indexes [1,4] for the alignment
+        123    45
+        ATN----GA
+    would become [0,7] based on the following numbering:
+        012345678
+        ATN----GA
+
+    Args:
+        seq: an aligned sequence
+        indexes: a list of indexes
+
+    Returns:
+        list of indexes that are 0-indexed and account for gaps
+    """
+    i = 0
+    current_index = 0
+    new_indexes = []
+    for j in range(0, len(seq)):
+        if seq[j] != '-':
+            i += 1
+        if i == indexes[current_index]:
+            new_indexes.append(j)
+            if len(new_indexes) == len(indexes):
+                break
+            current_index += 1
+
+    if len(new_indexes) < len(indexes):
+        logger.warning("Annotated indexes (%s) were out of bounds of the "
+                       "reference sequence (length %i)."
+                       % (indexes[len(new_indexes):], i))
+    return new_indexes
+
+
 def curate_against_ref(seqs, ref_accs, asm=None,
         aln_identity_thres=0.5, aln_identity_ccg_thres=0.6,
         aln_identity_long_thres=(100000, 0.9, 0.9),

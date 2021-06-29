@@ -23,7 +23,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None, 
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
-        cluster_threshold=0.1, accessions_to_use=None, 
+        annotation_tsv=None, cluster_threshold=0.1, accessions_to_use=None,
         sequences_to_use=None, meta_filt=None, meta_filt_against=None):
     """Prepare an alignment for a taxonomy.
 
@@ -40,7 +40,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         segment: only use sequences of this segment (ignored if set
             to '' or None, e.g., if taxid is unsegmented)
         ref_accs: list of accessions of reference sequences to use for curation
-        out: path to direcotry in which write FASTA files of aligned
+        out: path to directory in which write FASTA files of aligned
             sequences (one per cluster)
         aln_memoizer: AlignmentMemoizer to use for memoizing alignments;
             or None to not memoize
@@ -67,6 +67,9 @@ def prepare_for(taxid, segment, ref_accs, out,
             a year (column 2) for each sequence written to out (column 1);
             this is only done for influenza sequences (if prep_influenza
             is True)
+        annotation_tsv: if set, a prefix to a TSV file to which this will write
+            genomic annotations on a per cluster basis, if there is a reference
+            sequence in that cluster
         cluster_threshold: maximum inter-cluster distance to merge clusters, in
             average nucleotide dissimilarity (1-ANI, where ANI is
             average nucleotide identity); higher results in fewer
@@ -179,6 +182,7 @@ def prepare_for(taxid, segment, ref_accs, out,
             if ref_acc not in acc_to_fetch:
                 acc_to_fetch += [ref_acc]
                 added_ref_accs_to_fetch += [ref_acc]
+                acc_count = Counter(acc_to_fetch)
         seqs_unaligned_fp = ncbi_neighbors.fetch_fastas(acc_to_fetch)
         seqs_unaligned = align.read_unaligned_seqs(seqs_unaligned_fp)
         # Delete temporary file
@@ -198,8 +202,7 @@ def prepare_for(taxid, segment, ref_accs, out,
 
         # Curate against ref_accs
         seqs_unaligned_curated = align.curate_against_ref(
-            seqs_unaligned, ref_accs, asm=aln_stat_memoizer,
-            remove_ref_accs=added_ref_accs_to_fetch)
+            seqs_unaligned, ref_accs, asm=aln_stat_memoizer)
 
         # An accession can show up multiple times if there was sampling with
         # replacement, but the dicts above (seqs_unaligned and
@@ -288,6 +291,40 @@ def prepare_for(taxid, segment, ref_accs, out,
         # Align the sequences in this cluster
         seqs_aligned = align.align(seqs_unaligned_curated_in_cluster,
             am=aln_memoizer)
+
+        # Write annotation file, if requested
+        if annotation_tsv:
+            headers = ["type", "start", "end", "gene", "product", "note"]
+            annotation_file_written = False
+            for ref_acc in ref_accs:
+                for accver in seqs_aligned:
+                    if ref_acc in accver:
+                        annotations = ncbi_neighbors.get_annotations(ref_acc)
+                        for annotation in annotations:
+                            annotation['start'], annotation['end'] = align.convert_to_index_with_gaps(
+                                    seqs_aligned[accver],
+                                    [annotation['start'],
+                                     annotation['end']])
+                            annotation['start'] = str(annotation['start'])
+                            annotation['end'] = str(annotation['end'])
+                        with open("%s.%i.annotation.tsv" %(annotation_tsv, cluster_idx), 'w') as fw:
+                            fw.write("name\t")
+                            fw.write('\t'.join(headers) + '\n')
+                            for annotation in annotations:
+                                fw.write('\t'.join([annotation[header] for header in headers]) + '\n')
+                        annotation_file_written = True
+                        break
+                if annotation_file_written:
+                    break
+            if not annotation_file_written:
+                logger.warning("No reference sequence were in cluster %i, "
+                    "so no genomic annotations could be written.")
+
+        for ref_acc in added_ref_accs_to_fetch:
+            for accver in seqs_aligned:
+                if ref_acc in accver:
+                    del seqs_aligned[accver]
+                    break
 
         # Write a fasta file of aligned sequences
         fasta_file = os.path.join(out, str(cluster_idx) + '.fasta')

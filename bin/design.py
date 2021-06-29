@@ -352,12 +352,16 @@ def prepare_alignments(args):
             raise Exception(("Cannot use both --use-accessions and "
                 "--use-fasta for the same taxonomy"))
 
+        annotation_tsv = os.path.join(args.out_tsv_dir, label) if label \
+            else args.write_annotation
+
         nc, specific_against_metadata_acc = prepare_alignment.prepare_for(
             tax_id, segment, ref_accs,
             aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
             sample_seqs=args.sample_seqs,
             prep_influenza=args.prep_influenza,
             years_tsv=years_tsv_tmp_name,
+            annotation_tsv=annotation_tsv,
             cluster_threshold=args.cluster_threshold,
             accessions_to_use=accessions_to_use_for_tax,
             sequences_to_use=sequences_to_use_for_tax,
@@ -1367,6 +1371,13 @@ def argv_to_args(argv):
               "input for design to a file in OUT_TSV_DIR; the filename is "
               "determined based on the label for each taxonomy (they are "
               "'[label].[cluster-number].fasta'"))
+    input_autofile_subparser.add_argument('--write-annotation',
+        action='store_true',
+        help=("If set, write genomic annotations for the alignments "
+              "based on the (first) reference sequence to a TSV file in "
+              "OUT_TSV_DIR; the filename is determined based on the label for "
+              "each taxonomy (they are "
+              "'[label].[cluster-number].annotation.tsv'"))
 
     # Auto prepare from arguments
     input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
@@ -1402,6 +1413,11 @@ def argv_to_args(argv):
         help=("Prefix of path to files to which to write the alignments "
               "being used as input for design; filenames are "
               "'WRITE_INPUT_ALN.[cluster-number]'"))
+    input_autoargs_subparser.add_argument('--write-annotation',
+        help=("Prefix of path to files to which to write genomic annotations "
+              "for the alignments based on the first reference sequence in the "
+              "cluster; the filenames are "
+              "'WRITE_ANNOTATION.[cluster-number].tsv'"))
 
     # Add parsers for subcommands
     for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:
