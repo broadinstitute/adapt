@@ -474,7 +474,7 @@ The repository includes an alignment of Lassa virus sequences (S segment) from S
 If you have installed ADAPT via Bioconda or PyPI, you'll need to download the alignment from [`here`](https://raw.githubusercontent.com/broadinstitute/adapt/main/examples/SLE_S.aligned.fasta).
 Run:
 ```bash
-design.py sliding-window fasta FASTA_PATH -o probes.tsv -w 200 -gl 28 -gm 1 -gp 0.95
+design.py sliding-window fasta FASTA_PATH -o probes -w 200 -gl 28 -gm 1 -gp 0.95
 ```
 
 From this alignment, ADAPT scans each 200 nt window (`-w 200`) to find the smallest collection of probes that:
@@ -492,7 +492,7 @@ It identifies Cas13a guides using a pre-trained predictive model of activity.
 
 Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-cas13a-activity-model --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
+design.py complete-targets auto-from-args 64320 None guides -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-cas13a-activity-model --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
 This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable of MAFFT.
@@ -502,7 +502,7 @@ ADAPT designs primers and Cas13a guides within the amplicons, such that:
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
 * primers capture 95% of sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-pm 1`)
 
-ADAPT outputs a file, `guides.tsv.0`, that contains the best 5 design options (`--best-n-targets 5`) as measured by ADAPT's default objective function.
+ADAPT outputs a file, `guides.0.tsv`, that contains the best 5 design options (`--best-n-targets 5`) as measured by ADAPT's default objective function.
 See [Output](#output) above for a description of this file.
 
 This example randomly selects 50 sequences (`--sample-seqs 50`) prior to design to speed the runtime in this example; the command should take about 20 minutes to run in full.

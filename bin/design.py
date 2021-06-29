@@ -380,7 +380,7 @@ def prepare_alignments(args):
         aln_tmp_dirs += [aln_file_dir]
 
         if label is None:
-            out_tsv += [args.out_tsv + '.' + str(i) for i in range(nc)]
+            out_tsv += [args.out_tsv + '.' + str(i) + '.tsv' for i in range(nc)]
         else:
             for i in range(nc):
                 out_name = label + '.' + str(i) + '.tsv'
@@ -414,7 +414,7 @@ def prepare_alignments(args):
                 if label is None:
                     # args.write_input_aln gives the prefix of the path to
                     # which to write the alignment
-                    copy_path = args.write_input_aln + '.' + str(i)
+                    copy_path = args.write_input_aln + '.' + str(i) + '.fasta'
                 else:
                     # Determine where to write the alignment based on the
                     # label and args.out_tsv_dir
@@ -818,6 +818,7 @@ def run(args):
         if len(args.in_fasta) != len(args.out_tsv):
             raise Exception(("Number output TSVs must match number of input "
                 "FASTAs"))
+        args.out_tsv = [out_tsv + '.tsv' for out_tsv in args.out_tsv]
         args.design_for = None
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
         args.specific_against_metadata_accs = [[] for _ in range(len(args.in_fasta))]
@@ -1388,7 +1389,7 @@ def argv_to_args(argv):
               "unsegmented"))
     input_autoargs_subparser.add_argument('out_tsv',
         help=("Path to output TSVs, with one per cluster; output TSVs are "
-              "OUT_TSV.{cluster-number}"))
+              "OUT_TSV.[cluster-number].tsv"))
     input_autoargs_subparser.add_argument('--ref-accs', nargs='+',
         help=("Accession(s) of reference sequence(s) to use for curation (space-"
               "separated). If not set, ADAPT will automatically get accessions "
@@ -1412,7 +1413,7 @@ def argv_to_args(argv):
     input_autoargs_subparser.add_argument('--write-input-aln',
         help=("Prefix of path to files to which to write the alignments "
               "being used as input for design; filenames are "
-              "'WRITE_INPUT_ALN.[cluster-number]'"))
+              "'WRITE_INPUT_ALN.[cluster-number].fasta'"))
     input_autoargs_subparser.add_argument('--write-annotation',
         help=("Prefix of path to files to which to write genomic annotations "
               "for the alignments based on the first reference sequence in the "
