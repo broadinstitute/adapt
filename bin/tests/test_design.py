@@ -161,6 +161,8 @@ class TestDesignFasta(TestDesign.TestDesignCase):
 
     def setUp(self):
         super().setUp()
+        self.real_output_file = self.output_file.name + '.tsv'
+        self.files.append(self.real_output_file)
 
         # Write to temporary input fasta
         seq_io.write_fasta(SEQS, self.input_file.name)
@@ -171,7 +173,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
         expected = [["AA"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
     def test_max_activity(self):
         argv = super().baseArgv(objective='maximize-activity')
@@ -180,7 +182,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # Doesn't use model, just greedy binary prediction with 0 mismatches
         # (so same outputs as min-guides)
         expected = [["AA"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
     def test_complete_targets(self):
         argv = super().baseArgv(search_type='complete-targets')
@@ -189,7 +191,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # Since sequences are short and need 1 base for primer on each side,
         # only finds 1 target in middle
         expected = [["CT"]]
-        self.check_results(self.output_file.name, expected,
+        self.check_results(self.real_output_file, expected,
                            header='guide-target-sequences')
 
     def test_specificity_fastas(self):
@@ -209,7 +211,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # AA isn't allowed in 1st window by specificity fasta,
         # so 1st window changes
         expected = [["AC", "GG"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
 
 class TestDesignAutos(TestDesign.TestDesignCase):
@@ -277,7 +279,7 @@ class TestDesignFull(TestDesign.TestDesignCase):
 
         # 'auto-from-args' gives different outputs for every cluster
         # Our test only produces 1 cluster, so store the name of that file
-        self.real_output_file = self.output_file.name + '.0'
+        self.real_output_file = self.output_file.name + '.0.tsv'
         self.files.extend([self.sp_file.name, self.real_output_file])
 
         # We cannot access MAFFT, so override this function; store original so
