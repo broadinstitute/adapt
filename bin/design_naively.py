@@ -39,7 +39,8 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
     """
     start_positions = range(aln.seq_length - args.guide_length + 1)
     guides = [None for _ in start_positions]
-    ref_seq_aln = alignment.Alignment.from_list_of_seqs([ref_seq])
+    if ref_seq is not None:
+        ref_seq_aln = alignment.Alignment.from_list_of_seqs([ref_seq])
     for i in start_positions:
         # Extract the portion of the alignment that starts at i
         pos_start, pos_end = i, i + args.guide_length
@@ -52,8 +53,10 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
         # Only look at sequences with valid flanking regions
         seqs_to_consider = aln.seqs_with_required_flanking(i, args.guide_length,
                 args.required_flanking_seqs, seqs_to_consider=seqs_to_consider)
-        ref_seqs_to_consider = ref_seq_aln.seqs_with_required_flanking(
-                i, args.guide_length, args.required_flanking_seqs)
+        ref_seqs_to_consider = []
+        if ref_seq is not None:
+            ref_seqs_to_consider = ref_seq_aln.seqs_with_required_flanking(
+                    i, args.guide_length, args.required_flanking_seqs)
 
         consensus_guide = None
         mode_guide = None
