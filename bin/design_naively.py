@@ -59,7 +59,7 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
                     i, args.guide_length, args.required_flanking_seqs)
 
         consensus_guide = None
-        mode_guide = None
+        mode_guides = None
         diversity_guide = None
 
         frac_with_gap = float(len(seqs_with_gap)) / aln.num_sequences
@@ -73,9 +73,9 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
                     consensus_guide = aln_for_guide.determine_consensus_sequence(
                             seqs_to_consider=seqs_to_consider)
                 if args.mode:
-                    mode_guide = aln_for_guide.determine_most_common_sequences(
+                    mode_guides = aln_for_guide.determine_most_common_sequences(
                             seqs_to_consider=seqs_to_consider,
-                            skip_ambiguity=True)[0]
+                            skip_ambiguity=True, n=args.mode_n)
 
             if len(ref_seqs_to_consider) > 0:
                 if args.diversity:
@@ -91,14 +91,24 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
             consensus_guide = 'None'
             consensus_guide_frac = 0
 
-        if mode_guide is not None:
-            mode_guide_bound = aln.sequences_bound_by_guide(
-                    mode_guide, i, args.guide_mismatches,
-                    args.allow_gu_pairs, required_flanking_seqs=args.required_flanking_seqs)
-            mode_guide_frac = float(len(mode_guide_bound)) / aln.num_sequences
+        if mode_guides is not None:
+            mode_guides_bound = []
+            for mode_guide in mode_guides:
+                mode_guides_bound.append(aln.sequences_bound_by_guide(
+                        mode_guide, i, args.guide_mismatches,
+                        args.allow_gu_pairs, required_flanking_seqs=args.required_flanking_seqs))
+            all_mode_guides_bound = set()
+            for mode_guide_bound in mode_guides_bound:
+                all_mode_guides_bound |= set(mode_guide_bound)
+            mode_guide_frac = (float(len(all_mode_guides_bound)) /
+                               aln.num_sequences)
+            mode_guides_frac = [(float(len(mode_guide_bound)) /
+                                 aln.num_sequences)
+                                for mode_guide_bound in mode_guides_bound]
         else:
-            mode_guide = 'None'
+            mode_guides = 'None'
             mode_guide_frac = 0
+            mode_guides_frac = [0]
 
         if diversity_guide is not None:
             diversity_guide_bound = aln.sequences_bound_by_guide(
@@ -119,7 +129,7 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
         if args.consensus:
             d['consensus'] = (consensus_guide, consensus_guide_frac)
         if args.mode:
-            d['mode'] = (mode_guide, mode_guide_frac)
+            d['mode'] = ((mode_guides, mode_guides_frac), mode_guide_frac)
         if args.diversity:
             d[args.diversity] = ((diversity_guide, diversity_guide_frac), diversity_metric)
         guides[i] = d
@@ -260,7 +270,7 @@ def main(args):
         if args.consensus:
             header.extend(['target-sequence-by-consensus', 'frac-bound-by-consensus'])
         if args.mode:
-            header.extend(['target-sequence-by-mode', 'frac-bound-by-mode'])
+            header.extend(['target-sequence-by-mode', 'frac-bound-by-mode', 'total-frac-bound-by-mode'])
         if args.diversity:
             header.extend(['target-sequence-by-%s' %args.diversity, args.diversity, 'frac-bound-by-%s' %args.diversity])
 
@@ -271,7 +281,8 @@ def main(args):
                 if args.consensus:
                     line.extend(consensus_guides_in_window[i][j])
                 if args.mode:
-                    line.extend(mode_guides_in_window[i][j])
+                    line.extend(mode_guides_in_window[i][j][0])
+                    line.append(mode_guides_in_window[i][j][1])
                 if args.diversity:
                     diversity_line = (diversity_guides_in_window[i][j][0][0], 
                                       diversity_guides_in_window[i][j][1],
@@ -340,6 +351,10 @@ if __name__ == "__main__":
                   "each potential guide, then return the guides at the positions "
                   "with the lowest entropy; nucleotides are determined by the "
                   "reference sequence"))
+
+    parser.add_argument('--mode-n', type=int, default=1,
+            help=("Use the MODE_N most common sequences as the 'mode' "
+                "sequences; defaults to 1"))
 
     # Requiring flanking sequence (PFS)
     parser.add_argument('--require-flanking5',
