@@ -70,8 +70,9 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
                     consensus_guide = aln_for_guide.determine_consensus_sequence(
                             seqs_to_consider=seqs_to_consider)
                 if args.mode:
-                    mode_guide = aln_for_guide.determine_most_common_sequence(
-                            seqs_to_consider=seqs_to_consider, skip_ambiguity=True) \
+                    mode_guide = aln_for_guide.determine_most_common_sequences(
+                            seqs_to_consider=seqs_to_consider,
+                            skip_ambiguity=True)[0]
 
             if len(ref_seqs_to_consider) > 0:
                 if args.diversity:
