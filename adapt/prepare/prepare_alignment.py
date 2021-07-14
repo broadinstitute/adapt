@@ -277,6 +277,8 @@ def prepare_for(taxid, segment, ref_accs, out,
             str(sorted(list(seqs_from_small_clusters))))
         clusters = clusters[:cluster_to_remove]
 
+    # Store annotations by cluster
+    annotations = []
     # Align the curated sequences, with one alignment per cluster
     for cluster_idx, seqs_in_cluster in enumerate(clusters):
         logger.info(("Aligning sequences in cluster %d (of %d), with %d "
@@ -295,30 +297,44 @@ def prepare_for(taxid, segment, ref_accs, out,
         # Write annotation file, if requested
         if annotation_tsv:
             headers = ["type", "start", "end", "gene", "product", "note"]
-            annotation_file_written = False
+        annotation_written = False
+        for accver in seqs_aligned:
             for ref_acc in ref_accs:
-                for accver in seqs_aligned:
-                    if ref_acc in accver:
-                        annotations = ncbi_neighbors.get_annotations(ref_acc)
-                        for annotation in annotations:
-                            annotation['start'], annotation['end'] = align.convert_to_index_with_gaps(
-                                    seqs_aligned[accver],
-                                    [annotation['start'],
-                                     annotation['end']])
-                            annotation['start'] = str(annotation['start'])
-                            annotation['end'] = str(annotation['end'])
+                if ref_acc in accver:
+                    annotations.append(ncbi_neighbors.get_annotations(ref_acc))
+                    print(ref_acc, accver)
+                    for annotation in annotations[-1]:
+                        # Sort indexes as start could be larger than end if it
+                        # is a complement
+                        interval_mod = align.convert_to_index_with_gaps(
+                                seqs_aligned[accver],
+                                sorted([annotation['start'],
+                                        annotation['end']]))
+                        # Make sure start and end are appropriately placed,
+                        # accounting for sorting
+                        if annotation['start'] < annotation['end']:
+                            annotation['start'], annotation['end'] = \
+                                interval_mod
+                        else:
+                            annotation['end'], annotation['start'] = \
+                                interval_mod
+                        annotation['start'] = str(annotation['start'])
+                        annotation['end'] = str(annotation['end'])
+                    if annotation_tsv:
                         with open("%s.%i.annotation.tsv" %(annotation_tsv, cluster_idx), 'w') as fw:
                             fw.write("name\t")
                             fw.write('\t'.join(headers) + '\n')
-                            for annotation in annotations:
+                            for annotation in annotations[-1]:
                                 fw.write('\t'.join([annotation[header] for header in headers]) + '\n')
-                        annotation_file_written = True
-                        break
-                if annotation_file_written:
+                    annotation_written = True
                     break
-            if not annotation_file_written:
-                logger.warning("No reference sequence were in cluster %i, "
-                    "so no genomic annotations could be written.")
+            if annotation_written:
+                break
+        if not annotation_written:
+            logger.warning("No reference sequence were in cluster %d, "
+                           "so no genomic annotations could be determined."
+                           % cluster_idx)
+            annotations.append([])
 
         for ref_acc in added_ref_accs_to_fetch:
             for accver in seqs_aligned:
@@ -342,7 +358,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 acc = name.split('.')[0]
                 fw.write('\t'.join([name, str(year_for_acc[acc])]) + '\n')
 
-    return len(clusters), specific_against_metadata_acc
+    return len(clusters), specific_against_metadata_acc, annotations
 
 
 def fetch_sequences_for_taxonomy(taxid, segment):

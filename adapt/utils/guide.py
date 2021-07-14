@@ -138,7 +138,6 @@ def query_target_eq(query_seq, target_seq):
     return sum(1 for i in range(len(query_seq))
                if target_seq[i] == 'N' or
                not (FASTA_CODES[query_seq[i]] & FASTA_CODES[target_seq[i]])) == 0
-    return num_mismatches == 0
 
 
 def guide_binds(guide_seq, target_seq, mismatches, allow_gu_pairs):
@@ -235,7 +234,7 @@ def guide_overlap_in_seq(guide_seqs, target_seq, mismatches, allow_gu_pairs):
         mismatches: int giving threshold on number of mismatches for binding
         allow_gu_pairs: if True, tolerate G-U base pairs when
             counting mismatches between guide_seq and target_seq
-    
+
     Returns:
         set of indices in target_seq to which guide_seq binds
     """

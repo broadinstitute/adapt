@@ -748,12 +748,13 @@ def parse_genbank_xml_for_gene_features(fn, feature_keys=["mat_peptide", "CDS",
             key_values['type'] = feature_key
             key_values['start'] = int(parse_xml_node_value(intervals, 'GBInterval_from'))
             key_values['end'] = int(parse_xml_node_value(intervals, 'GBInterval_to'))
-            quals = feature.getElementsByTagName('GBFeature_quals')[0]
-            for qualifier in quals.getElementsByTagName('GBQualifier'):
-                qual_name = parse_xml_node_value(qualifier, 'GBQualifier_name')
-                if qual_name in metrics:
-                    qual_value = parse_xml_node_value(qualifier, 'GBQualifier_value')
-                    key_values[qual_name] = qual_value
+            quals = feature.getElementsByTagName('GBFeature_quals')
+            if len(quals) > 0:
+                for qualifier in quals[0].getElementsByTagName('GBQualifier'):
+                    qual_name = parse_xml_node_value(qualifier, 'GBQualifier_name')
+                    if qual_name in metrics:
+                        qual_value = parse_xml_node_value(qualifier, 'GBQualifier_value')
+                        key_values[qual_name] = qual_value
             gene_features.append(key_values)
 
     return gene_features

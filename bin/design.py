@@ -322,6 +322,7 @@ def prepare_alignments(args):
     out_tsv = []
     design_for = []
     specific_against_metadata_accs = []
+    annotations = []
     for label, tax_id, segment, ref_accs, meta_filt, meta_filt_against in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -355,23 +356,25 @@ def prepare_alignments(args):
         annotation_tsv = os.path.join(args.out_tsv_dir, label) if label \
             else args.write_annotation
 
-        nc, specific_against_metadata_acc = prepare_alignment.prepare_for(
-            tax_id, segment, ref_accs,
-            aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
-            sample_seqs=args.sample_seqs,
-            prep_influenza=args.prep_influenza,
-            years_tsv=years_tsv_tmp_name,
-            annotation_tsv=annotation_tsv,
-            cluster_threshold=args.cluster_threshold,
-            accessions_to_use=accessions_to_use_for_tax,
-            sequences_to_use=sequences_to_use_for_tax,
-            meta_filt=meta_filt,
-            meta_filt_against=meta_filt_against)
+        nc, specific_against_metadata_acc, annotation = \
+            prepare_alignment.prepare_for(
+                tax_id, segment, ref_accs,
+                aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
+                sample_seqs=args.sample_seqs,
+                prep_influenza=args.prep_influenza,
+                years_tsv=years_tsv_tmp_name,
+                annotation_tsv=annotation_tsv,
+                cluster_threshold=args.cluster_threshold,
+                accessions_to_use=accessions_to_use_for_tax,
+                sequences_to_use=sequences_to_use_for_tax,
+                meta_filt=meta_filt,
+                meta_filt_against=meta_filt_against)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
             taxid_for_fasta += [tax_id]
             specific_against_metadata_accs.append(specific_against_metadata_acc)
+            annotations.append(annotation[i])
             if taxs_to_design_for is None:
                 design_for += [True]
             else:
@@ -435,7 +438,8 @@ def prepare_alignments(args):
     else:
         years_tsv = None
 
-    return in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, specific_against_metadata_accs
+    return (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv,
+            design_for, specific_against_metadata_accs, annotations)
 
 
 def design_for_id(args):
@@ -692,10 +696,11 @@ def design_for_id(args):
 
         # Construct mutator, if necessary
         if args.predict_activity_degradation:
-            mutator = mutate.GTRSubstitutionMutator(aln, *args.predict_activity_degradation,
-                           args.predict_activity_degradation_mu,
-                           args.predict_activity_degradation_t,
-                           args.predict_activity_degradation_n)
+            mutator = mutate.GTRSubstitutionMutator(
+                aln, *args.predict_activity_degradation,
+                args.predict_activity_degradation_mu,
+                args.predict_activity_degradation_t,
+                args.predict_activity_degradation_n)
         else:
             mutator = None
 
@@ -768,7 +773,8 @@ def design_for_id(args):
                 only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
                 halt_early=args.halt_search_early, mutator=mutator)
             ts.find_and_write_targets(args.out_tsv[i],
-                best_n=args.best_n_targets, no_overlap=args.do_not_overlap)
+                best_n=args.best_n_targets, no_overlap=args.do_not_overlap,
+                annotations=args.annotations[i])
         else:
             raise Exception("Unknown search subcommand '%s'" % args.search_cmd)
 
@@ -800,12 +806,16 @@ def run(args):
                     args.out_tsv_dir)
 
         # Prepare input alignments, stored in temp fasta files
-        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, design_for, specific_against_metadata_accs = prepare_alignments(args)
+        in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, \
+            design_for, specific_against_metadata_accs, annotations = \
+            prepare_alignments(args)
+
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
         args.out_tsv = out_tsv
         args.design_for = design_for
         args.specific_against_metadata_accs = specific_against_metadata_accs
+        args.annotations = annotations
 
         if args.cover_by_year_decay:
             # args.cover_by_year_decay contains two parameters: the year
@@ -822,6 +832,7 @@ def run(args):
         args.design_for = None
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
         args.specific_against_metadata_accs = [[] for _ in range(len(args.in_fasta))]
+        args.annotations = [[] for _ in range(len(args.in_fasta))]
     else:
         raise Exception("Unknown input type subcommand '%s'" % args.input_type)
 
