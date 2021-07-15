@@ -294,48 +294,18 @@ def prepare_for(taxid, segment, ref_accs, out,
         seqs_aligned = align.align(seqs_unaligned_curated_in_cluster,
             am=aln_memoizer)
 
-        # Write annotation file, if requested
-        if annotation_tsv:
-            headers = ["type", "start", "end", "gene", "product", "note"]
-        annotation_written = False
-        for accver in seqs_aligned:
-            for ref_acc in ref_accs:
-                if ref_acc in accver:
-                    annotations.append(ncbi_neighbors.get_annotations(ref_acc))
-                    print(ref_acc, accver)
-                    for annotation in annotations[-1]:
-                        # Sort indexes as start could be larger than end if it
-                        # is a complement
-                        interval_mod = align.convert_to_index_with_gaps(
-                                seqs_aligned[accver],
-                                sorted([annotation['start'],
-                                        annotation['end']]))
-                        # Make sure start and end are appropriately placed,
-                        # accounting for sorting
-                        if annotation['start'] < annotation['end']:
-                            annotation['start'], annotation['end'] = \
-                                interval_mod
-                        else:
-                            annotation['end'], annotation['start'] = \
-                                interval_mod
-                        annotation['start'] = str(annotation['start'])
-                        annotation['end'] = str(annotation['end'])
-                    if annotation_tsv:
-                        with open("%s.%i.annotation.tsv" %(annotation_tsv, cluster_idx), 'w') as fw:
-                            fw.write("name\t")
-                            fw.write('\t'.join(headers) + '\n')
-                            for annotation in annotations[-1]:
-                                fw.write('\t'.join([annotation[header] for header in headers]) + '\n')
-                    annotation_written = True
-                    break
-            if annotation_written:
-                break
-        if not annotation_written:
+        cluster_annotation_tsv = None if annotation_tsv is None else \
+            "%s.%i.annotation.tsv" % (annotation_tsv, cluster_idx)
+        cluster_annotations = fetch_annotations(seqs_aligned, ref_accs,
+                annotation_tsv=cluster_annotation_tsv)
+
+        if len(cluster_annotations) == 0:
             logger.warning("No reference sequence were in cluster %d, "
                            "so no genomic annotations could be determined."
                            % cluster_idx)
-            annotations.append([])
+        annotations.append(cluster_annotations)
 
+        # Remove reference sequences that were only added for curation
         for ref_acc in added_ref_accs_to_fetch:
             for accver in seqs_aligned:
                 if ref_acc in accver:
@@ -416,3 +386,55 @@ def fetch_sequences_for_acc_list(acc_to_fetch):
     os.unlink(seqs_unaligned_fp.name)
 
     return seqs_unaligned
+
+
+def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
+    '''Fetch annotations given reference accessions and aligned sequences
+
+     Args:
+        seqs_aligned: dict mapping sequence header to sequence string
+        ref_accs: list of accessions of reference sequences to use for curation
+        annotation_tsv: if set, a prefix to a TSV file to which this will write
+            genomic annotations on a per cluster basis, if there is a reference
+            sequence in that cluster
+
+    Returns:
+        list of dictionaries representing annotations with keys "type",
+            "start", "end", "gene", "product", "note"
+    '''
+    # Write annotation file, if requested
+    if annotation_tsv:
+        headers = ["type", "start", "end", "gene", "product", "note"]
+
+    annotations = []
+    annotation_written = False
+    for accver in seqs_aligned:
+        for ref_acc in ref_accs:
+            if ref_acc in accver:
+                annotations = ncbi_neighbors.get_annotations(ref_acc)
+                for annotation in annotations:
+                    # Sort indexes as start could be larger than end if it
+                    # is an annotation of the complement
+                    interval_mod = align.convert_to_index_with_gaps(
+                            seqs_aligned[accver],
+                            sorted([annotation['start'],
+                                    annotation['end']]))
+                    # Make sure start and end are appropriately placed,
+                    # accounting for sorting
+                    if annotation['start'] < annotation['end']:
+                        annotation['start'], annotation['end'] = \
+                            interval_mod
+                    else:
+                        annotation['end'], annotation['start'] = \
+                            interval_mod
+                    annotation['start'] = str(annotation['start'])
+                    annotation['end'] = str(annotation['end'])
+                if annotation_tsv:
+                    with open(annotation_tsv, 'w') as fw:
+                        fw.write('\t'.join(headers) + '\n')
+                        for annotation in annotations:
+                            fw.write('\t'.join([annotation[header]
+                                                for header in headers]) + '\n')
+                return annotations
+
+    return annotations

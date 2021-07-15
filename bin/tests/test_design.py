@@ -311,12 +311,16 @@ class TestDesignFull(TestDesign.TestDesignCase):
             # 123 is the taxonomic ID used in our specificity file
             if taxid == 123:
                 return SP_SEQS
-            # If it's not the specificity taxonomic ID, test fetching the real sequences,
-            # although they won't be used
+            # If it's not the specificity taxonomic ID, test fetching the real
+            # sequences, but don't return them as they won't be used
             else:
-                return self.fetch_sequences_for_taxonomy(taxid, segment)
+                self.fetch_sequences_for_taxonomy(taxid, segment)
+                return SEQS
 
         prepare_alignment.fetch_sequences_for_taxonomy = small_fetch
+
+        # Disable warning logging to avoid annotation warning
+        logging.disable(logging.WARNING)
 
     def test_specificity_taxa(self):
         argv = super().baseArgv(input_type='auto-from-args', specific='taxa',

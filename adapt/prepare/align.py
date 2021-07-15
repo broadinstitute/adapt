@@ -456,12 +456,15 @@ def convert_to_index_with_gaps(seq, indexes):
         012345678
         ATN----GA
 
+    If indexes would go past the end of the sequence, '' is returned for
+    those indexes.
+
     Args:
         seq: an aligned sequence
-        indexes: a list of indexes
+        indexes: a list of sorted indexes
 
     Returns:
-        list of indexes that are 0-indexed and account for gaps
+        list of indexes that are 0-indexed and account for gaps.
     """
     i = 0
     current_index = 0
@@ -477,8 +480,10 @@ def convert_to_index_with_gaps(seq, indexes):
 
     if len(new_indexes) < len(indexes):
         logger.warning("Annotated indexes (%s) were out of bounds of the "
-                       "reference sequence (length %i)."
+                       "reference sequence (length %i); sequence annotations "
+                       "may not be accurate."
                        % (indexes[len(new_indexes):], i))
+        new_indexes.extend(['' for _ in range(len(indexes)-len(new_indexes))])
     return new_indexes
 
 
