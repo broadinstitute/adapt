@@ -354,7 +354,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--mode-n', type=int, default=1,
             help=("Use the MODE_N most common sequences as the 'mode' "
-                "sequences; defaults to 1"))
+                "sequences; note that this is no longer the 'mode' of the "
+                "data. Defaults to 1."))
 
     # Requiring flanking sequence (PFS)
     parser.add_argument('--require-flanking5',
