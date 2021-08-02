@@ -97,17 +97,19 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
                 mode_guides_bound.append(aln.sequences_bound_by_guide(
                         mode_guide, i, args.guide_mismatches,
                         args.allow_gu_pairs, required_flanking_seqs=args.required_flanking_seqs))
-            all_mode_guides_bound = set()
-            for mode_guide_bound in mode_guides_bound:
-                all_mode_guides_bound |= set(mode_guide_bound)
-            mode_guide_frac = (float(len(all_mode_guides_bound)) /
-                               aln.num_sequences)
+            all_mode_guides_bound = set().union(*mode_guides_bound)
+            # total_mode_guides_frac is the fraction of sequences bound by at
+            # least one of the guides
+            total_mode_guides_frac = (float(len(all_mode_guides_bound)) /
+                                      aln.num_sequences)
+            # mode_guides_frac is a list of the fraction of sequences bound by
+            # each guides
             mode_guides_frac = [(float(len(mode_guide_bound)) /
                                  aln.num_sequences)
                                 for mode_guide_bound in mode_guides_bound]
         else:
             mode_guides = 'None'
-            mode_guide_frac = 0
+            total_mode_guides_frac = 0
             mode_guides_frac = [0]
 
         if diversity_guide is not None:
@@ -129,7 +131,7 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
         if args.consensus:
             d['consensus'] = (consensus_guide, consensus_guide_frac)
         if args.mode:
-            d['mode'] = ((mode_guides, mode_guides_frac), mode_guide_frac)
+            d['mode'] = ((mode_guides, mode_guides_frac), total_mode_guides_frac)
         if args.diversity:
             d[args.diversity] = ((diversity_guide, diversity_guide_frac), diversity_metric)
         guides[i] = d

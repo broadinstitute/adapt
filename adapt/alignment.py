@@ -601,11 +601,11 @@ class Alignment(SequenceList):
                 an ambiguity code (i.e., only count sequences where all
                 bases are 'A', 'T', 'C', or 'G')
             n: number of sequences to return. If there are <n unique sequences,
-                all sequences are return in order of count
+                all sequences are returned
 
         Returns:
-            list of str representing the n most common of the sequences (or
-            None if there are no suitable strings)
+            list of str representing the n most common of the sequences in
+            order of count (or None if there are no suitable strings)
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
