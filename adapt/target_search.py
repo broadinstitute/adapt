@@ -594,7 +594,7 @@ class TargetSearcher:
             if self.mutator:
                 headers.append('guide-set-5th-pctile-mutated-activity')
             if overlapping_annotations:
-                headers.append('overlapping_annotations')
+                headers.append('overlapping-annotations')
 
             outf.write('\t'.join(headers) + '\n')
 

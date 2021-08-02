@@ -456,7 +456,7 @@ def convert_to_index_with_gaps(seq, indexes):
         012345678
         ATN----GA
 
-    If indexes would go past the end of the sequence, '' is returned for
+    If indexes would go past the end of the sequence, None is returned for
     those indexes.
 
     Args:
@@ -483,7 +483,8 @@ def convert_to_index_with_gaps(seq, indexes):
                        "reference sequence (length %i); sequence annotations "
                        "may not be accurate."
                        % (indexes[len(new_indexes):], i))
-        new_indexes.extend(['' for _ in range(len(indexes)-len(new_indexes))])
+        new_indexes.extend([None for _ in
+                            range(len(indexes)-len(new_indexes))])
     return new_indexes
 
 

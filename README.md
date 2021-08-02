@@ -216,7 +216,7 @@ These arguments are defined below for each INPUT-TYPE.
 ```bash
 design.py [SEARCH-TYPE] fasta [fasta] [fasta ...] -o [out-tsv] [out-tsv ...]
 ```
-where `[fasta]` is a path to an aligned FASTA file for a taxon and `[out-tsv]` specifies where to write the output TSV file.
+where `[fasta]` is a path to an aligned FASTA file for a taxon and `[out-tsv]` specifies the basename of where to write the output TSV file (_without_ the `.tsv` suffix).
 If there are more than one space-separated FASTA, there must be an equivalent number of output TSV files; the _i_'th output gives designs for the _i_'th input FASTA.
 
 ##### If INPUT-TYPE is `auto-from-args`:

@@ -76,8 +76,8 @@ class TestAlignStats(unittest.TestCase):
         i = [1, 3, 5]
 
         expected_a = [0, 2, 8]
-        expected_b = [2, 5, '']
-        expected_c = ['', '', '']
+        expected_b = [2, 5, None]
+        expected_c = [None, None, None]
 
         self.assertEqual(align.convert_to_index_with_gaps(a, i), expected_a)
         self.assertEqual(align.convert_to_index_with_gaps(b, i), expected_b)

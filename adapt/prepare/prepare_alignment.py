@@ -389,11 +389,14 @@ def fetch_sequences_for_acc_list(acc_to_fetch):
 
 
 def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
-    '''Fetch annotations given reference accessions and aligned sequences
+    """Fetch annotations given reference accessions and aligned sequences
 
      Args:
         seqs_aligned: dict mapping sequence header to sequence string
-        ref_accs: list of accessions of reference sequences to use for curation
+        ref_accs: list of accessions of reference sequences; an arbitrary
+            reference accession from this list that is also in the aligned
+            sequences will be used for annotations; positions will be modified
+            to match the alignment
         annotation_tsv: if set, a prefix to a TSV file to which this will write
             genomic annotations on a per cluster basis, if there is a reference
             sequence in that cluster
@@ -401,12 +404,8 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
     Returns:
         list of dictionaries representing annotations with keys "type",
             "start", "end", "gene", "product", "note"
-    '''
-    # Write annotation file, if requested
-    if annotation_tsv:
-        headers = ["type", "start", "end", "gene", "product", "note"]
+    """
 
-    annotations = []
     annotation_written = False
     for accver in seqs_aligned:
         for ref_acc in ref_accs:
@@ -429,7 +428,10 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
                             interval_mod
                     annotation['start'] = str(annotation['start'])
                     annotation['end'] = str(annotation['end'])
+
+                # Write annotation file, if requested
                 if annotation_tsv:
+                    headers = ["type", "start", "end", "gene", "product", "note"]
                     with open(annotation_tsv, 'w') as fw:
                         fw.write('\t'.join(headers) + '\n')
                         for annotation in annotations:
@@ -437,4 +439,4 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
                                                 for header in headers]) + '\n')
                 return annotations
 
-    return annotations
+    return []

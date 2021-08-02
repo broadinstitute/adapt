@@ -50,7 +50,7 @@ class TestDesign(object):
             self.output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
             self.output_file.close()
 
-            self.files = [self.input_file.name, self.output_file.name]
+            self.files_to_delete = [self.input_file.name, self.output_file.name]
 
         def check_results(self, file, expected, header='target-sequences'):
             """Check the results of the test output
@@ -148,7 +148,7 @@ class TestDesign(object):
             return argv
 
         def tearDown(self):
-            for file in self.files:
+            for file in self.files_to_delete:
                 if os.path.isfile(file):
                     os.unlink(file)
             # Re-enable logging
@@ -162,7 +162,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
     def setUp(self):
         super().setUp()
         self.real_output_file = self.output_file.name + '.tsv'
-        self.files.append(self.real_output_file)
+        self.files_to_delete.append(self.real_output_file)
 
         # Write to temporary input fasta
         seq_io.write_fasta(SEQS, self.input_file.name)
@@ -202,7 +202,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
 
         seq_io.write_fasta(SP_SEQS, self.sp_fasta.name)
 
-        self.files.append(self.sp_fasta.name)
+        self.files_to_delete.append(self.sp_fasta.name)
 
         argv = super().baseArgv(specific='fasta',
             specificity_file=self.sp_fasta.name)
@@ -280,7 +280,7 @@ class TestDesignFull(TestDesign.TestDesignCase):
         # 'auto-from-args' gives different outputs for every cluster
         # Our test only produces 1 cluster, so store the name of that file
         self.real_output_file = self.output_file.name + '.0.tsv'
-        self.files.extend([self.sp_file.name, self.real_output_file])
+        self.files_to_delete.extend([self.sp_file.name, self.real_output_file])
 
         # We cannot access MAFFT, so override this function; store original so
         # it can be fixed for future tests

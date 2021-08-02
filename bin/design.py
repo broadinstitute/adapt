@@ -1266,9 +1266,9 @@ def argv_to_args(argv):
               "given for differential identification"))
     input_fasta_subparser.add_argument('-o', '--out-tsv',
         nargs='+', required=True,
-        help=("Path to output TSV. If more than one input FASTA is given, the "
-              "same number of output TSVs must be given; each output TSV "
-              "corresponds to an input FASTA."))
+        help=("Path to output TSV, without the file extension. If more than "
+              "one input FASTA is given, the same number of output TSVs must "
+              "be given; each output TSV corresponds to an input FASTA."))
     input_fasta_subparser.add_argument('--cover-by-year-decay', nargs=3,
         action=ParseCoverDecayWithYearsFile,
         help=("<A> <B> <C>; if set, group input sequences by year and set a "
@@ -1399,8 +1399,8 @@ def argv_to_args(argv):
         help=("Label of segment (e.g., 'S') if there is one, or 'None' if "
               "unsegmented"))
     input_autoargs_subparser.add_argument('out_tsv',
-        help=("Path to output TSVs, with one per cluster; output TSVs are "
-              "OUT_TSV.[cluster-number].tsv"))
+        help=("Path to output TSVs, without the file extension, with one per "
+              "cluster; output TSVs are OUT_TSV.[cluster-number].tsv"))
     input_autoargs_subparser.add_argument('--ref-accs', nargs='+',
         help=("Accession(s) of reference sequence(s) to use for curation (space-"
               "separated). If not set, ADAPT will automatically get accessions "
