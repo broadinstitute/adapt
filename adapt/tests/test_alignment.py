@@ -543,12 +543,18 @@ class TestAlignment(unittest.TestCase):
                          [0,1,2,3,4])
 
     def test_most_common_sequence_simple(self):
-        self.assertEqual(self.d_seqs_aln.determine_most_common_sequence(
+        self.assertEqual(self.d_seqs_aln.determine_most_common_sequences(
                             skip_ambiguity=False),
-                         'ATCGAA')
-        self.assertEqual(self.d_seqs_aln.determine_most_common_sequence(
+                         ['ATCGAA'])
+        self.assertEqual(self.d_seqs_aln.determine_most_common_sequences(
                             skip_ambiguity=True),
-                         'ATCGAA')
+                         ['ATCGAA'])
+        self.assertEqual(self.d_seqs_aln.determine_most_common_sequences(
+                            n=2),
+                         ['ATCGAA','GGGCCC'])
+        self.assertEqual(self.d_seqs_aln.determine_most_common_sequences(
+                            n=3),
+                         ['ATCGAA','GGGCCC'])
 
     def test_most_common_sequence_with_ambiguity(self):
         seqs = ['ATCNAA',
@@ -560,10 +566,18 @@ class TestAlignment(unittest.TestCase):
                 'GGGCCC']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
 
-        self.assertEqual(aln.determine_most_common_sequence(skip_ambiguity=False),
-                         'ATCNAA')
-        self.assertEqual(aln.determine_most_common_sequence(skip_ambiguity=True),
-                         'GGGCCC')
+        self.assertEqual(aln.determine_most_common_sequences(skip_ambiguity=False),
+                         ['ATCNAA'])
+        self.assertEqual(aln.determine_most_common_sequences(skip_ambiguity=True),
+                         ['GGGCCC'])
+        self.assertEqual(aln.determine_most_common_sequences(skip_ambiguity=False, n=2),
+                         ['ATCNAA', 'GGGCCC'])
+        self.assertEqual(aln.determine_most_common_sequences(skip_ambiguity=True, n=2),
+                         ['GGGCCC', 'ATCGAA'])
+        self.assertEqual(aln.determine_most_common_sequences(skip_ambiguity=False, n=3),
+                         ['ATCNAA', 'GGGCCC', 'ATCGAA'])
+        self.assertEqual(aln.determine_most_common_sequences(skip_ambiguity=True, n=3),
+                         ['GGGCCC', 'ATCGAA'])
 
     def test_position_entropy_simple(self):
         seqs = ['ACCCC',
