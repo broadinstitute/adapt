@@ -431,12 +431,12 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
 
                 # Write annotation file, if requested
                 if annotation_tsv:
-                    headers = ["type", "start", "end", "gene", "product", "note"]
+                    header = ["type", "start", "end", "gene", "product", "note"]
                     with open(annotation_tsv, 'w') as fw:
-                        fw.write('\t'.join(headers) + '\n')
+                        fw.write('\t'.join(header) + '\n')
                         for annotation in annotations:
-                            fw.write('\t'.join([annotation[header]
-                                                for header in headers]) + '\n')
+                            fw.write('\t'.join([annotation[col_name]
+                                                for col_name in header]) + '\n')
                 return annotations
 
     return []
