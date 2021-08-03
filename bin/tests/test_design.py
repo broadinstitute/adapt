@@ -50,7 +50,7 @@ class TestDesign(object):
             self.output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
             self.output_file.close()
 
-            self.files = [self.input_file.name, self.output_file.name]
+            self.files_to_delete = [self.input_file.name, self.output_file.name]
 
         def check_results(self, file, expected, header='target-sequences'):
             """Check the results of the test output
@@ -148,7 +148,7 @@ class TestDesign(object):
             return argv
 
         def tearDown(self):
-            for file in self.files:
+            for file in self.files_to_delete:
                 if os.path.isfile(file):
                     os.unlink(file)
             # Re-enable logging
@@ -161,6 +161,8 @@ class TestDesignFasta(TestDesign.TestDesignCase):
 
     def setUp(self):
         super().setUp()
+        self.real_output_file = self.output_file.name + '.tsv'
+        self.files_to_delete.append(self.real_output_file)
 
         # Write to temporary input fasta
         seq_io.write_fasta(SEQS, self.input_file.name)
@@ -171,7 +173,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
         expected = [["AA"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
     def test_max_activity(self):
         argv = super().baseArgv(objective='maximize-activity')
@@ -180,7 +182,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # Doesn't use model, just greedy binary prediction with 0 mismatches
         # (so same outputs as min-guides)
         expected = [["AA"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
     def test_complete_targets(self):
         argv = super().baseArgv(search_type='complete-targets')
@@ -189,7 +191,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # Since sequences are short and need 1 base for primer on each side,
         # only finds 1 target in middle
         expected = [["CT"]]
-        self.check_results(self.output_file.name, expected,
+        self.check_results(self.real_output_file, expected,
                            header='guide-target-sequences')
 
     def test_specificity_fastas(self):
@@ -200,7 +202,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
 
         seq_io.write_fasta(SP_SEQS, self.sp_fasta.name)
 
-        self.files.append(self.sp_fasta.name)
+        self.files_to_delete.append(self.sp_fasta.name)
 
         argv = super().baseArgv(specific='fasta',
             specificity_file=self.sp_fasta.name)
@@ -209,7 +211,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # AA isn't allowed in 1st window by specificity fasta,
         # so 1st window changes
         expected = [["AC", "GG"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
 
 class TestDesignAutos(TestDesign.TestDesignCase):
@@ -277,8 +279,8 @@ class TestDesignFull(TestDesign.TestDesignCase):
 
         # 'auto-from-args' gives different outputs for every cluster
         # Our test only produces 1 cluster, so store the name of that file
-        self.real_output_file = self.output_file.name + '.0'
-        self.files.extend([self.sp_file.name, self.real_output_file])
+        self.real_output_file = self.output_file.name + '.0.tsv'
+        self.files_to_delete.extend([self.sp_file.name, self.real_output_file])
 
         # We cannot access MAFFT, so override this function; store original so
         # it can be fixed for future tests
@@ -309,12 +311,16 @@ class TestDesignFull(TestDesign.TestDesignCase):
             # 123 is the taxonomic ID used in our specificity file
             if taxid == 123:
                 return SP_SEQS
-            # If it's not the specificity taxonomic ID, test fetching the real sequences,
-            # although they won't be used
+            # If it's not the specificity taxonomic ID, test fetching the real
+            # sequences, but don't return them as they won't be used
             else:
-                return self.fetch_sequences_for_taxonomy(taxid, segment)
+                self.fetch_sequences_for_taxonomy(taxid, segment)
+                return SEQS
 
         prepare_alignment.fetch_sequences_for_taxonomy = small_fetch
+
+        # Disable warning logging to avoid annotation warning
+        logging.disable(logging.WARNING)
 
     def test_specificity_taxa(self):
         argv = super().baseArgv(input_type='auto-from-args', specific='taxa',
