@@ -138,30 +138,45 @@ def read_taxid_from_ncbi_url(url):
     return int(queries['taxid'][0])
 
 
-def fetch_neighbors_table(given_taxid):
+def determine_current_taxid(given_taxid):
+    """Determine NCBI's current taxonomic ID given an (old) taxonomic ID
+
+    Args:
+        given_taxid: previously used NCBI taxonomic ID
+
+    Returns:
+        most current NCBI taxonomic ID
+    """
+    taxid = given_taxid
+    taxid_in_xml = None
+    redirects = 0
+
+    # Set at most 5 redirects to avoid infinite looping
+    while ((taxid_in_xml != 0) and (redirects <= 5)):
+        tax_url = ncbi_taxonomy_url(taxid)
+        tax_raw_xml = urlopen_with_tries(tax_url)
+        taxid_in_xml = parse_taxonomy_xml_for_aka_taxid(tax_raw_xml)
+        if taxid_in_xml != 0:
+            logger.warning("Taxid %d is being redirected to taxid %d" %
+                           (taxid, taxid_in_xml))
+            taxid = taxid_in_xml
+        else:
+            logger.debug("Taxid %d did not need to be redirected" %
+                       (taxid))
+        redirects += 1
+    return taxid
+
+def fetch_neighbors_table(taxid):
     """Fetch genome neighbors table from NCBI.
 
     Args:
-        given_taxid: taxonomic ID to download neighbors for
+        taxid: taxonomic ID to download neighbors for
 
     Yields:
         lines, where each line is from the genome neighbors
         table and each line is a str
     """
-    taxid = given_taxid
     logger.debug(("Fetching table of neighbors for tax %d") % taxid)
-
-    tax_url = ncbi_taxonomy_url(taxid)
-    tax_raw_xml = urlopen_with_tries(tax_url)
-    taxid_in_xml = parse_taxonomy_xml_for_aka_taxid(tax_raw_xml)
-    redirects = 0
-
-    # Set at most 5 redirects to avoid infinite looping
-    while ((taxid_in_xml != 0) and (redirects < 5)):
-        logger.warning("Taxid %d is being redirected to taxid %d" %
-                       (taxid, taxid_in_xml))
-        taxid = taxid_in_xml
-        redirects += 1
 
     url = ncbi_neighbors_url(taxid)
     r = urlopen_with_tries(url)
