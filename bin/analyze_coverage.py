@@ -55,7 +55,8 @@ def read_designs(fn):
         else:
             # This design contains primers and guides
             design = coverage_analysis.Design(
-                    cols['guide-target-sequences'].split(' '),
+                    cols['guide-target-sequences'].split(' ')
+                    if len(cols['guide-target-sequences']) > 0 else [],
                     (cols['left-primer-target-sequences'].split(' '),
                      cols['right-primer-target-sequences'].split(' ')))
         designs[i + 1] = design
@@ -165,8 +166,12 @@ def main(args):
             "activity is high."))
     elif args.guide_mismatches is not None:
         analyzer = coverage_analysis.CoverageAnalyzerWithMismatchModel(
-                seqs, designs, args.guide_mismatches, args.primer_mismatches,
-                allow_gu_pairs, fully_sensitive=args.fully_sensitive)
+                seqs, designs, args.guide_mismatches,
+                primer_mismatches=args.primer_mismatches,
+                allow_gu_pairs=allow_gu_pairs,
+                fully_sensitive=args.fully_sensitive,
+                primer_terminal_mismatches=args.primer_terminal_mismatches,
+                bases_from_terminal=args.bases_from_terminal)
     elif args.predict_activity_model_path:
         cla_path, reg_path = args.predict_activity_model_path
         if args.predict_activity_thres:
@@ -180,9 +185,12 @@ def main(args):
                 regression_threshold=reg_thres)
         highly_active = args.predict_activity_require_highly_active
         analyzer = coverage_analysis.CoverageAnalyzerWithPredictedActivity(
-                seqs, designs, predictor, args.primer_mismatches,
+                seqs, designs, predictor,
+                primer_mismatches=args.primer_mismatches,
                 highly_active=highly_active,
-                fully_sensitive=args.fully_sensitive)
+                fully_sensitive=args.fully_sensitive,
+                primer_terminal_mismatches=args.primer_terminal_mismatches,
+                bases_from_terminal=args.bases_from_terminal)
     else:
         raise Exception(("One of --guide-mismatches or "
             "--predict-activity-model-path must be set"))
@@ -249,6 +257,17 @@ if __name__ == "__main__":
         help=("Allow for this number of mismatches when determining "
               "whether a primer covers a sequence (ignore this if "
               "the targets only consist of guides)"))
+    parser.add_argument('-ptm', '--primer-terminal-mismatches',
+        type=int,
+        help=("Allow for this number of mismatches in the BASES_FROM_TERMINAL "
+              "bases from the 3' end when determining whether a primer covers "
+              "a sequence (ignore this if the targets only consist of "
+              "guides)"))
+    parser.add_argument('--bases-from-terminal',
+        type=int, default=5,
+        help=("Allow for PRIMER_TERMINAL_MISMATCHES in this many bases from "
+              "the 3' end when determining whether a primer covers a sequence"
+              "(ignore this if the targets only consist of guides)"))
 
     # Parameters determining whether a guide binds to target based on
     # mismatch model

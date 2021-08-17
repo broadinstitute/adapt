@@ -38,6 +38,7 @@ class CoverageAnalyzer:
     """
 
     def __init__(self, seqs, designs, primer_mismatches=None,
+            primer_terminal_mismatches=None, bases_from_terminal=5,
             fully_sensitive=False):
         """
         Args:
@@ -47,12 +48,21 @@ class CoverageAnalyzer:
             primer_mismatches: number of mismatches to tolerate when determining
                 whether a primer hybridizes to a target sequence (if not
                 set, the designs are assumed to not contain primers)
+            primer_terminal_mismatches: number of mismatches to tolerate in
+                the bases_from_terminal bases from the 3' end when determining
+                whether a primer hybridizes to a target sequence (if not
+                set, don't consider terminal mismatches)
+            bases_from_terminal: number of bases from 3' end in which to check
+                for primer_terminal_mismatches (defaults to 5, unused if
+                primer_terminal_mismatches is not set)
             fully_sensitive: if True, use a fully sensitive lookup of
                 primers and guides (slower)
         """
         self.seqs = seqs
         self.designs = designs
         self.primer_mismatches = primer_mismatches
+        self.primer_terminal_mismatches = primer_terminal_mismatches
+        self.bases_from_terminal = bases_from_terminal
         self.seqs_are_indexed = False
         self.seqs_index_k = None
         self.fully_sensitive = fully_sensitive
@@ -100,6 +110,46 @@ class CoverageAnalyzer:
         """
         self.seqs_index.clear()
         self.seqs_are_indexed = False
+
+    def evaluate_pos_by_terminal_mismatches_and_mismatches(self, seq,
+            target_seq, pos, mismatches, terminal_mismatches,
+            bases_from_terminal, left, allow_gu_pairs=False):
+        """Evaluate binding with a mismatch model.
+
+        Args:
+            seq: guide or primer sequence to lookup
+            target_seq: target sequence against which to check
+            pos: list of positions indicating subsequence in target_seq
+                to check for binding of seq
+            mismatches: number of mismatches to tolerate in the
+                bases_from_terminal bases when determining whether seq binds to
+                target_seq at a position
+            bases_from_terminal: number of bases from 3' end in which to check
+                for mismatches
+            left: if True, consider the 3' end as the right end (and so check
+                the last bases_from_terminal bases for mismatches); else,
+                consider the 3' end as the left end (and so check the first
+                bases_from_terminal bases for mismatches)
+            allow_gu_pairs: if True, tolerate G-U base pairs between
+                seq and a subsequence of target_seq
+
+        Returns:
+            set of positions in pos where seq binds to target_seq
+        """
+        start_shift = len(seq)-bases_from_terminal if left else 0
+        end_shift = len(seq) if left else bases_from_terminal
+        subseq = seq[start_shift:end_shift]
+
+        bind_pos = set()
+        for i in pos:
+            target_subseq = target_seq[(i+start_shift):(i+end_shift)]
+            if guide.guide_binds(subseq, target_subseq, terminal_mismatches,
+                    allow_gu_pairs):
+                target_subseq = target_seq[i:(i + len(seq))]
+                if guide.guide_binds(seq, target_subseq, mismatches,
+                        allow_gu_pairs):
+                    bind_pos.add(i)
+        return bind_pos
 
     def evaluate_pos_by_mismatches(self, seq, target_seq, pos,
             mismatches, allow_gu_pairs):
@@ -246,6 +296,81 @@ class CoverageAnalyzer:
                     break
         return seqs_bound
 
+    def seqs_where_primers_bind(self, primer_left_seqs, primer_right_seqs):
+        """Determine sequences to which a primer pair binds.
+
+        Args:
+            primer_left_seqs: primers on the 5' end of the target
+            primer_right_seqs: primers on the 3' end of the target
+
+        Returns:
+            collection of names of sequences in self.seqs to which
+            some pair of primers binds
+        """
+        if self.primer_terminal_mismatches is not None:
+            def primer_left_bind_fn(seq, target_seq, pos):
+                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                    seq, target_seq, pos, self.primer_mismatches,
+                    self.primer_terminal_mismatches, self.bases_from_terminal,
+                    True)
+            def primer_right_bind_fn(seq, target_seq, pos):
+                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                    seq, target_seq, pos, self.primer_mismatches,
+                    self.primer_terminal_mismatches, self.bases_from_terminal,
+                    False)
+        else:
+            def primer_bind_fn(seq, target_seq, pos):
+                return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
+                    self.primer_mismatches, False)
+            primer_left_bind_fn = primer_bind_fn
+            primer_right_bind_fn = primer_bind_fn
+
+        seqs_bound = set()
+        seqs_bound_left = set()
+        seqs_bound_right = set()
+        for seq_name, target_seq in self.seqs.items():
+            primer_left_bind_pos = set()
+            min_primer_len_at_pos = {}
+            for primer_seq in primer_left_seqs:
+                bind_pos = self.find_binding_pos(seq_name, primer_seq,
+                        primer_left_bind_fn)
+                primer_left_bind_pos.update(bind_pos)
+                for pos in bind_pos:
+                    if pos not in min_primer_len_at_pos:
+                        min_primer_len_at_pos[pos] = len(primer_seq)
+                    else:
+                        min_primer_len_at_pos[pos] = min(
+                                min_primer_len_at_pos[pos], len(primer_seq))
+            if len(primer_left_bind_pos) > 0:
+                seqs_bound_left.add(seq_name)
+            primer_right_bind_pos = set()
+            for primer_seq in primer_right_seqs:
+                bind_pos = self.find_binding_pos(seq_name, primer_seq,
+                        primer_right_bind_fn)
+                primer_right_bind_pos.update(bind_pos)
+            if len(primer_right_bind_pos) > 0:
+                seqs_bound_right.add(seq_name)
+
+            # Determine if there exists some combination of (5' primer)/
+            # (3' primer) that binds to target_seq
+            added_seq = False
+            for pl_pos in primer_left_bind_pos:
+                # Consider all primers that fall *after* (3' of) pl
+                primer_len = min_primer_len_at_pos[pl_pos]
+                for pr_pos in primer_right_bind_pos:
+                    if pr_pos > pl_pos:
+                        seqs_bound.add(seq_name)
+                        added_seq = True
+                        break
+                if added_seq:
+                    break
+        logging.debug("Number of seqs bound by left primer: %i" %
+                      len(seqs_bound_left))
+        logging.debug("Number of seqs bound by right primer: %i" %
+                      len(seqs_bound_right))
+
+        return seqs_bound
+
     def seqs_where_targets_bind(self, guide_seqs, primer_left_seqs,
            primer_right_seqs):
         """Determine sequences to which a target binds.
@@ -259,11 +384,28 @@ class CoverageAnalyzer:
             collection of names of sequences in self.seqs to which
             some pair of primers and guide between them binds
         """
-        def primer_bind_fn(seq, target_seq, pos):
-            return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
-                self.primer_mismatches, False)
+        if self.primer_terminal_mismatches is not None:
+            def primer_left_bind_fn(seq, target_seq, pos):
+                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                    seq, target_seq, pos, self.primer_mismatches,
+                    self.primer_terminal_mismatches, self.bases_from_terminal,
+                    True)
+            def primer_right_bind_fn(seq, target_seq, pos):
+                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                    seq, target_seq, pos, self.primer_mismatches,
+                    self.primer_terminal_mismatches, self.bases_from_terminal,
+                    False)
+        else:
+            def primer_bind_fn(seq, target_seq, pos):
+                return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
+                    self.primer_mismatches, False)
+            primer_left_bind_fn = primer_bind_fn
+            primer_right_bind_fn = primer_bind_fn
 
         seqs_bound = set()
+        seqs_bound_left = set()
+        seqs_bound_right = set()
+        seqs_bound_guide = set()
         for seq_name, target_seq in self.seqs.items():
             guide_bind_pos = set()
             min_guide_len_at_pos = {}
@@ -277,11 +419,13 @@ class CoverageAnalyzer:
                     else:
                         min_guide_len_at_pos[pos] = min(
                                 min_guide_len_at_pos[pos], len(guide_seq))
+            if len(guide_bind_pos) > 0:
+                seqs_bound_guide.add(seq_name)
             primer_left_bind_pos = set()
             min_primer_len_at_pos = {}
             for primer_seq in primer_left_seqs:
                 bind_pos = self.find_binding_pos(seq_name, primer_seq,
-                        primer_bind_fn)
+                        primer_left_bind_fn)
                 primer_left_bind_pos.update(bind_pos)
                 for pos in bind_pos:
                     if pos not in min_primer_len_at_pos:
@@ -289,11 +433,15 @@ class CoverageAnalyzer:
                     else:
                         min_primer_len_at_pos[pos] = min(
                                 min_primer_len_at_pos[pos], len(primer_seq))
+            if len(primer_left_bind_pos) > 0:
+                seqs_bound_left.add(seq_name)
             primer_right_bind_pos = set()
             for primer_seq in primer_right_seqs:
                 bind_pos = self.find_binding_pos(seq_name, primer_seq,
-                        primer_bind_fn)
+                        primer_right_bind_fn)
                 primer_right_bind_pos.update(bind_pos)
+            if len(primer_right_bind_pos) > 0:
+                seqs_bound_right.add(seq_name)
 
             # Determine if there exists some combination of (5' primer)/guide/
             # (3' primer) that binds to target_seq
@@ -315,6 +463,12 @@ class CoverageAnalyzer:
                         break
                 if added_seq:
                     break
+        logging.debug("Number of seqs bound by guide: %i" %
+                      len(seqs_bound_guide))
+        logging.debug("Number of seqs bound by left primer: %i" %
+                      len(seqs_bound_left))
+        logging.debug("Number of seqs bound by right primer: %i" %
+                      len(seqs_bound_right))
 
         return seqs_bound
 
@@ -328,12 +482,13 @@ class CoverageAnalyzer:
             collection of sequences that are bound by the guides (and
             possibly primers) in design
         """
+        if len(design.guides) == 0:
+            return self.seqs_where_primers_bind(*design.primers)
         if design.is_complete_target:
             primers_left, primers_right = design.primers
             return self.seqs_where_targets_bind(design.guides,
                     primers_left, primers_right)
-        else:
-            return self.seqs_where_guides_bind(design.guides)
+        return self.seqs_where_guides_bind(design.guides)
 
     def frac_of_seqs_bound(self):
         """Determine the fraction of sequences bound by each design.
@@ -372,8 +527,8 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
     of mismatches for guide-target binding.
     """
 
-    def __init__(self, seqs, designs, guide_mismatches, primer_mismatches=None,
-            allow_gu_pairs=True, fully_sensitive=False):
+    def __init__(self, seqs, designs, guide_mismatches, allow_gu_pairs=True,
+            **kwargs):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -381,16 +536,11 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
             designs: dict mapping an identifier for a design to Design object
             guide_mismatches: number of mismatches to tolerate when determining
                 whether a guide hybridizes to a target sequence
-            primer_mismatches: number of mismatches to tolerate when determining
-                whether a primer hybridizes to a target sequence (if not
-                set, the designs are assumed to not contain primers)
             allow_gu_pairs: if True, tolerate G-U base pairs between a guide
                 and target when computing whether a guide binds
-            fully_sensitive: if True, use a fully sensitive lookup of
-                primers and guides (slower)
+            kwargs: keyword arguments from CoverageAnalyzer
         """
-        super().__init__(seqs, designs, primer_mismatches=primer_mismatches,
-                fully_sensitive=fully_sensitive)
+        super().__init__(seqs, designs, **kwargs)
         self.guide_mismatches = guide_mismatches
         self.allow_gu_pairs = allow_gu_pairs
 
@@ -419,8 +569,8 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
     highly active.
     """
 
-    def __init__(self, seqs, designs, predictor, primer_mismatches=None,
-            highly_active=False, fully_sensitive=False):
+    def __init__(self, seqs, designs, predictor, highly_active=False,
+            **kwargs):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -429,16 +579,11 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
             predictor: adapt.utils.predict_activity.Predictor object, used to
                 determine whether a guide-target pair is predicted to be
                 active
-            primer_mismatches: number of mismatches to tolerate when determining
-                whether a primer hybridizes to a target sequence (if not
-                set, the designs are assumed to not contain primers)
             highly_active: if True, determine a guide-target pair to bind if
                  it is predicted to be highly active (not just active)
-            fully_sensitive: if True, use a fully sensitive lookup of
-                primers and guides (slower)
+            kwargs: keyword arguments from CoverageAnalyzer
         """
-        super().__init__(seqs, designs, primer_mismatches=primer_mismatches,
-                fully_sensitive=fully_sensitive)
+        super().__init__(seqs, designs, **kwargs)
         self.predictor = predictor
         self.highly_active = highly_active
 

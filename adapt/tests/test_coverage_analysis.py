@@ -33,7 +33,7 @@ class TestCoverageAnalysisWithMismatchModel(unittest.TestCase):
                 'design3': self.design3
         }
         self.ca = coverage_analysis.CoverageAnalyzerWithMismatchModel(self.seqs,
-                designs, 1, 1, allow_gu_pairs=False)
+                designs, 1, primer_mismatches=1, allow_gu_pairs=False)
 
         # Index sequences with a k-mer length of k=2 to ensure k-mers
         # will be found
@@ -81,6 +81,61 @@ class TestCoverageAnalysisWithMismatchModel(unittest.TestCase):
                 self.ca.seqs_where_targets_bind({'TTCGA'},
                     {'TCGA'}, {'CGAT'}),
                 {'seq1'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_targets_bind({'TTCGA'},
+                    {'TCGT'}, {'CGAT'}),
+                {'seq1'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_targets_bind({'TTCGA'},
+                    {'TCGA'}, {'GGAA'}),
+                {'seq1'}
+        )
+        self.ca.primer_terminal_mismatches = 0
+        self.ca.bases_from_terminal = 1
+        self.assertEqual(
+                self.ca.seqs_where_targets_bind({'TTCGA'},
+                    {'TCGA'}, {'CGAT'}),
+                {'seq1'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_targets_bind({'TTCGA'},
+                    {'TCGT'}, {'CGAT'}),
+                set()
+        )
+        self.assertEqual(
+                self.ca.seqs_where_targets_bind({'TTCGT'},
+                    {'TCGA'}, {'GGAA'}),
+                set()
+        )
+
+    def test_seqs_where_primers_bind(self):
+        self.assertEqual(
+                self.ca.seqs_where_primers_bind({'ATCGAAT'}, {'CGAT'}),
+                {'seq1', 'seq2'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_primers_bind({'ATCGAAG'}, {'CGAT'}),
+                {'seq1', 'seq2'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_primers_bind({'ATCGAAT'}, {'TGAT'}),
+                {'seq1'}
+        )
+        self.ca.primer_terminal_mismatches = 0
+        self.ca.bases_from_terminal = 1
+        self.assertEqual(
+                self.ca.seqs_where_primers_bind({'ATCGAAT'}, {'CGAT'}),
+                {'seq1', 'seq2'}
+        )
+        self.assertEqual(
+                self.ca.seqs_where_primers_bind({'ATCGAAG'}, {'CGAT'}),
+                set()
+        )
+        self.assertEqual(
+                self.ca.seqs_where_primers_bind({'ATCGAAT'}, {'TGAT'}),
+                set()
         )
 
     def test_seqs_bound_by_design(self):
@@ -149,7 +204,8 @@ class TestCoverageAnalysisWithPredictedActivity(unittest.TestCase):
                 'seq3': 'TGCAACCGATCCGT'
         }
         self.ca = coverage_analysis.CoverageAnalyzerWithPredictedActivity(
-                self.seqs, {}, predictor, 1, highly_active=True)
+                self.seqs, {}, predictor, primer_mismatches=1,
+                highly_active=True)
 
         # Index sequences with a k-mer length of k=2 to ensure k-mers
         # will be found
