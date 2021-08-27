@@ -333,6 +333,8 @@ class CoverageAnalyzer:
         seqs_bound = set()
         seqs_bound_left = set()
         seqs_bound_right = set()
+        primer_left_bind_pos_across_seq = set()
+        primer_right_bind_pos_across_seq = set()
         for seq_name, target_seq in self.seqs.items():
             primer_left_bind_pos = set()
             min_primer_len_at_pos = {}
@@ -369,13 +371,19 @@ class CoverageAnalyzer:
                             self.max_target_length >= pr_end_pos-pl_pos):
                         seqs_bound.add(seq_name)
                         added_seq = True
+                        primer_left_bind_pos_across_seq.add(pl_pos)
+                        primer_right_bind_pos_across_seq.add(pr_pos)
                         break
                 if added_seq:
                     break
-        logging.debug("Number of seqs bound by left primer: %i" %
+        logging.info("Number of seqs bound by left primer: %i" %
                       len(seqs_bound_left))
-        logging.debug("Number of seqs bound by right primer: %i" %
+        logging.info("Number of seqs bound by right primer: %i" %
                       len(seqs_bound_right))
+        logging.debug("Left primer binding positions: %s" %
+                      primer_left_bind_pos_across_seq)
+        logging.debug("Right primer binding positions: %s" %
+                      primer_right_bind_pos_across_seq)
 
         return seqs_bound
 
@@ -414,6 +422,9 @@ class CoverageAnalyzer:
         seqs_bound_left = set()
         seqs_bound_right = set()
         seqs_bound_guide = set()
+        primer_left_bind_pos_across_seq = set()
+        primer_right_bind_pos_across_seq = set()
+        guide_bind_pos_across_seq = set()
         for seq_name, target_seq in self.seqs.items():
             guide_bind_pos = set()
             min_guide_len_at_pos = {}
@@ -470,17 +481,26 @@ class CoverageAnalyzer:
                                     self.max_target_length >= pr_end_pos-pl_pos)):
                                 seqs_bound.add(seq_name)
                                 added_seq = True
+                                primer_left_bind_pos_across_seq.add(pl_pos)
+                                primer_right_bind_pos_across_seq.add(pr_pos)
+                                guide_bind_pos_across_seq.add(g_pos)
                                 break
                     if added_seq:
                         break
                 if added_seq:
                     break
-        logging.debug("Number of seqs bound by guide: %i" %
+        logging.info("Number of seqs bound by guide: %i" %
                       len(seqs_bound_guide))
-        logging.debug("Number of seqs bound by left primer: %i" %
+        logging.info("Number of seqs bound by left primer: %i" %
                       len(seqs_bound_left))
-        logging.debug("Number of seqs bound by right primer: %i" %
+        logging.info("Number of seqs bound by right primer: %i" %
                       len(seqs_bound_right))
+        logging.debug("Guide binding positions: %s" %
+                      guide_bind_pos_across_seq)
+        logging.debug("Left primer binding positions: %s" %
+                      primer_left_bind_pos_across_seq)
+        logging.debug("Right primer binding positions: %s" %
+                      primer_right_bind_pos_across_seq)
 
         return seqs_bound
 
