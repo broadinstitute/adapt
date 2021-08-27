@@ -171,7 +171,8 @@ def main(args):
                 allow_gu_pairs=allow_gu_pairs,
                 fully_sensitive=args.fully_sensitive,
                 primer_terminal_mismatches=args.primer_terminal_mismatches,
-                bases_from_terminal=args.bases_from_terminal)
+                bases_from_terminal=args.bases_from_terminal,
+                max_target_length=args.max_target_length)
     elif args.predict_activity_model_path:
         cla_path, reg_path = args.predict_activity_model_path
         if args.predict_activity_thres:
@@ -190,7 +191,8 @@ def main(args):
                 highly_active=highly_active,
                 fully_sensitive=args.fully_sensitive,
                 primer_terminal_mismatches=args.primer_terminal_mismatches,
-                bases_from_terminal=args.bases_from_terminal)
+                bases_from_terminal=args.bases_from_terminal,
+                max_target_length=args.max_target_length)
     else:
         raise Exception(("One of --guide-mismatches or "
             "--predict-activity-model-path must be set"))
@@ -317,6 +319,14 @@ if __name__ == "__main__":
         help=("When determining whether a guide-target pair binds using an "
               "activity model, require that the pair be predicted to be "
               "highly active (not just active)"))
+
+    # Parameters determining whether a target is amplified
+    parser.add_argument('--max-target-length',
+        type=int,
+        help=("The maximum length a target can be for it to be amplified; "
+            "defaults to no maximum length (i.e. targets of any length "
+            "will be considered amplifiable). Does nothing if only a guide is "
+            "being considered."))
 
     # Miscellaneous
     parser.add_argument('--use-accessions',

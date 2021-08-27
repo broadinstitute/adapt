@@ -39,7 +39,7 @@ class CoverageAnalyzer:
 
     def __init__(self, seqs, designs, primer_mismatches=None,
             primer_terminal_mismatches=None, bases_from_terminal=5,
-            fully_sensitive=False):
+            fully_sensitive=False, max_target_length=None):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -57,6 +57,10 @@ class CoverageAnalyzer:
                 primer_terminal_mismatches is not set)
             fully_sensitive: if True, use a fully sensitive lookup of
                 primers and guides (slower)
+            max_target_length: the maximum length a target can be for it to
+                be amplified; if None, no maximum length (i.e. targets of
+                any length will be considered amplifiable). Does nothing if
+                only a guide is being considered.
         """
         self.seqs = seqs
         self.designs = designs
@@ -66,6 +70,7 @@ class CoverageAnalyzer:
         self.seqs_are_indexed = False
         self.seqs_index_k = None
         self.fully_sensitive = fully_sensitive
+        self.max_target_length = max_target_length
 
     def _index_seqs(self, k=6, stride_by_k=False, index_only=None):
         """Construct index of seqs for faster lookups of binding positions.
@@ -347,7 +352,9 @@ class CoverageAnalyzer:
             for primer_seq in primer_right_seqs:
                 bind_pos = self.find_binding_pos(seq_name, primer_seq,
                         primer_right_bind_fn)
-                primer_right_bind_pos.update(bind_pos)
+                bind_pos_with_end = {(pos, pos+len(primer_seq))
+                                     for pos in bind_pos}
+                primer_right_bind_pos.update(bind_pos_with_end)
             if len(primer_right_bind_pos) > 0:
                 seqs_bound_right.add(seq_name)
 
@@ -357,8 +364,9 @@ class CoverageAnalyzer:
             for pl_pos in primer_left_bind_pos:
                 # Consider all primers that fall *after* (3' of) pl
                 primer_len = min_primer_len_at_pos[pl_pos]
-                for pr_pos in primer_right_bind_pos:
-                    if pr_pos > pl_pos:
+                for (pr_pos, pr_end_pos) in primer_right_bind_pos:
+                    if pr_pos > pl_pos and (self.max_target_length is None or
+                            self.max_target_length >= pr_end_pos-pl_pos):
                         seqs_bound.add(seq_name)
                         added_seq = True
                         break
@@ -439,7 +447,9 @@ class CoverageAnalyzer:
             for primer_seq in primer_right_seqs:
                 bind_pos = self.find_binding_pos(seq_name, primer_seq,
                         primer_right_bind_fn)
-                primer_right_bind_pos.update(bind_pos)
+                bind_pos_with_end = {(pos, pos+len(primer_seq))
+                                     for pos in bind_pos}
+                primer_right_bind_pos.update(bind_pos_with_end)
             if len(primer_right_bind_pos) > 0:
                 seqs_bound_right.add(seq_name)
 
@@ -449,13 +459,15 @@ class CoverageAnalyzer:
             for pl_pos in primer_left_bind_pos:
                 # Consider all primers that fall *after* (3' of) pl
                 primer_len = min_primer_len_at_pos[pl_pos]
-                for pr_pos in primer_right_bind_pos:
+                for (pr_pos, pr_end_pos) in primer_right_bind_pos:
                     if pr_pos > pl_pos:
                         # Find if any guide falls in between pl and pr
                         for g_pos in guide_bind_pos:
                             guide_len = min_guide_len_at_pos[g_pos]
-                            if (g_pos >= pl_pos + primer_len and
-                                    pr_pos >= g_pos + guide_len):
+                            if ((g_pos >= pl_pos + primer_len and
+                                    pr_pos >= g_pos + guide_len) and
+                                    (self.max_target_length is None or
+                                    self.max_target_length >= pr_end_pos-pl_pos)):
                                 seqs_bound.add(seq_name)
                                 added_seq = True
                                 break
