@@ -148,23 +148,24 @@ def determine_current_taxid(given_taxid):
         most current NCBI taxonomic ID
     """
     taxid = given_taxid
-    taxid_in_xml = None
+    aka_taxid_in_xml = None
     redirects = 0
 
     # Set at most 5 redirects to avoid infinite looping
-    while ((taxid_in_xml != 0) and (redirects <= 5)):
+    while ((aka_taxid_in_xml != 0) and (redirects <= 5)):
         tax_url = ncbi_taxonomy_url(taxid)
         tax_raw_xml = urlopen_with_tries(tax_url)
-        taxid_in_xml = parse_taxonomy_xml_for_aka_taxid(tax_raw_xml)
-        if taxid_in_xml != 0:
+        aka_taxid_in_xml = parse_taxonomy_xml_for_aka_taxid(tax_raw_xml)
+        if aka_taxid_in_xml != 0:
             logger.warning("Taxid %d is being redirected to taxid %d" %
-                           (taxid, taxid_in_xml))
-            taxid = taxid_in_xml
+                           (taxid, aka_taxid_in_xml))
+            taxid = aka_taxid_in_xml
         else:
             logger.debug("Taxid %d did not need to be redirected" %
                        (taxid))
         redirects += 1
     return taxid
+
 
 def fetch_neighbors_table(taxid):
     """Fetch genome neighbors table from NCBI.
@@ -516,6 +517,7 @@ def construct_neighbors(taxid):
 
     return neighbors
 
+
 def construct_references(taxid):
     """Construct reference accession number list for a taxonomic ID.
 
@@ -759,12 +761,14 @@ def construct_influenza_genome_neighbors(taxid):
 
     return neighbors
 
+
 def parse_xml_node_value(element, tag_name):
     els = element.getElementsByTagName(tag_name)
     if len(els) == 0:
         return None
     else:
         return els[0].firstChild.nodeValue
+
 
 def parse_taxonomy_xml_for_aka_taxid(raw_xml):
     """Parse Taxonomy XML to extract an alternative taxonomic ID, if it exists
@@ -780,12 +784,16 @@ def parse_taxonomy_xml_for_aka_taxid(raw_xml):
     gene_features = []
 
     result = doc.getElementsByTagName('eSummaryResult')[0]
-    doc_sum = result.getElementsByTagName('DocSum')[0]
-    for item in doc_sum.getElementsByTagName('Item'):
-        name = item.getAttribute('Name')
-        if name == "AkaTaxId":
-            return int(item.firstChild.nodeValue)
+    doc_sum = result.getElementsByTagName('DocSum')
+    if len(doc_sum) > 0:
+        for item in doc_sum[0].getElementsByTagName('Item'):
+            name = item.getAttribute('Name')
+            if name == "AkaTaxId":
+                return int(item.firstChild.nodeValue)
+    else:
+        raise ValueError("Taxonomic ID not in NCBI's taxonomy database. ")
     return 0
+
 
 def parse_genbank_xml_for_gene_features(fn, feature_keys=["mat_peptide", "CDS",
                                                           "5'UTR", "3'UTR"],
