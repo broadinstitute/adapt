@@ -279,6 +279,7 @@ def prepare_alignments(args):
     # Read list of taxonomies
     if args.input_type == 'auto-from-args':
         s = None if args.segment == 'None' else args.segment
+        args.tax_id = ncbi_neighbors.determine_current_taxid(args.tax_id)
         ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
             if not args.ref_accs else args.ref_accs
         meta_filt = None
@@ -508,9 +509,10 @@ def design_for_id(args):
     if args.specific_against_taxa:
         taxs_to_be_specific_against = seq_io.read_taxonomies_to_design_for(
                 args.specific_against_taxa)
-        for taxid, segment in taxs_to_be_specific_against:
+        for given_taxid, segment in taxs_to_be_specific_against:
             logger.info(("Fetching sequences to be specific against tax "
-                "%d (segment: %s)"), taxid, segment)
+                "%d (segment: %s)"), given_taxid, segment)
+            taxid = ncbi_neighbors.determine_current_taxid(given_taxid)
             seqs = prepare_alignment.fetch_sequences_for_taxonomy(
                     taxid, segment)
             seqs_list = alignment.SequenceList(list(seqs.values()))
