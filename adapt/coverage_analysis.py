@@ -476,7 +476,8 @@ class CoverageAnalyzer:
                         for g_pos in guide_bind_pos:
                             guide_len = min_guide_len_at_pos[g_pos]
                             if ((g_pos >= pl_pos + primer_len and
-                                    pr_pos >= g_pos + guide_len) and
+                            if ((g_pos >= pl_pos and
+                                    pr_end_pos >= g_pos + guide_len) and
                                     (self.max_target_length is None or
                                     self.max_target_length >= pr_end_pos-pl_pos)):
                                 seqs_bound.add(seq_name)
@@ -496,11 +497,11 @@ class CoverageAnalyzer:
         logging.info("Number of seqs bound by right primer: %i" %
                       len(seqs_bound_right))
         logging.debug("Guide binding positions: %s" %
-                      guide_bind_pos_across_seq)
+                      guide_bind_pos)
         logging.debug("Left primer binding positions: %s" %
-                      primer_left_bind_pos_across_seq)
+                      primer_left_bind_pos)
         logging.debug("Right primer binding positions: %s" %
-                      primer_right_bind_pos_across_seq)
+                      primer_right_bind_pos)
 
         return seqs_bound
 
