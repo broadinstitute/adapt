@@ -475,7 +475,6 @@ class CoverageAnalyzer:
                         # Find if any guide falls in between pl and pr
                         for g_pos in guide_bind_pos:
                             guide_len = min_guide_len_at_pos[g_pos]
-                            if ((g_pos >= pl_pos + primer_len and
                             if ((g_pos >= pl_pos and
                                     pr_end_pos >= g_pos + guide_len) and
                                     (self.max_target_length is None or
