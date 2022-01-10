@@ -31,7 +31,7 @@ class SequenceList:
         self.num_sequences = len(seqs)
 
     def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False,
-                          remove_gaps=False):
+            remove_gaps=False):
         """Construct list of sequences.
 
         Args:
@@ -160,7 +160,7 @@ class Alignment(SequenceList):
         return has_gap
 
     def seqs_with_required_flanking(self, oligo_start, oligo_length,
-        required_flanking_seqs, seqs_to_consider=None):
+            required_flanking_seqs, seqs_to_consider=None):
         """Determine sequences in the alignment with required flanking sequence.
 
         If no flanking sequences are required, this says that all sequences
@@ -213,7 +213,7 @@ class Alignment(SequenceList):
         return seqs_with_required_flanking
 
     def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False,
-                          remove_gaps=False):
+            remove_gaps=False):
         """Construct list of sequences from the alignment.
 
         Args:
@@ -553,7 +553,7 @@ class Alignment(SequenceList):
         return activities
 
     def sequences_bound_by_oligo(self, olg_seq, olg_start, mismatches,
-        allow_gu_pairs, required_flanking_seqs=(None, None)):
+            allow_gu_pairs, required_flanking_seqs=(None, None)):
         """Determine the sequences to which a oligo hybridizes.
 
         Args:

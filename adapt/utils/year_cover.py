@@ -48,7 +48,7 @@ def read_years(fn):
 
 
 def construct_partial_covers(years, year_with_highest_cover,
-                             highest_cover_frac, decay):
+        highest_cover_frac, decay):
     """Construct desired partial cover fractions for each year.
 
     This specifies achieving a coverage of highest_cover_frac

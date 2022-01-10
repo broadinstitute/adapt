@@ -19,7 +19,7 @@ class AlignmentQuerier(metaclass=ABCMeta):
     """
 
     def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs,
-                do_not_memoize=False):
+            do_not_memoize=False):
         """
         Args:
             alns: list of Alignment objects
@@ -148,7 +148,7 @@ class AlignmentQuerierWithLSHNearNeighbor(AlignmentQuerier):
     """
 
     def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=22,
-                 reporting_prob=0.95):
+            reporting_prob=0.95):
         """
         Args:
             [See AlignmentQuerier.__init__()]

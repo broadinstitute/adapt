@@ -372,7 +372,7 @@ class NearNeighborLookup:
     """
 
     def __init__(self, family, k, dist_thres, dist_fn, reporting_prob,
-                 hash_idx=None, join_concat_as_str=False):
+            hash_idx=None, join_concat_as_str=False):
         """
         This selects a number of hash tables (defined as L in the above
         reference) according to the strategy it outlines: we want any

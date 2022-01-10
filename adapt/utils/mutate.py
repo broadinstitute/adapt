@@ -168,7 +168,7 @@ class GTRSubstitutionMutator:
         return ["".join(seq) for seq in sampled_seqs_list]
 
     def compute_mutated_activity(self, predictor, target_seq,
-                                 guide_seq, start=0):
+            guide_seq, start=0):
         """Calculate the activity of the guide after mutating the target
 
         Args:

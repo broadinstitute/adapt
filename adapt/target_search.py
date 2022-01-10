@@ -534,7 +534,7 @@ class TargetSearcher:
         return r
 
     def find_and_write_targets(self, out_fn, best_n=10, no_overlap='amplicon',
-                               annotations=[]):
+            annotations=[]):
         """Find targets across an alignment, and write them to a file.
 
         This writes a table of the targets to a file, in which each

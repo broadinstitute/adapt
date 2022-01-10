@@ -1764,7 +1764,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         return expected_activities
 
     def _analyze_oligos_memoized(self, start, curr_activities,
-        use_last=False):
+            use_last=False):
         """Make a memoized call to self._analyze_oligos().
 
         Args:
