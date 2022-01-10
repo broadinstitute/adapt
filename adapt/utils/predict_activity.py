@@ -10,15 +10,29 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 import numpy as np
 import tensorflow as tf
 
-from adapt.utils.oligo import FASTA_CODES
-from adapt.utils import thermo
-
 # Again, suppress TensorFlow warnings
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
+# Define function for creating a one-hot encoding from
+# nucleotide sequence
+FASTA_CODES = {'A': set(('A')),
+               'T': set(('T')),
+               'C': set(('C')),
+               'G': set(('G')),
+               'K': set(('G', 'T')),
+               'M': set(('A', 'C')),
+               'R': set(('A', 'G')),
+               'Y': set(('C', 'T')),
+               'S': set(('C', 'G')),
+               'W': set(('A', 'T')),
+               'B': set(('C', 'G', 'T')),
+               'V': set(('A', 'C', 'G')),
+               'H': set(('A', 'C', 'T')),
+               'D': set(('A', 'G', 'T')),
+               'N': set(('A', 'T', 'C', 'G'))}
 onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
 def onehot(b):
     # One-hot encoding of base b
@@ -35,7 +49,8 @@ class Predictor:
     """
 
     def __init__(self, classification_model_path, regression_model_path,
-            classification_threshold=None, regression_threshold=None):
+            classification_threshold=None,
+            regression_threshold=None):
         """
         Args:
             classification_model_path: path to serialized classification model
@@ -402,70 +417,6 @@ class Predictor:
             del self._memoized_evaluations[start_pos]
 
 
-class ThermoPredictor:
-    """A Predictor object telling alignment.Alignment to compute activity based
-    on a thermodynamic model of the oligos.
-
-    This does not use any machine learning models.
-    """
-
-    def __init__(self, sodium, temperature, required_flanking_seqs=(None,None)):
-        """
-        Args:
-            sodium: concentration of sodium in the reaction
-            temperature: temperature of the annealing reaction
-        """
-        self.sodium = sodium
-        self.temperature = temperature
-        self.required_flanking_seqs = required_flanking_seqs
-
-        self.rough_max_activity = 1.0
-
-    def compute_activity(self, start_pos, gd_sequence, aln, percentiles=None):
-        """Compute activity by checking hybridization across an alignment.
-
-        This says the activity is 1.0 if a guide is deemed to bind to
-        a target, and 0 otherwise.
-
-        Args:
-            start_pos: start position of guide sequence in aln
-            gd_sequence: str representing guide sequence
-            aln: alignment.Alignment object
-            percentiles: single percentile or list of percentiles to compute,
-                each in [0,100] (0 is minimum, 100 is maximum)
-
-        Returns:
-            If percentile is not defined, numpy array x where x[i] gives the
-                activity (1 or 0) between gd_sequence and the sequence in the
-                alignment at index i
-            If percentile is defined, tuple of (the above, the percentile(s) of
-                the activities)
-        """
-        # Start with all 0s
-        activities = np.zeros(aln.num_sequences)
-
-        # Find indices in alignment where gd_sequence binds
-        seqs_bound = aln.sequences_bound_by_oligo(gd_sequence, start_pos,
-                self.mismatches, self.allow_gu_pairs,
-                required_flanking_seqs=self.required_flanking_seqs)
-
-        # Set activity to 1 when bound
-        for seq_idx in seqs_bound:
-            activities[seq_idx] = 1.0
-
-        if percentiles:
-            percentile_activity = np.percentile(activities, percentiles)
-            return (activities, percentile_activity)
-
-        return activities
-
-    def cleanup_memoized(self, start_pos):
-        """Cleanup memoizations; not needed here because there are
-        no memoizations.
-        """
-        pass
-
-
 class SimpleBinaryPredictor:
     """A mock Predictor object telling alignment.Alignment to compute
     activity only based on mismatches (distance) and required flanking
@@ -519,7 +470,7 @@ class SimpleBinaryPredictor:
         activities = np.zeros(aln.num_sequences)
 
         # Find indices in alignment where gd_sequence binds
-        seqs_bound = aln.sequences_bound_by_oligo(gd_sequence, start_pos,
+        seqs_bound = aln.sequences_bound_by_guide(gd_sequence, start_pos,
                 self.mismatches, self.allow_gu_pairs,
                 required_flanking_seqs=self.required_flanking_seqs)
 
@@ -538,5 +489,3 @@ class SimpleBinaryPredictor:
         no memoizations.
         """
         pass
-
-
