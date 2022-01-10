@@ -533,7 +533,8 @@ class TargetSearcher:
 
         return r
 
-    def find_and_write_targets(self, out_fn, best_n=10, no_overlap='amplicon'):
+    def find_and_write_targets(self, out_fn, best_n=10, no_overlap='amplicon',
+                               annotations=[]):
         """Find targets across an alignment, and write them to a file.
 
         This writes a table of the targets to a file, in which each
@@ -551,10 +552,31 @@ class TargetSearcher:
                 in the output, this *replaces* the overlapping one with
                 the new one if the new one has a better objective value.
                 When 'none', many targets in the best_n may be very similar
+            annotations: list of annotations as dictionaries with keys "type",
+                "start", "end", "gene", "product", & "note". If not empty,
+                output TSV will include a column of which annotations the
+                target overlaps with
         """
         targets = self.find_targets(best_n=best_n, no_overlap=no_overlap)
         if self.mutator:
             mutated_activity = self._find_mutated_activity(targets)
+        overlapping_annotations = None
+        if len(annotations) > 0:
+            overlapping_annotations = []
+            for target in targets:
+                (_, ((p1, p2), _)) = target
+                target_overlapping_annotations = []
+                for annotation in annotations:
+                    # Annotation start can be greater than the end (if it is a
+                    # complement), so sort to find which is smaller
+                    annotation_start, annotation_end = sorted(
+                        [int(annotation['start']), int(annotation['end'])])
+                    if (((annotation_start <= p1.start) and
+                         (annotation_end >= p1.start)) or
+                        ((annotation_start > p1.start) and
+                         (annotation_start <= p2.start+p2.primer_length))):
+                        target_overlapping_annotations.append(annotation)
+                overlapping_annotations.append(target_overlapping_annotations)
 
         with open(out_fn, 'w') as outf:
             # Write a header
@@ -571,6 +593,8 @@ class TargetSearcher:
                 'guide-target-sequences', 'guide-target-sequence-positions']
             if self.mutator:
                 headers.append('guide-set-5th-pctile-mutated-activity')
+            if overlapping_annotations:
+                headers.append('overlapping-annotations')
 
             outf.write('\t'.join(headers) + '\n')
 
@@ -625,6 +649,17 @@ class TargetSearcher:
                     guides_seqs_str, guides_positions_str]
                 if self.mutator:
                     line.append(mutated_activity[i])
+                if overlapping_annotations:
+                    overlapping_annotations_strs = []
+                    for overlapping_annotation in overlapping_annotations[i]:
+                        overlapping_annotations_strs.append('%s (%s) [%s-%s]'
+                                % (overlapping_annotation['product'],
+                                   overlapping_annotation['type'],
+                                   overlapping_annotation['start'],
+                                   overlapping_annotation['end']))
+                    overlapping_annotations_str = \
+                        '; '.join(overlapping_annotations_strs)
+                    line.append(overlapping_annotations_str)
 
                 outf.write('\t'.join([str(x) for x in line]) + '\n')
 

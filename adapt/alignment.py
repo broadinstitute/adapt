@@ -213,7 +213,7 @@ class Alignment(SequenceList):
         return seqs_with_required_flanking
 
     def make_list_of_seqs(self, seqs_to_consider=None, include_idx=False,
-        remove_gaps=False):
+                          remove_gaps=False):
         """Construct list of sequences from the alignment.
 
         Args:
@@ -291,13 +291,13 @@ class Alignment(SequenceList):
 
         return consensus
 
-    def determine_most_common_sequence(self, seqs_to_consider=None,
-        skip_ambiguity=False):
+    def determine_most_common_sequences(self, seqs_to_consider=None,
+            skip_ambiguity=False, n=1):
         """Determine the most common of the sequences from the alignment.
 
         If we imagine each sequence in the alignment as existing some
         number of times in the alignment, this effectively picks the
-        mode.
+        mode when n is 1.
 
         Ties are broken arbitrarily but deterministically.
 
@@ -307,10 +307,12 @@ class Alignment(SequenceList):
             skip_ambiguity: if True, ignore any sequences that contain
                 an ambiguity code (i.e., only count sequences where all
                 bases are 'A', 'T', 'C', or 'G')
+            n: number of sequences to return. If there are <n unique sequences,
+                all sequences are returned
 
         Returns:
-            str representing the mode of the sequences (or None if there
-            are no suitable strings)
+            list of str representing the n most common of the sequences in
+            order of count (or None if there are no suitable strings)
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
@@ -338,10 +340,11 @@ class Alignment(SequenceList):
             # There are no suitable strings (e.g., all contain ambiguity)
             return None
 
-        # Find the most common sequence (sort to break ties deterministically)
-        counts_sorted = sorted(list(seq_count.items()))
-        max_seq_str = max(counts_sorted, key=lambda x: x[1])[0]
-        return max_seq_str
+        # Find the most common sequence (break ties by arbitrarily by sequence)
+        counts_sorted = sorted(list(seq_count.items()),
+                               key=lambda x: (-x[1], x[0]))
+        max_seq_strs = [count_sorted[0] for count_sorted in counts_sorted[0:n]]
+        return max_seq_strs
 
     def determine_representative_oligos(self, start, oligo_length,
         seqs_to_consider, clusterer, missing_threshold=1,

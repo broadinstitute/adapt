@@ -57,7 +57,7 @@ class CoverageAnalyzer:
         self.seqs_index_k = None
         self.fully_sensitive = fully_sensitive
 
-    def _index_seqs(self, k=6, stride_by_k=False):
+    def _index_seqs(self, k=6, stride_by_k=False, index_only=None):
         """Construct index of seqs for faster lookups of binding positions.
 
         This constructs a dictionary d. For key 'name' in self.seqs,
@@ -70,11 +70,18 @@ class CoverageAnalyzer:
                 in each sequence; if True, only index k-mers while striding
                 by k (i.e., index every k'th k-mer). Enabling this can
                 save memory but may make it less likely to find a hit
+            index_only: if set, index only this target sequence
         """
-        logger.info(("Indexing sequences"))
+        if index_only is None:
+            logger.info(("Indexing all sequences"))
         self.seqs_index_k = k
         self.seqs_index = {}
-        for name, seq in self.seqs.items():
+        if index_only is None:
+            seqs_to_index = self.seqs.keys()
+        else:
+            seqs_to_index = [index_only]
+        for name in seqs_to_index:
+            seq = self.seqs[name]
             self.seqs_index[name] = defaultdict(set)
             i = 0
             while i < len(seq) - k + 1:
@@ -85,7 +92,14 @@ class CoverageAnalyzer:
                 else:
                     i += 1
         self.seqs_are_indexed = True
-        logger.info(("Done indexing sequences"))
+        if index_only is None:
+            logger.info(("Done indexing all sequences"))
+
+    def _clear_index(self):
+        """Clear the index of sequences.
+        """
+        self.seqs_index.clear()
+        self.seqs_are_indexed = False
 
     def evaluate_pos_by_mismatches(self, seq, target_seq, pos,
             mismatches, allow_gu_pairs):
@@ -158,8 +172,13 @@ class CoverageAnalyzer:
             # index (i.e., without performing a slow sliding approach)
             allow_not_fully_sensitive = True
 
+        # Only keep target_seq_name in the index
         if not self.seqs_are_indexed:
-            self._index_seqs()
+            self._index_seqs(index_only=target_seq_name)
+        else:
+            if target_seq_name not in self.seqs_index:
+                self._clear_index()
+                self._index_seqs(index_only=target_seq_name)
 
         def bind_fn_with_save(seq, target_seq, pos):
             if save_activities is None:
