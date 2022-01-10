@@ -1,4 +1,5 @@
 import numpy as np
+import math
 from adapt.utils.oligo import FASTA_CODES, make_complement, is_complement, is_symmetric
 
 # Define entropic terms from Santalucia et al 2004
@@ -13,7 +14,7 @@ DNA_DNA_SYM = (0, -0.0014)
 
 DNA_DNA_TERM_AT = (2.2, 0.0069)
 
-DNA_DNA_SALT = (0, -0.000368)
+DNA_DNA_SALT = (0, 0.000368)
 
 # DNA_DNA_INTERNAL accounts for the thermodynamic properities of pairs of bases
 # that are not at the ends of the binding region, as long as there is <= 1
@@ -244,6 +245,8 @@ DNA_DNA_TERMINAL = {
     },
 }
 
+# kcal/mol K
+R_CONSTANT = .0019872
 
 def _delta_g_from_h_s(h, s, t=310.15):
     """
@@ -255,7 +258,91 @@ def _delta_g_from_h_s(h, s, t=310.15):
     return h - t * s
 
 
-def calculate_delta_g(target, oligo, reverse_oligo=False, sodium=1, t=310.15):
+def calculate_melting_temp(target, oligo, reverse_oligo=False, sodium=5e-2,
+        oligo_concentration=3e-7, target_concentration=0):
+    """
+    Calculate the percent of oligo bound to the target
+
+    Uses the equations:
+    Tm = (delta H) / (delta S + R * ln(|oligo|-|target|/2))
+    Based on SantaLucia 2004
+
+    Args:
+        target: target sequence
+        oligo: oligo sequence's perfect match target
+        reverse_oligo: True if the oligo is binding to the 3' end of the
+            amplicon, False (default) if the oligo is binding to the 5' end
+        sodium: molar concentration of sodium ions
+        t: temperature in Kelvin
+    """
+    h,s = calculate_delta_h_s(target, oligo, reverse_oligo=reverse_oligo,
+                              sodium=sodium)
+
+    tm = h/(s + R_CONSTANT * np.log(oligo_concentration-target_concentration/2))
+
+    return tm
+
+
+def calculate_percent_bound(target, oligo, reverse_oligo=False, sodium=5e-2,
+        oligo_concentration=3e-7, target_concentration=0, t=310.15):
+    """
+    Calculate the percent of oligo bound to the target
+
+    Uses the equations:
+    K = [AB]/([A][B])
+    [A_tot] = [A] + [AB]
+    [B_tot] = [B] + [AB]
+    which simplfies to:
+    0 = K[AB]^2 - (K[A_tot]+K[B_tot]+1)[AB] + K[A_tot][B_tot]
+    This is then solved with the quadratic formula
+    Based on SantaLucia 2007
+
+    Args:
+        target: target sequence
+        oligo: oligo sequence's perfect match target
+        reverse_oligo: True if the oligo is binding to the 3' end of the
+            amplicon, False (default) if the oligo is binding to the 5' end
+        sodium: molar concentration of sodium ions
+        t: temperature in Kelvin
+    """
+    K = calculate_equilibrium_constant(target, oligo, reverse_oligo=False,
+                                   sodium=sodium, t=310.15)
+
+    # Coefficients for quadratic formula
+    a = K
+    b = -K*(oligo_concentration + target_concentration) + 1
+    c = K*oligo_concentration*target_concentration
+
+    return np.roots(a, b, c)
+    #((neg_b-(neg_b**2-4*a*c)**0.5)/(2*a)/target_concentration)
+
+
+def calculate_equilibrium_constant(target, oligo, reverse_oligo=False,
+        sodium=5e-2, t=310.15):
+    """
+    Calculate equilibrium constant of the target and oligo annealing
+
+    Uses the equation:
+    delta G = -RT*ln(K)
+    which simplifies to
+    K=e^{-delta G/(RT)}
+    Based on SantaLucia 2007
+
+    Args:
+        target: target sequence
+        oligo: oligo sequence's perfect match target
+        reverse_oligo: True if the oligo is binding to the 3' end of the
+            amplicon, False (default) if the oligo is binding to the 5' end
+        sodium: molar concentration of sodium ions
+        t: temperature in Kelvin
+    """
+    delta_g = calculate_delta_g(target, oligo, reverse_oligo=reverse_oligo,
+                                sodium=sodium, t=t)
+    return math.e**(-delta_g/(R_CONSTANT*t))
+
+
+def calculate_delta_g(target, oligo, reverse_oligo=False, sodium=5e-2,
+        t=310.15):
     """
     Calculate free energy of the target and oligo annealing
 
@@ -264,93 +351,97 @@ def calculate_delta_g(target, oligo, reverse_oligo=False, sodium=1, t=310.15):
 
     Args:
         target: target sequence
-        oligo: oligo sequence
+        oligo: oligo sequence's perfect match target
         reverse_oligo: True if the oligo is binding to the 3' end of the
             amplicon, False (default) if the oligo is binding to the 5' end
         sodium: molar concentration of sodium ions
         t: temperature in Kelvin
     TODO: handling degeneracy properly
     """
-    if reverse_oligo:
-        forward_seq = target
-        reverse_seq = make_complement(oligo)
-    else:
-        forward_seq = oligo
-        reverse_seq = make_complement(target)
+    # if reverse_oligo:
+    #     forward_seq = target
+    #     reverse_seq = make_complement(oligo)
+    # else:
+    #     forward_seq = oligo
+    #     reverse_seq = make_complement(target)
 
-    # delta G of initiation
-    delta_g = _delta_g_from_h_s(*DNA_DNA_INIT, t)
+    # # delta G of initiation
+    # delta_g = _delta_g_from_h_s(*DNA_DNA_INIT, t)
 
-    def delta_g_increment(w, x, y, z, prev_match=None,
-        thermo_prev_match=DNA_DNA_INTERNAL):
-        """
-        If the bases are:
-            5'-wx-3'
-            3'-yz'5'
-        this will return the thermodynamic properties of this set of bases.
+    # def delta_g_increment(w, x, y, z, prev_match=None,
+    #         thermo_prev_match=DNA_DNA_INTERNAL):
+    #     """
+    #     If the bases are:
+    #         5'-wx-3'
+    #         3'-yz'5'
+    #     this will return the thermodynamic properties of this set of bases.
 
-        Args:
-            w: 5' base of 5' to 3' sequence
-            x: 3' base of 5' to 3' sequence
-            y: 3' base of 3' to 5' sequence
-            z: 5' base of 3' to 5' sequence
-            prev_match: Boolean if w and y match or not; None (default) checks
-                in the function
-            thermo_prev_match: If prev_match, use this dictionary of
-                thermodyamic values. Otherwise, use the DNA_DNA_INTERNAL
-                thermodynamic table. Defaults to DNA_DNA_INTERNAL
-        """
-        curr_match = is_complement(x, z) == 1
-        if prev_match is None:
-            curr_match = is_complement(w, y) == 1
-        if prev_match:
-            return (_delta_g_from_h_s(*thermo_prev_match[w][x][z], t),
-                    curr_match)
-        elif curr_match:
-            return (_delta_g_from_h_s(*DNA_DNA_INTERNAL[z][y][w], t),
-                    curr_match)
-        else:
-            raise DoubleMismatchesError("delta G cannot be calculated if there "
-                "are two mismatches next to each other.")
+    #     Args:
+    #         w: 5' base of 5' to 3' sequence
+    #         x: 3' base of 5' to 3' sequence
+    #         y: 3' base of 3' to 5' sequence
+    #         z: 5' base of 3' to 5' sequence
+    #         prev_match: Boolean if w and y match or not; None (default) checks
+    #             in the function
+    #         thermo_prev_match: If prev_match, use this dictionary of
+    #             thermodyamic values. Otherwise, use the DNA_DNA_INTERNAL
+    #             thermodynamic table. Defaults to DNA_DNA_INTERNAL
+    #     """
+    #     curr_match = is_complement(x, z) == 1
+    #     if prev_match is None:
+    #         curr_match = is_complement(w, y) == 1
+    #     if prev_match:
+    #         return (_delta_g_from_h_s(*thermo_prev_match[w][x][z], t),
+    #                 curr_match)
+    #     elif curr_match:
+    #         return (_delta_g_from_h_s(*DNA_DNA_INTERNAL[z][y][w], t),
+    #                 curr_match)
+    #     else:
+    #         raise DoubleMismatchesError("delta G cannot be calculated if there "
+    #             "are two mismatches next to each other.")
 
-    # delta G of starting base pair
-    increment, prev_match = delta_g_increment(*reverse_seq[1::-1],
-        *forward_seq[1::-1], thermo_prev_match=DNA_DNA_TERMINAL)
-    delta_g += increment
+    # # delta G of starting base pair
+    # increment, prev_match = delta_g_increment(*reverse_seq[1::-1],
+    #     *forward_seq[1::-1], thermo_prev_match=DNA_DNA_TERMINAL)
+    # delta_g += increment
 
-    for b in range(1, len(oligo)-1):
-        increment, prev_match = delta_g_increment(*forward_seq[b-1:b+1],
-            *reverse_seq[b-1:b+1], prev_match=prev_match)
-        delta_g += increment
+    # for b in range(1, len(oligo)-1):
+    #     increment, prev_match = delta_g_increment(*forward_seq[b-1:b+1],
+    #         *reverse_seq[b-1:b+1], prev_match=prev_match)
+    #     delta_g += increment
 
-    increment, prev_match = delta_g_increment(*forward_seq[-2:],
-            *reverse_seq[-2:], prev_match=prev_match,
-            thermo_prev_match=DNA_DNA_TERMINAL)
-    delta_g += increment
+    # increment, prev_match = delta_g_increment(*forward_seq[-2:],
+    #         *reverse_seq[-2:], prev_match=prev_match,
+    #         thermo_prev_match=DNA_DNA_TERMINAL)
+    # delta_g += increment
 
-    # Terminal AT penalties
-    if (forward_seq[0] in FASTA_CODES['W'] and
-            reverse_seq[0] in FASTA_CODES['W']):
-        delta_g += _delta_g_from_h_s(*DNA_DNA_TERM_AT, t)
-    if (forward_seq[-1] in FASTA_CODES['W'] and
-            reverse_seq[-1] in FASTA_CODES['W']):
-        delta_g += _delta_g_from_h_s(*DNA_DNA_TERM_AT, t)
-
-    # TODO - how to handle degeneracy. is_symmetric returns the percentage of
-    # oligos that are perfectly symmetric, so this calculates the average delta
-    # G amongst the possible oligos
-    # Symmetry Correction
-    delta_g += is_symmetric(oligo) * _delta_g_from_h_s(*DNA_DNA_SYM, t)
-
-    # Salt Correction
-    phosphates = len(forward_seq) - 1
-    delta_g = -(_delta_g_from_h_s(*DNA_DNA_SALT, t) * phosphates *
-                np.log(sodium))
-
-    return delta_g
+    # # Terminal AT penalties
+    # if (forward_seq[0] in FASTA_CODES['W'] and
+    #         reverse_seq[0] in FASTA_CODES['W']):
+    #     delta_g += _delta_g_from_h_s(*DNA_DNA_TERM_AT, t)
+    # if (forward_seq[-1] in FASTA_CODES['W'] and
+    #         reverse_seq[-1] in FASTA_CODES['W']):
+    #     delta_g += _delta_g_from_h_s(*DNA_DNA_TERM_AT, t)
 
 
-def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=1):
+    # # TODO: how to handle degeneracy. is_symmetric returns the percentage of
+    # # oligos that are perfectly symmetric, so this calculates the average delta
+    # # G amongst the possible oligos
+    # # Symmetry Correction
+    # delta_g += is_symmetric(oligo) * _delta_g_from_h_s(*DNA_DNA_SYM, t)
+
+    # # Salt Correction
+    # phosphates = len(forward_seq) - 1
+    # delta_g += (_delta_g_from_h_s(*DNA_DNA_SALT, t) * phosphates *
+    #              np.log(sodium))
+
+    h,s = calculate_delta_h_s(target, oligo, reverse_oligo=reverse_oligo,
+                              sodium=sodium)
+
+    return _delta_g_from_h_s(h, s, t=t)
+
+
+def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=5e-2):
     """
     Calculate free energy of the target and oligo annealing
 
@@ -359,7 +450,7 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=1):
 
     Args:
         target: target sequence
-        oligo: oligo sequence
+        oligo: oligo sequence's perfect match target
         reverse_oligo: True if the oligo is binding to the 3' end of the
             amplicon, False (default) if the oligo is binding to the 5' end
         sodium: molar concentration of sodium ions
@@ -373,14 +464,24 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=1):
         reverse_seq = make_complement(target)
 
     # delta G of initiation
-    delta_h, delta_s = *DNA_DNA_INIT
+    delta_h, delta_s = DNA_DNA_INIT
+
+    # Terminal AT penalties
+    if (forward_seq[0] in FASTA_CODES['W'] and
+            reverse_seq[0] in FASTA_CODES['W']):
+        delta_h += DNA_DNA_TERM_AT[0]
+        delta_s += DNA_DNA_TERM_AT[1]
+    if (forward_seq[-1] in FASTA_CODES['W'] and
+            reverse_seq[-1] in FASTA_CODES['W']):
+        delta_h += DNA_DNA_TERM_AT[0]
+        delta_s += DNA_DNA_TERM_AT[1]
 
     def delta_h_s_increment(w, x, y, z, prev_match=None,
         thermo_prev_match=DNA_DNA_INTERNAL):
         """
         If the bases are:
             5'-wx-3'
-            3'-yz'5'
+            3'-yz-5'
         this will return the thermodynamic properties of this set of bases.
 
         Args:
@@ -396,7 +497,7 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=1):
         """
         curr_match = is_complement(x, z) == 1
         if prev_match is None:
-            curr_match = is_complement(w, y) == 1
+            prev_match = is_complement(w, y) == 1
         if prev_match:
             return (thermo_prev_match[w][x][z], curr_match)
         elif curr_match:
@@ -411,7 +512,7 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=1):
     delta_h += increment[0]
     delta_s += increment[1]
 
-    for b in range(1, len(oligo)-1):
+    for b in range(2, len(oligo)-1):
         increment, prev_match = delta_h_s_increment(*forward_seq[b-1:b+1],
             *reverse_seq[b-1:b+1], prev_match=prev_match)
         delta_h += increment[0]
@@ -423,17 +524,7 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=1):
     delta_h += increment[0]
     delta_s += increment[1]
 
-    # Terminal AT penalties
-    if (forward_seq[0] in FASTA_CODES['W'] and
-            reverse_seq[0] in FASTA_CODES['W']):
-        delta_h += DNA_DNA_TERM_AT[0]
-        delta_s += DNA_DNA_TERM_AT[1]
-    if (forward_seq[-1] in FASTA_CODES['W'] and
-            reverse_seq[-1] in FASTA_CODES['W']):
-        delta_h += DNA_DNA_TERM_AT[0]
-        delta_s += DNA_DNA_TERM_AT[1]
-
-    # TODO - how to handle degeneracy. symmetric returns the percentage of
+    # TODO: how to handle degeneracy. symmetric returns the percentage of
     # oligos that are perfectly symmetric, so this calculates the average delta
     # G amongst the possible oligos
     # Symmetry Correction
@@ -444,10 +535,45 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=1):
     # Salt Correction
     phosphates = len(forward_seq) - 1
     salt_corr = phosphates * np.log(sodium)
-    # No delta H change for salt, only delta S
-    delta_s = DNA_DNA_SALT[1] * phosphates * salt_corr
+
+    delta_h += DNA_DNA_SALT[0] * salt_corr
+    delta_s += DNA_DNA_SALT[1] * salt_corr
 
     return delta_h, delta_s
+
+
+def calculate_i_x(target, oligo, reverse_oligo=False):
+    """
+    i_x is a linear score based on the distance of the nearest mismatch
+    to the end, where a mismatch at the end is 6 and a mismatch 5 bp
+    away from the end is 1. No mismatches in the 6 bps from the 3' end
+    gives an i_x of 0.
+
+    Args:
+        target: target sequence
+        oligo: oligo sequence's perfect match target
+        reverse_oligo: True if the oligo is binding to the 3' end of the
+            amplicon, False (default) if the oligo is binding to the 5' end
+
+    Returns:
+        i_x of the oligo, as defined above
+    """
+    i_x = 0
+    ol = len(oligo)
+    for i in range(min(6, ol)):
+        if reverse_oligo:
+            # The 3' end of the reverse primer is at the start of the string, so
+            # check from start of string
+            bp = i
+        else:
+            # The 3' end of the forward primer is at the end of the string, so
+            # check from end of string
+            bp = ol - 1 - i
+        if oligo[bp] != target[bp]:
+            i_x = i
+            break
+
+    return i_x
 
 
 class DoubleMismatchesError(ValueError):

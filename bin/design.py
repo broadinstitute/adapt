@@ -748,7 +748,7 @@ def design_for_id(args):
             primer_is_suitable = []
             # if args.pcr:
             #     primer_is_suitable = pcr_suitable_filters
-            ps = primer_search.PrimerSearcher(aln, args.primer_length,
+            ps = primer_search.PrimerSearcherMinimizePrimers(aln, args.primer_length,
                                               args.primer_mismatches,
                                               primer_cover_frac,
                                               args.missing_thres,

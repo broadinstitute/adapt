@@ -83,7 +83,7 @@ class PrimerResult:
                 self.primers_in_cover == other.primers_in_cover)
 
 
-class PrimerSearcher(search.OligoSearcherMinimizeNumber):
+class PrimerSearcherMinimizePrimers(search.OligoSearcherMinimizeNumber):
     """Methods to search for primers over a genome.
 
     This is a special case of guide_search.GuideSearcherMinimizeGuides; thus, it
