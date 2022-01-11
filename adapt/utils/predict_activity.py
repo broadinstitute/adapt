@@ -470,7 +470,7 @@ class SimpleBinaryPredictor:
         activities = np.zeros(aln.num_sequences)
 
         # Find indices in alignment where gd_sequence binds
-        seqs_bound = aln.sequences_bound_by_guide(gd_sequence, start_pos,
+        seqs_bound = aln.sequences_bound_by_oligo(gd_sequence, start_pos,
                 self.mismatches, self.allow_gu_pairs,
                 required_flanking_seqs=self.required_flanking_seqs)
 

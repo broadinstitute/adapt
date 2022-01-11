@@ -4,6 +4,7 @@ jobs:
   include:
     - name: "Python 3.8.0 on Linux"
       python: 3.8           # this works for Linux but is ignored on macOS or Windows
+      script: python3 -m unittest discover
       deploy:
         provider: pypi
         username: "__token__"
@@ -18,6 +19,7 @@ jobs:
       os: osx
       osx_image: xcode11.2
       language: shell       # 'language: python' is an error on Travis CI macOS
+      script: python3 -m unittest discover
     - name: "Python 3.8.5 on Windows"
       os: windows
       language: shell       # 'language: python' is an error on Travis CI Windows
@@ -25,13 +27,10 @@ jobs:
         - choco install python --version 3.8.5
         - python -m pip install --upgrade pip
       env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
+      script: python -m unittest discover
 
 # all three OSes agree about 'pip3'
 install:
   - pip3 install --upgrade pip
   - pip3 install -r requirements.txt
   - pip3 install .
-
-# 'python' points to Python 2.7 on macOS but points to Python 3.8 on Linux and Windows
-# 'python3' is a 'command not found' error on Windows but 'py' works on Windows only
-script: python3 -m unittest discover || python -m unittest discover
