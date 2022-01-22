@@ -5,7 +5,7 @@ jobs:
     - name: "Python 3.8.0 on Linux"
       python: 3.8           # this works for Linux but is ignored on macOS or Windows
       before_script: pip3 install coverage
-      script: python3 -m unittest discover
+      script: coverage run -m unittest discover   # Runs coverage analysis on Linux only
       deploy:
         provider: pypi
         username: "__token__"
