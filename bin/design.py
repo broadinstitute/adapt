@@ -173,11 +173,11 @@ def parse_required_guides_and_ignore(args):
         args: namespace of arguments provided to this executable
 
     Returns:
-        tuple (required_guides, ignored_ranges) where required_guides
-        is a representation of data in the args.required_guides file;
-        ignored_ranges is a representation of data in the
-        args.ignored_ranges file; and ignored_kmers is a
-        representation of data in the args.ignored_kmers file
+        tuple (required_guides, ignored_ranges, disallowed_kmers) where
+        required_guides is a representation of data in the args.required_guides
+        file; ignored_ranges is a representation of data in the
+        args.ignored_ranges file; and disallowed_kmers is a
+        representation of data in the args.disallowed_kmers file
     """
     num_aln = len(args.in_fasta)
 
@@ -195,16 +195,16 @@ def parse_required_guides_and_ignore(args):
     else:
         ignored_ranges = [set() for _ in range(num_aln)]
 
-    # Read ignored kmers, if provided
-    if args.ignored_kmers:
-        ignored_kmers = seq_io.read_ignored_kmers(
-            args.ignored_kmers,
+    # Read disallowed kmers, if provided
+    if args.disallowed_kmers:
+        disallowed_kmers = seq_io.read_disallowed_kmers(
+            args.disallowed_kmers,
             min_len_warning=5,
             max_len_warning=args.guide_length)
     else:
-        ignored_kmers = set()
+        disallowed_kmers = set()
 
-    return required_guides, ignored_ranges, ignored_kmers
+    return required_guides, ignored_ranges, disallowed_kmers
 
 
 def prepare_alignments(args):
@@ -522,7 +522,7 @@ def design_for_id(args):
             args.specific_against_taxa is not None) or
             (specific_against_metadata_end - specific_against_metadata_start) > 0)
 
-    required_guides, ignored_ranges, ignored_kmers = \
+    required_guides, ignored_ranges, disallowed_kmers = \
         parse_required_guides_and_ignore(args)
     required_flanking_seqs = (args.require_flanking5, args.require_flanking3)
 
@@ -592,17 +592,17 @@ def design_for_id(args):
         if aq is not None:
             guide_is_specific = aq.guide_is_specific_to_alns_fn(
                     alns_in_same_taxon, args.diff_id_frac,
-                    do_not_memoize=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
         else:
             # No specificity to check
             guide_is_specific = lambda guide: True
 
         def guide_is_suitable(guide):
-            # Return True iff the guide does not contain a ignored
+            # Return True iff the guide does not contain a disallowed
             # k-mer and is specific to aln
 
-            # Return False if the guide contains a ignored k-mer
-            for kmer in ignored_kmers:
+            # Return False if the guide contains a disallowed k-mer
+            for kmer in disallowed_kmers:
                 if kmer in guide:
                     return False
 
@@ -723,7 +723,7 @@ def design_for_id(args):
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
         elif args.obj == 'maximize-activity':
             gs = guide_search.GuideSearcherMaximizeActivity(
                     aln,
@@ -739,7 +739,7 @@ def design_for_id(args):
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -1045,8 +1045,8 @@ def argv_to_args(argv):
               "given as input (0-based); col 2 gives the start position of "
               "the range (inclusive); col 3 gives the end position of the "
               "range (exclusive)"))
-    base_subparser.add_argument('--ignored-kmers',
-        help=("Path to a FASTA file that gives k-mers to ignored from "
+    base_subparser.add_argument('--disallowed-kmers',
+        help=("Path to a FASTA file that gives k-mers to disallow from "
               "guide sequences. No guide sequences will be constructed that "
               "contain these k-mers. The k-mers make up the sequences in "
               "the FASTA file; the sequence names are ignored. k-mers "
@@ -1137,10 +1137,10 @@ def argv_to_args(argv):
               "runtime."))
 
     # Technical options
-    base_subparser.add_argument('--do-not-memoize-guide-computations',
+    base_subparser.add_argument('--do-not-memoize-oligo-computations',
         action='store_true',
         help=("If set, do not memoize computations during the search, "
-              "including of guides identified at each site and of "
+              "including of oligos identified at each site and of "
               "specificity queries. This can be helpful for benchmarking "
               "the improvement of memoization, or if there is reason "
               "to believe memoization will slow the search (e.g., "

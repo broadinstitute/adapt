@@ -1,4 +1,4 @@
-"""Methods for searching for optimal guides to use for a diagnostic.
+"""Methods for searching for optimal oligos to use for a diagnostic.
 """
 
 from collections import defaultdict
@@ -9,6 +9,7 @@ import random
 import numpy as np
 
 from adapt import alignment
+from adapt.utils import oligo
 from adapt.utils import index_compress
 from adapt.utils import lsh
 from adapt.utils import predict_activity
@@ -294,7 +295,7 @@ class OligoSearcher:
         Note that if oligo_set is a subset of the ground set, then
         we already have these computed in OligoSearcherMaximizeAcitivity.
         Re-implementing it here lets us use have them with
-        OligoSearcherMinimizeoligos, and is also not a bad check
+        OligoSearcherMinimizeNumber, and is also not a bad check
         to re-compute.
 
         This assumes that oligo positions for each oligo in oligo_set
@@ -557,6 +558,14 @@ class OligoSearcher:
         Must be implemented by subclasses.
         """
         raise NotImplementedError("Subclasses of OligoSearcher must implement "
+                                  "_find_oligos_in_window")
+
+    def _find_optimal_oligo_in_window(self, *args, **kwargs):
+        """Find a collection of oligos with the best objective in a given window
+
+        Must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses of OligoSearcher must implement "
                                   "_find_optimal_oligo_in_window")
 
 
@@ -639,7 +648,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             tuple (x, y, z) where:
                 x is the sequence of the constructed oligo
                 y is a set of indices of sequences (a subset of
-                    values in seqs_to_consider) to which the guide x will
+                    values in seqs_to_consider) to which the oligo x will
                     hybridize
                 z is the marginal contribution of the oligo to the objective
             (Note that it is possible that x binds to no sequences and that
@@ -1106,13 +1115,298 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         return frac_bound
 
     def construct_oligo(self, start, oligo_length, seqs_to_consider,
-            num_needed=None):
-        """Construct a single oligo to target a set of sequences
+            num_needed=None, stop_early=True):
+        """Construct a single oligo to target a set of sequences in the alignment.
 
-        Must be implemented by subclasses
+        This constructs a oligo to target sequence within the range [start,
+        start+oligo_length]. It only considers the sequences with indices given in
+        seqs_to_consider.
+
+        Args:
+            start: start position in alignment at which to target
+            seqs_to_consider: dict mapping universe group ID to collection of
+                indices to use when constructing the oligo
+            num_needed: dict mapping universe group ID to the number of sequences
+                from the group that are left to cover in order to achieve
+                a desired coverage; these are used to help construct a
+                oligo. If None, do not consider groups in determining coverage
+                (base coverage on the number of sequences covered overall).
+            stop_early: if True, impose early stopping criteria while iterating
+                over clusters to improve runtime
+
+        Returns:
+            tuple (x, y, z) where:
+                x is the sequence of the constructed oligo
+                y is a set of indices of sequences (a subset of
+                    values in seqs_to_consider) to which the oligo x will
+                    hybridize
+                z is the marginal contribution of the oligo to the objective
+            (Note that it is possible that x binds to no sequences and that
+            y will be empty.)
         """
-        raise NotImplementedError("Subclasses of OligoSearcherMinimizeGuides "
-                                  "must implement construct_oligo.")
+        # TODO: There are several optimizations that can be made to
+        # this function that take advantage of G-U pairing in order
+        # to lower the number of oligos that need to be designed.
+        # Two are:
+        #  1) The function SequenceClusterer.cluster(..), which is
+        #     used here, can cluster accounting for G-U pairing (e.g.,
+        #     such that 'A' hashes to 'G' and 'C' hashes to 'T',
+        #     so that similar oligo sequences hash to the same
+        #     value tolerating G-U similarity).
+        #  2) Instead of taking a consensus sequence across a
+        #     cluster, this can take a pseudo-consensus that
+        #     accounts for G-U pairing (e.g., in which 'A' is
+        #     treated as 'G' and 'C' is treated as 'T' for
+        #     the purposes of generating a consensus sequence).
+
+        assert start + oligo_length <= self.aln.seq_length
+        assert len(seqs_to_consider) > 0
+
+        for pos in range(start, start + oligo_length):
+            if self.aln.frac_missing_at_pos(pos) > self.missing_threshold:
+                raise CannotConstructOligoError(("Too much missing "
+                    "data at a position in the target range"))
+
+        aln_for_oligo = self.aln.extract_range(start, start + oligo_length)
+
+        if self.predictor is not None:
+            # Extract the target sequences, including context to use with
+            # prediction
+            start_context = 0
+            end_context = 0
+            if isinstance(self.predictor, predict_activity.SimpleBinaryPredictor):
+                if self.predictor.required_flanking_seqs[0] is not None:
+                    start_context = len(self.predictor.required_flanking_seqs[0])
+                if self.predictor.required_flanking_seqs[1] is not None:
+                    end_context = len(self.predictor.required_flanking_seqs[1])
+            else:
+                start_context = self.predictor.context_nt
+                end_context = self.predictor.context_nt
+            if (start - start_context < 0 or
+                    start + oligo_length + end_context > self.aln.seq_length):
+                raise CannotConstructOligoError(("The context needed "
+                    "for the target to predict activity falls outside the "
+                    "range of the alignment at this position"))
+            aln_for_oligo_with_context = self.aln.extract_range(
+                    start - start_context,
+                    start + oligo_length + end_context)
+
+        # Before modifying seqs_to_consider, make a copy of it
+        seqs_to_consider_cp = {}
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider_cp[group_id] = set(seqs_to_consider[group_id])
+        seqs_to_consider = seqs_to_consider_cp
+
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # Ignore any sequences in the alignment that have a gap in
+        # this region
+        if self.predictor is not None:
+            seqs_with_gap = set(aln_for_oligo_with_context.seqs_with_gap(
+                all_seqs_to_consider))
+        else:
+            seqs_with_gap = set(aln_for_oligo.seqs_with_gap(
+                all_seqs_to_consider))
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider[group_id].difference_update(seqs_with_gap)
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # Only consider sequences in the alignment that have the
+        # required flanking sequence(s)
+        seqs_with_flanking = self.aln.seqs_with_required_flanking(
+            start, oligo_length, self.required_flanking_seqs,
+            seqs_to_consider=all_seqs_to_consider)
+        for group_id in seqs_to_consider.keys():
+            seqs_to_consider[group_id].intersection_update(seqs_with_flanking)
+        all_seqs_to_consider = set.union(*seqs_to_consider.values())
+
+        # If every sequence in this region has a gap or does not contain
+        # required flanking sequence, then there are none left to consider
+        if len(all_seqs_to_consider) == 0:
+            raise CannotConstructOligoError(("All sequences in region "
+                "have a gap and/or do not contain required flanking sequences"))
+
+        seq_rows = aln_for_oligo.make_list_of_seqs(all_seqs_to_consider,
+            include_idx=True)
+        if self.predictor is not None:
+            seq_rows_with_context = aln_for_oligo_with_context.make_list_of_seqs(
+                    all_seqs_to_consider, include_idx=True)
+
+        if self.predictor is not None:
+            # Memoize activity evaluations
+            pair_eval = {}
+        def determine_binding_and_active_seqs(olg_sequence):
+            binding_seqs = set()
+            num_bound = 0
+            if self.predictor is not None:
+                num_passed_predict_active = 0
+                # Determine what calls to make to
+                # self.predictor.determine_highly_active(); it
+                # is best to batch these
+                pairs_to_eval = []
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if oligo.binds(olg_sequence, seq, self.mismatches,
+                            self.allow_gu_pairs):
+                        seq_with_context, _ = seq_rows_with_context[i]
+                        pair = (seq_with_context, olg_sequence)
+                        pairs_to_eval += [pair]
+                # Evaluate activity
+                evals = self.predictor.determine_highly_active(start, pairs_to_eval)
+                for pair, y in zip(pairs_to_eval, evals):
+                    pair_eval[pair] = y
+                # Fill in binding_seqs
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if oligo.binds(olg_sequence, seq, self.mismatches,
+                            self.allow_gu_pairs):
+                        num_bound += 1
+                        seq_with_context, _ = seq_rows_with_context[i]
+                        pair = (seq_with_context, olg_sequence)
+                        if pair_eval[pair]:
+                            num_passed_predict_active += 1
+                            binding_seqs.add(seq_idx)
+            else:
+                num_passed_predict_active = None
+                for i, (seq, seq_idx) in enumerate(seq_rows):
+                    if oligo.binds(olg_sequence, seq, self.mismatches,
+                            self.allow_gu_pairs):
+                        num_bound += 1
+                        binding_seqs.add(seq_idx)
+            return binding_seqs, num_bound, num_passed_predict_active
+
+        # Define a score function (higher is better) for a collection of
+        # sequences covered by a oligo
+        if num_needed is not None:
+            # This is the number of sequences it contains that are needed to
+            # achieve the partial cover; we can compute this by summing over
+            # the number of needed sequences it contains, taken across the
+            # groups in the universe
+            # Memoize the scores because this computation might be expensive
+            seq_idxs_scores = {}
+            def seq_idxs_score(seq_idxs):
+                seq_idxs = set(seq_idxs)
+                tc = tuple(seq_idxs)
+                if tc in seq_idxs_scores:
+                    return seq_idxs_scores[tc]
+                score = 0
+                for group_id, needed in num_needed.items():
+                    contained_in_seq_idxs = seq_idxs & seqs_to_consider[group_id]
+                    score += min(needed, len(contained_in_seq_idxs))
+                seq_idxs_scores[tc] = score
+                return score
+        else:
+            # Score by the number of sequences it contains
+            def seq_idxs_score(seq_idxs):
+                return len(seq_idxs)
+
+        # First construct the optimal oligo to cover the sequences. This would be
+        # a string x that maximizes the number of sequences s_i such that x and
+        # s_i are equal to within 'mismatches' mismatches; it's called the "max
+        # close string" or "close to most strings" problem. For simplicity, let's
+        # do the following: cluster the sequences (just the portion with
+        # potential oligos) with LSH, choose a oligo for each cluster to be
+        # the consensus of that cluster, and choose the one (across clusters)
+        # that has the highest score
+        if self.clusterer is None:
+            # Don't cluster; instead, draw the consensus from all the
+            # sequences. Effectively, treat it as there being just one
+            # cluster, which consists of all sequences to consider
+            clusters_ordered = [all_seqs_to_consider]
+        else:
+            # Cluster the sequences
+            clusters = self.clusterer.cluster(seq_rows)
+
+            # Sort the clusters by score, from highest to lowest
+            # Here, the score is determined by the sequences in the cluster
+            clusters_ordered = sorted(clusters, key=seq_idxs_score, reverse=True)
+
+        best_olg = None
+        best_olg_binding_seqs = None
+        best_olg_score = 0
+        stopped_early = False
+        for cluster_idxs in clusters_ordered:
+            if stop_early and best_olg_score > seq_idxs_score(cluster_idxs):
+                # The oligo from this cluster is unlikely to exceed the current
+                # score; stop early
+                stopped_early = True
+                break
+
+            olg = aln_for_oligo.determine_consensus_sequence(
+                cluster_idxs)
+            if 'N' in olg:
+                # Skip this; all sequences at a position in this cluster
+                # are 'N'
+                continue
+            skip_cluster = False
+            for is_suitable_fn in self.is_suitable_fns:
+                if is_suitable_fn(olg) is False:
+                    # Skip this cluster
+                    skip_cluster = True
+                    break
+            if skip_cluster:
+                continue
+            # Determine the sequences that are bound by this oligo (and
+            # where it is 'active', if self.predictor is set)
+            binding_seqs, num_bound, num_passed_predict_active = \
+                    determine_binding_and_active_seqs(olg)
+            score = seq_idxs_score(binding_seqs)
+            if score > best_olg_score:
+                best_olg = olg
+                best_olg_binding_seqs = binding_seqs
+                best_olg_score = score
+
+            # Impose an early stopping criterion if self.predictor is
+            # used, because using it is slow
+            if self.predictor is not None and stop_early:
+                if (num_bound >= 0.5*len(cluster_idxs) and
+                        num_passed_predict_active < 0.1*len(cluster_idxs)):
+                    # olg binds (according to oligo.binds()) many
+                    # sequences, but is not predicted to be active against
+                    # many; it is likely that this region is poor according to
+                    # the self.predictor (e.g., due to sequence composition).
+                    # Rather than trying other clusters at this site, just skip
+                    # it. Note that this is just a heuristic; it can help
+                    # runtime when the self.predictor is used, but is not needed
+                    # and may hurt the optimality of the solution
+                    stopped_early = True
+                    break
+        olg = best_olg
+        binding_seqs = best_olg_binding_seqs
+        score = best_olg_score
+
+        # It's possible that the consensus sequence (oligo) of no cluster
+        # binds to any of the sequences. In this case, simply go through all
+        # sequences and find the first that has no ambiguity and is suitable
+        # and active, and make this the oligo
+        if olg is None and not stopped_early:
+            for i, (s, idx) in enumerate(seq_rows):
+                if not set(s).issubset(set(['A', 'C', 'G', 'T'])):
+                    # s has ambiguity; skip it
+                    continue
+                skip_cluster = False
+                for is_suitable_fn in self.is_suitable_fns:
+                    if is_suitable_fn(s) is False:
+                        # Skip this cluster
+                        skip_cluster = True
+                        break
+                if skip_cluster:
+                    continue
+                if self.predictor is not None:
+                    s_with_context, _ = seq_rows_with_context[i]
+                    if not self.predictor.determine_highly_active(start,
+                            [(s_with_context, s)])[0]:
+                        # s is not active against itself; skip it
+                        continue
+                # s has no ambiguity and is a suitable oligo; use it
+                olg = s
+                binding_seqs, _, _ = determine_binding_and_active_seqs(olg)
+                score = seq_idxs_score(binding_seqs)
+                break
+
+        if olg is None:
+            raise CannotConstructOligoError(("No oligos are suitable "
+                "or active"))
+
+        return (olg, binding_seqs, score)
 
 
 class OligoSearcherMaximizeActivity(OligoSearcher):

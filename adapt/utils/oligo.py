@@ -148,6 +148,9 @@ def make_complement(oligo):
 def is_complement(oligo_a, oligo_b):
     """Find what fraction of possible oligos of 2 ambiguous oligos complement
 
+    "Ambiguous" oligos are consider to have an equal percent of all possible
+    bases at a base pair.
+
     Args:
         oligo_a: oligo sequence. Length should equal oligo_b's; may be ambiguous
         oligo_b: oligo sequence. Length should equal oligo_a's; may be ambiguous
@@ -159,24 +162,42 @@ def is_complement(oligo_a, oligo_b):
     if len(oligo_a) != len(oligo_b):
         raise ValueError("To check for complementarity, sequences must be "
             "equal lengths.")
+    # Percent of ambiguous sequences that are complementary; starts at 100%
+    # before we check each base
     complementary = 1
     for i in range(len(oligo_a)):
         bases1 = FASTA_CODES[oligo_a[i]]
         bases2 = FASTA_CODES[COMPLEMENTS[oligo_b[i]]]
         total = 0
+        # Go through all (equally likely) potential base pair combinations at
+        # this location and count the number that complement
         for base1 in bases1:
             for base2 in bases2:
                 if base1 == base2:
                     total += 1
+        # If no base pair combinations complement at this location, the
+        # sequence doesn't complement; return early
         if total == 0:
             return 0
+        # Divide by the number of possible base pair combinations
         total /= len(bases1)*len(bases2)
+        # Multiply the percent of sequences that complemented up to this
+        # location by the percent of sequences that complement at this location
         complementary *= total
     return complementary
 
 
 def is_symmetric(oligo):
     """Find what fraction of possible oligos of an ambiguous oligo are symmetric
+
+    For example, the following sequence is symmetric because it perfectly pairs
+    with itself:
+
+    3'-GCATATGC-5'
+    5'-CGTATACG-3'
+
+    This is a special case of self dimerization where the entire sequence binds
+    to itself
 
     Args:
         oligo: oligo sequence. Must be >1bp long, may be ambiguous
@@ -186,6 +207,7 @@ def is_symmetric(oligo):
             oligos are unambiguous, this will be either 0 or 1.
     """
     half_len = int(len(oligo)/2)
+    # Check if first half complements the reverse of second half
     return is_complement(oligo[:half_len], oligo[-half_len:][::-1])
 
 

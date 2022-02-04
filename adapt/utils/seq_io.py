@@ -203,8 +203,8 @@ def read_ignored_ranges(fn, num_alignments):
     return ignored_ranges
 
 
-def read_ignored_kmers(fn, min_len_warning=5, max_len_warning=28):
-    """Read file of ignored k-mers.
+def read_disallowed_kmers(fn, min_len_warning=5, max_len_warning=28):
+    """Read file of disallowed k-mers.
 
     Args:
         fn: path to FASTA file, where each sequence is a k-mer (names
@@ -219,11 +219,11 @@ def read_ignored_kmers(fn, min_len_warning=5, max_len_warning=28):
     kmers = set()
     for name, kmer in seqs.items():
         if len(kmer) < min_len_warning:
-            logger.warning(("Ignored k-mer '%s' might be shorter than "
+            logger.warning(("Disallowed k-mer '%s' might be shorter than "
                 "desired and may lead to many guides being treated as "
                 "unsuitable") % kmer)
         if len(kmer) > max_len_warning:
-            logger.warning(("Ignored k-mer '%s' might be longer than "
+            logger.warning(("Disallowed k-mer '%s' might be longer than "
                 "desired") % kmer)
         kmers.add(kmer)
     return kmers
