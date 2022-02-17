@@ -657,7 +657,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         def construct_p():
             p_best = (None, None, 0)
             for oligo_length in range(self.min_oligo_length, min(
-                    self.max_oligo_length+1, self.aln.seq_length)):
+                    self.max_oligo_length, self.aln.seq_length)+1):
                 try:
                     p = self.construct_oligo(start, oligo_length, seqs_to_consider,
                                              num_needed=num_needed)
@@ -1952,6 +1952,10 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             best_seq = None
             best_activities = None
             best_expected_activity = -math.inf
+            # Ground set was built on maximum oligo length, check oligos of
+            # the full range of lengths with the same starting position
+            # Note: since both the range and subsequence have exclusive
+            # endpoints, needs a +1
             for oligo_length in range(self.min_oligo_length, len(olg_seq)+1):
                 short_olg_seq = olg_seq[:oligo_length]
                 try:
