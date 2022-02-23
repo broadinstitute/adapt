@@ -855,6 +855,7 @@ def run(args):
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
         args.specific_against_metadata_accs = [[] for _ in range(len(args.in_fasta))]
         args.annotations = [[] for _ in range(len(args.in_fasta))]
+        aln_tmp_dirs = []
         if args.unaligned:
             in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, \
             design_for, specific_against_metadata_accs, annotations = \
@@ -874,9 +875,9 @@ def run(args):
     design_for_id(args)
 
     # Close temporary files storing alignments
+    for td in aln_tmp_dirs:
+        td.cleanup()
     if args.input_type in ['auto-from-file', 'auto-from-args']:
-        for td in aln_tmp_dirs:
-            td.cleanup()
         if years_tsv is not None:
             years_tsv.close()
 
