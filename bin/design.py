@@ -166,18 +166,18 @@ def seqs_grouped_by_year(seqs, args):
     return aln, years_idx, cover_frac
 
 
-def parse_required_guides_and_blacklist(args):
-    """Parse files giving required guides and blacklisted sequence.
+def parse_required_guides_and_ignore(args):
+    """Parse files giving required guides and ignored sequences.
 
     Args:
         args: namespace of arguments provided to this executable
 
     Returns:
-        tuple (required_guides, blacklisted_ranges) where required_guides
-        is a representation of data in the args.required_guides file;
-        blacklisted_ranges is a representation of data in the
-        args.blacklisted_ranges file; and blacklisted_kmers is a
-        representation of data in the args.blacklisted_kmers file
+        tuple (required_guides, ignored_ranges, disallowed_kmers) where
+        required_guides is a representation of data in the args.required_guides
+        file; ignored_ranges is a representation of data in the
+        args.ignored_ranges file; and disallowed_kmers is a
+        representation of data in the args.disallowed_kmers file
     """
     num_aln = len(args.in_fasta)
 
@@ -188,23 +188,23 @@ def parse_required_guides_and_blacklist(args):
     else:
         required_guides = [{} for _ in range(num_aln)]
 
-    # Read blacklisted ranges, if provided
-    if args.blacklisted_ranges:
-        blacklisted_ranges = seq_io.read_blacklisted_ranges(
-            args.blacklisted_ranges, num_aln)
+    # Read ignored ranges, if provided
+    if args.ignored_ranges:
+        ignored_ranges = seq_io.read_ignored_ranges(
+            args.ignored_ranges, num_aln)
     else:
-        blacklisted_ranges = [set() for _ in range(num_aln)]
+        ignored_ranges = [set() for _ in range(num_aln)]
 
-    # Read blacklisted kmers, if provided
-    if args.blacklisted_kmers:
-        blacklisted_kmers = seq_io.read_blacklisted_kmers(
-            args.blacklisted_kmers,
+    # Read disallowed kmers, if provided
+    if args.disallowed_kmers:
+        disallowed_kmers = seq_io.read_disallowed_kmers(
+            args.disallowed_kmers,
             min_len_warning=5,
             max_len_warning=args.guide_length)
     else:
-        blacklisted_kmers = set()
+        disallowed_kmers = set()
 
-    return required_guides, blacklisted_ranges, blacklisted_kmers
+    return required_guides, ignored_ranges, disallowed_kmers
 
 
 def prepare_alignments(args):
@@ -522,8 +522,8 @@ def design_for_id(args):
             args.specific_against_taxa is not None) or
             (specific_against_metadata_end - specific_against_metadata_start) > 0)
 
-    required_guides, blacklisted_ranges, blacklisted_kmers = \
-        parse_required_guides_and_blacklist(args)
+    required_guides, ignored_ranges, disallowed_kmers = \
+        parse_required_guides_and_ignore(args)
     required_flanking_seqs = (args.require_flanking5, args.require_flanking3)
 
     # Allow G-U base pairing, unless it is explicitly disallowed
@@ -582,7 +582,7 @@ def design_for_id(args):
         guide_cover_frac = guide_cover_frac_per_input[i]
         primer_cover_frac = primer_cover_frac_per_input[i]
         required_guides_for_aln = required_guides[i]
-        blacklisted_ranges_for_aln = blacklisted_ranges[i]
+        ignored_ranges_for_aln = ignored_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
         # For metadata filtering, we only want to be specific against the
         # accessions in alns[specific_against_metadata_index]
@@ -592,17 +592,17 @@ def design_for_id(args):
         if aq is not None:
             guide_is_specific = aq.guide_is_specific_to_alns_fn(
                     alns_in_same_taxon, args.diff_id_frac,
-                    do_not_memoize=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
         else:
             # No specificity to check
             guide_is_specific = lambda guide: True
 
         def guide_is_suitable(guide):
-            # Return True iff the guide does not contain a blacklisted
+            # Return True iff the guide does not contain a disallowed
             # k-mer and is specific to aln
 
-            # Return False if the guide contains a blacklisted k-mer
-            for kmer in blacklisted_kmers:
+            # Return False if the guide contains a disallowed k-mer
+            for kmer in disallowed_kmers:
                 if kmer in guide:
                     return False
 
@@ -717,13 +717,13 @@ def design_for_id(args):
                     guide_cover_frac,
                     args.missing_thres,
                     seq_groups=seq_groups,
-                    guide_is_suitable_fn=guide_is_suitable,
-                    required_guides=required_guides_for_aln,
-                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    is_suitable_fns=[guide_is_suitable],
+                    required_oligos=required_guides_for_aln,
+                    ignored_ranges=ignored_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
         elif args.obj == 'maximize-activity':
             gs = guide_search.GuideSearcherMaximizeActivity(
                     aln,
@@ -733,13 +733,13 @@ def design_for_id(args):
                     args.penalty_strength,
                     args.missing_thres,
                     algorithm=args.maximization_algorithm,
-                    guide_is_suitable_fn=guide_is_suitable,
-                    required_guides=required_guides_for_aln,
-                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    is_suitable_fns=[guide_is_suitable],
+                    required_oligos=required_guides_for_aln,
+                    ignored_ranges=ignored_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -756,12 +756,16 @@ def design_for_id(args):
                 primer_gc_content_bounds = None
             else:
                 primer_gc_content_bounds = tuple(args.primer_gc_content_bounds)
-            ps = primer_search.PrimerSearcher(aln, args.primer_length,
+            primer_is_suitable = []
+            # if args.pcr:
+            #     primer_is_suitable = pcr_suitable_filters
+            ps = primer_search.PrimerSearcherMinimizePrimers(aln, args.primer_length,
                                               args.primer_mismatches,
                                               primer_cover_frac,
                                               args.missing_thres,
                                               seq_groups=seq_groups,
-                                              primer_gc_content_bounds=primer_gc_content_bounds)
+                                              primer_gc_content_bounds=primer_gc_content_bounds,
+                                              is_suitable_fns=primer_is_suitable)
 
             if args.obj == 'minimize-guides':
                 obj_type = 'min'
@@ -1022,7 +1026,7 @@ def argv_to_args(argv):
               "in the target (since the synthesized guide is the reverse "
               "complement of the output guide sequence)"))
 
-    # Requiring guides in the cover, and blacklisting ranges and/or k-mers
+    # Requiring guides in the cover, and ignoring ranges and/or k-mers
     base_subparser.add_argument('--required-guides',
         help=("Path to a file that gives guide sequences that will be "
               "included in the guide cover and output for the windows "
@@ -1033,7 +1037,7 @@ def argv_to_args(argv):
               "FASTA given as input (0-based); col 2 gives a guide sequence; "
               "col 3 gives the start position of the guide (0-based) in "
               "the alignment"))
-    base_subparser.add_argument('--blacklisted-ranges',
+    base_subparser.add_argument('--ignored-ranges',
         help=("Path to a file that gives ranges in alignments from which "
               "guides will not be constructed. The file must have 3 columns: "
               "col 1 gives an identifier for the alignment that the range "
@@ -1041,8 +1045,8 @@ def argv_to_args(argv):
               "given as input (0-based); col 2 gives the start position of "
               "the range (inclusive); col 3 gives the end position of the "
               "range (exclusive)"))
-    base_subparser.add_argument('--blacklisted-kmers',
-        help=("Path to a FASTA file that gives k-mers to blacklisted from "
+    base_subparser.add_argument('--disallowed-kmers',
+        help=("Path to a FASTA file that gives k-mers to disallow from "
               "guide sequences. No guide sequences will be constructed that "
               "contain these k-mers. The k-mers make up the sequences in "
               "the FASTA file; the sequence names are ignored. k-mers "
@@ -1133,10 +1137,10 @@ def argv_to_args(argv):
               "runtime."))
 
     # Technical options
-    base_subparser.add_argument('--do-not-memoize-guide-computations',
+    base_subparser.add_argument('--do-not-memoize-oligo-computations',
         action='store_true',
         help=("If set, do not memoize computations during the search, "
-              "including of guides identified at each site and of "
+              "including of oligos identified at each site and of "
               "specificity queries. This can be helpful for benchmarking "
               "the improvement of memoization, or if there is reason "
               "to believe memoization will slow the search (e.g., "

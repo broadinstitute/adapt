@@ -6,7 +6,7 @@ import logging
 
 import numpy as np
 
-from adapt.utils import guide
+from adapt.utils import oligo
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -121,7 +121,7 @@ class CoverageAnalyzer:
         bind_pos = set()
         for i in pos:
             target_subseq = target_seq[i:(i + len(seq))]
-            if guide.guide_binds(seq, target_subseq, mismatches,
+            if oligo.binds(seq, target_subseq, mismatches,
                     allow_gu_pairs):
                 bind_pos.add(i)
         return bind_pos

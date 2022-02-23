@@ -30,7 +30,7 @@ class TestTargetSearch(unittest.TestCase):
                        'GGGGAATGTACGGTCGGGGTTCTCACCTATGGCCCCAGTGA',
                        'CCCCAATGTACGGTCCCCCTTCTCACCTATGGGGGGAGTGA']
         self.a_aln = alignment.Alignment.from_list_of_seqs(self.a_seqs)
-        a_ps = primer_search.PrimerSearcher(
+        a_ps = primer_search.PrimerSearcherMinimizePrimers(
             self.a_aln, 4, 0, 1.0, (1, 1, 100))
 
         a_min_gs = guide_search.GuideSearcherMinimizeGuides(
@@ -169,7 +169,7 @@ class TestTargetSearch(unittest.TestCase):
 
         cover_frac = {0: 1.0, 1: 0.01}
         seq_groups = {0: {0}, 1: {1, 2, 3, 4}}
-        b_ps = primer_search.PrimerSearcher(
+        b_ps = primer_search.PrimerSearcherMinimizePrimers(
             b_aln, 4, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
         b_gs = guide_search.GuideSearcherMinimizeGuides(
             b_aln, 6, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
@@ -224,7 +224,7 @@ class TestTargetSearch(unittest.TestCase):
                 pass
         predictor = PredictorTest()
 
-        a_ps = primer_search.PrimerSearcher(
+        a_ps = primer_search.PrimerSearcherMinimizePrimers(
             self.a_aln, 4, 0, 1.0, (1, 1, 100))
 
         a_max_gs = guide_search.GuideSearcherMaximizeActivity(
@@ -344,7 +344,7 @@ class TestTargetSearch(unittest.TestCase):
                                                 1, 1, 1)
         predictor = predict_activity.SimpleBinaryPredictor(
                     6, False, required_flanking_seqs=('A', None))
-        c_ps = primer_search.PrimerSearcher(self.a_aln, 4, 0, 1.0, (1, 1, 100))
+        c_ps = primer_search.PrimerSearcherMinimizePrimers(self.a_aln, 4, 0, 1.0, (1, 1, 100))
         c_gs = guide_search.GuideSearcherMaximizeActivity(
                     self.a_aln, 6, 1, 5, 0.05, (1, 1, 100), algorithm='greedy',
                     predictor=predictor)
