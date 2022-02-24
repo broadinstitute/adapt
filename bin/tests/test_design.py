@@ -227,8 +227,11 @@ class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
         self.real_output_file = self.output_file.name + '.0.tsv'
         self.files_to_delete.append(self.real_output_file)
 
+        unaligned_seqs = {key: value for key, value in SEQS.items()}
+        unaligned_seqs["genome_5"] = "GGCT"
+
         # Write to temporary input fasta
-        seq_io.write_fasta(SEQS, self.input_file.name)
+        seq_io.write_fasta(unaligned_seqs, self.input_file.name)
 
         # We cannot access MAFFT, so override this function; store original so
         # it can be fixed for future tests
