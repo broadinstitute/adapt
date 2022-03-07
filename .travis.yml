@@ -4,10 +4,26 @@ jobs:
   include:
     - name: "Python 3.8.0 on Linux"
       python: 3.8           # this works for Linux but is ignored on macOS or Windows
+      before_script: pip3 install coverage
+      script: coverage run -m unittest discover   # Runs coverage analysis on Linux only
+      deploy:
+        provider: pypi
+        username: "__token__"
+        distributions: "sdist bdist_wheel"
+        skip_existing: true
+        edge: true
+        password:
+          secure: V2hJhjeicavs2eyGETekDzWa+ti4hcmrdmS9w/zvwZ+pKD6VmASyY3szZu/2WuVzews+ijKJWItVbfzUSFDxGsSctErxkSbLdxF/wPlMoLhrfEz2JLHZyR0sry5WALoXH121TDNK1FXqQOYk3o6UIqozcYF0fVhHymUF3i7Cji6cjTJUXK5t3nxLNkDAei9w66VeOHdDoO6FqU9xrC4WkcKzGyWMVgdb8nvXZ1V9heo0sXLD9vUh1UtLPpwZK1O+vdRb0z5zWZcSlboNCpKYenvRAcekwRlGri0M7ACh9D39VKqBtW6pp3Q4KD1lRfgYDQIkNMIS+b7qxOqVcsy/UvauQY9zcW70yo87PRbJlHMZAllU7ur73ZU9KGsHbMefF40nG2gefSPBUpBs4HVq0lHfUqxH5DzsqPq8L1OkE31YBpQX6x2/Im7Hwo5tCpl31P5IsOmx3PuwWqtpeYnEq8GFNkdv59vCX7Zn5SOdjVfHC4Gt2Dq+GXKU3N6/om+fEMi0tHN4qFcrbpWGOLjFkHe7RvUXPZH/mfQvbACn4VwRsP5MdLpRckBksvf2h8FzzlFGaqpnkknF8opvvYnul5XHwjxtoxISKwO6Qeh+HkdmRnbPHVpuZGyzHL4nlVfAcg7mDahLaV/oRajJULB5bqXhzS2IolQBeA7mp2tP6X8=
+        on:
+          tags: true
+      after_success:
+        - pip3 install codecov
+        - codecov           # Submits to codecov
     - name: "Python 3.7.4 on macOS"
       os: osx
       osx_image: xcode11.2
       language: shell       # 'language: python' is an error on Travis CI macOS
+      script: python3 -m unittest discover
     - name: "Python 3.8.5 on Windows"
       os: windows
       language: shell       # 'language: python' is an error on Travis CI Windows
@@ -15,21 +31,10 @@ jobs:
         - choco install python --version 3.8.5
         - python -m pip install --upgrade pip
       env: PATH=/c/Python38:/c/Python38/Scripts:$PATH
+      script: python -m unittest discover
 
 # all three OSes agree about 'pip3'
 install:
   - pip3 install --upgrade pip
   - pip3 install -r requirements.txt
   - pip3 install .
-
-# 'python' points to Python 2.7 on macOS but points to Python 3.8 on Linux and Windows
-# 'python3' is a 'command not found' error on Windows but 'py' works on Windows only
-script: python3 -m unittest discover || python -m unittest discover
-
-deploy:
-  provider: pypi
-  username: "__token__"
-  password:
-    secure: V2hJhjeicavs2eyGETekDzWa+ti4hcmrdmS9w/zvwZ+pKD6VmASyY3szZu/2WuVzews+ijKJWItVbfzUSFDxGsSctErxkSbLdxF/wPlMoLhrfEz2JLHZyR0sry5WALoXH121TDNK1FXqQOYk3o6UIqozcYF0fVhHymUF3i7Cji6cjTJUXK5t3nxLNkDAei9w66VeOHdDoO6FqU9xrC4WkcKzGyWMVgdb8nvXZ1V9heo0sXLD9vUh1UtLPpwZK1O+vdRb0z5zWZcSlboNCpKYenvRAcekwRlGri0M7ACh9D39VKqBtW6pp3Q4KD1lRfgYDQIkNMIS+b7qxOqVcsy/UvauQY9zcW70yo87PRbJlHMZAllU7ur73ZU9KGsHbMefF40nG2gefSPBUpBs4HVq0lHfUqxH5DzsqPq8L1OkE31YBpQX6x2/Im7Hwo5tCpl31P5IsOmx3PuwWqtpeYnEq8GFNkdv59vCX7Zn5SOdjVfHC4Gt2Dq+GXKU3N6/om+fEMi0tHN4qFcrbpWGOLjFkHe7RvUXPZH/mfQvbACn4VwRsP5MdLpRckBksvf2h8FzzlFGaqpnkknF8opvvYnul5XHwjxtoxISKwO6Qeh+HkdmRnbPHVpuZGyzHL4nlVfAcg7mDahLaV/oRajJULB5bqXhzS2IolQBeA7mp2tP6X8=
-  on:
-    tags: true

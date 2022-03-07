@@ -1,4 +1,4 @@
-# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Bioconda Package](https://img.shields.io/conda/vn/bioconda/adapt)](http://bioconda.github.io/recipes/adapt/README.html) [![PyPI package](https://img.shields.io/pypi/v/adapt-diagnostics)](https://pypi.org/project/adapt-diagnostics/)
+# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://app.travis-ci.com/broadinstitute/adapt.svg?branch=main)](https://app.travis-ci.com/broadinstitute/adapt) [![codecov](https://codecov.io/gh/broadinstitute/adapt/branch/main/graph/badge.svg?token=2xAaHum6bd)](https://codecov.io/gh/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Bioconda Package](https://img.shields.io/conda/vn/bioconda/adapt)](http://bioconda.github.io/recipes/adapt/README.html) [![PyPI package](https://img.shields.io/pypi/v/adapt-diagnostics)](https://pypi.org/project/adapt-diagnostics/)
 #### Activity-informed Design with All-inclusive Patrolling of Targets
 
 ADAPT efficiently designs activity-informed nucleic acid diagnostics for viruses.
@@ -23,7 +23,7 @@ ADAPT includes a pre-trained model that predicts CRISPR-Cas13a guide detection a
 ADAPT's output also includes amplification primers, e.g., for use with the SHERLOCK platform.
 The framework and software are compatible with other nucleic acid technologies given appropriate models.
 
-For more information, see our [bioRxiv preprint](https://doi.org/10.1101/2020.11.28.401877) that describes ADAPT and evaluates its designs experimentally.
+For more information, see our [publication](https://www.nature.com/articles/s41587-022-01213-5) that describes ADAPT and evaluates its designs experimentally.
 
 ### Table of contents
 
@@ -40,6 +40,7 @@ For more information, see our [bioRxiv preprint](https://doi.org/10.1101/2020.11
   * [Enforcing specificity](#enforcing-specificity)
   * [Searching for complete targets](#searching-for-complete-targets)
   * [Automatically downloading and curating data](#automatically-downloading-and-curating-data)
+  * [Using custom sequences as input](#using-custom-sequences-as-input)
   * [Miscellaneous key arguments](#miscellaneous-key-arguments)
   * [Output](#output)
 * [Examples](#examples)
@@ -59,10 +60,10 @@ For more information, see our [bioRxiv preprint](https://doi.org/10.1101/2020.11
 ## Dependencies
 
 ADAPT requires:
-* [Python](https://www.python.org) &gt;= 3.8.0
+* [Python](https://www.python.org) == 3.8
 * [NumPy](http://www.numpy.org) &gt;= 1.16.0, &lt; 1.19.0
 * [SciPy](https://www.scipy.org) == 1.4.1
-* [TensorFlow](https://www.tensorflow.org) == 2.3.0
+* [TensorFlow](https://www.tensorflow.org) == 2.3.2
 
 Using ADAPT with AWS cloud features additionally requires:
 * [Boto3](https://aws.amazon.com/sdk-for-python/) &gt;= 1.14.54
@@ -101,14 +102,23 @@ You will need to activate the environment each time you use ADAPT.
 ## Downloading and installing
 
 ADAPT is available via [Bioconda](https://anaconda.org/bioconda/adapt) for GNU/Linux and Windows operating systems and via [PyPI](https://pypi.org/project/adapt-diagnostics/) for all operating systems.
+
 Before installing ADAPT via Bioconda, we suggest you follow the instructions in [Setting up a conda environment](#setting-up-a-conda-environment) to install Miniconda and activate the environment. To install via Bioconda, run the following command:
 ```bash
 conda install -c bioconda adapt
 ```
+If you want to be able to use AWS cloud features through ADAPT, run the following instead:
+```bash
+conda install -c bioconda "adapt[AWS]"
+```
 
-Before installing ADAPT via PyPI, we suggest you follow the instructions in the [Python documentation](https://docs.python.org/3/tutorial/venv.html) to set up and activate a virtual environment for ADAPT. To install via PyPI, run the following command:
+Before installing ADAPT via PyPI, we suggest you follow the instructions in either the [Python documentation](https://docs.python.org/3/tutorial/venv.html) or [Setting up a conda environment](#setting-up-a-conda-environment) to set up and activate a virtual environment for ADAPT. To install via PyPI, run the following command:
 ```bash
 pip install adapt-diagnostics
+```
+If you want to be able to use AWS cloud features through ADAPT, run the following instead:
+```bash
+pip install "adapt-diagnostics[AWS]"
 ```
 
 If you wish to modify ADAPT's code, ADAPT can be installed by cloning the repository and installing the package with `pip`:
@@ -188,8 +198,8 @@ This is the much simpler search type and can be helpful when getting started.
 
 INPUT-TYPE is one of:
 
-* `fasta`: The input is one or more FASTA files, each containing aligned sequences for a taxon.
-If more than one file is provided, the search finds taxon-specific designs meant for differential identification of the taxa.
+* `fasta`: The input is one or more FASTA files, each containing sequences for a taxon.
+If more than one file is provided, the search finds taxon-specific designs meant for differential identification of the taxa. This assumes the FASTA files contain aligned sequences, unless otherwise specified (see [Using custom sequences as input](#using-custom-sequences-as-input))
 * `auto-from-args`: The input is a single NCBI taxonomy ID, and related information, provided as command-line arguments.
 This fetches sequences for the taxon, then curates, clusters and aligns the sequences, and finally uses the generated alignment as input for design.
 More information is in [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
@@ -207,7 +217,7 @@ These arguments are defined below for each INPUT-TYPE.
 ```bash
 design.py [SEARCH-TYPE] fasta [fasta] [fasta ...] -o [out-tsv] [out-tsv ...]
 ```
-where `[fasta]` is a path to an aligned FASTA file for a taxon and `[out-tsv]` specifies where to write the output TSV file.
+where `[fasta]` is a path to an aligned FASTA file for a taxon and `[out-tsv]` specifies the basename of where to write the output TSV file (_without_ the `.tsv` suffix).
 If there are more than one space-separated FASTA, there must be an equivalent number of output TSV files; the _i_'th output gives designs for the _i_'th input FASTA.
 
 ##### If INPUT-TYPE is `auto-from-args`:
@@ -265,7 +275,7 @@ The value depends on the output values of the activity model and reflects a tole
 'random-greedy' uses a randomized greedy algorithm (Buchbinder 2014) for constrained non-monotone submodular maximization, which has good worst-case guarantees.
 (Default: 'random-greedy'.)
 
-Note that, when the objective is to maximize activity, this objective requires a predictive model of activity and thus `--predict-activity-model-path` should be specified (details in [Miscellaneous key arguments](#miscellaneous-key-arguments)).
+Note that, when the objective is to maximize activity, this objective requires a predictive model of activity and thus `--predict-activity-model-path` or `--predict-cas13a-activity-model` should be specified (details in [Miscellaneous key arguments](#miscellaneous-key-arguments)).
 If you wish to use this objective but cannot use our pre-trained Cas13a model nor another model, see the help message for the argument `--use-simple-binary-activity-prediction`.
 
 ### Objective: minimizing complexity
@@ -275,7 +285,7 @@ With this objective, the following arguments to [`design.py`](./bin/design.py) a
 
 * `-gm MISMATCHES`: Tolerate up to MISMATCHES mismatches when determining whether a guide detects a sequence.
 This argument is mainly meant to be helpful in the absence of a predictive model of activity.
-When using a predictive model of activity (via `--predict-activity-model-path` and `--predict-activity-thres`), this argument serves as an additional requirement for evaluating detection on top of the model; it can be effectively ignored by setting MISMATCHES to be sufficiently high.
+When using a predictive model of activity (via `--predict-activity-model-path` or `--predict-cas13a-activity-model`), this argument serves as an additional requirement for evaluating detection on top of the model; it can be effectively ignored by setting MISMATCHES to be sufficiently high.
 (Default: 0.)
 * `--predict-activity-thres THRES_C THRES_R`: Thresholds for determining whether a guide-target pair is active and highly active.
 THRES_C is a decision threshold on the output of the classifier (in \[0,1\]); predictions above this threshold are decided to be active.
@@ -283,7 +293,7 @@ Higher values have higher precision and less recall.
 THRES_R is a decision threshold on the output of the regression model (at least 0); predictions above this threshold are decided to be highly active.
 Higher values limit the number of pairs determined to be highly active.
 To count as detecting a target sequence, a guide must be: (i) within MISMATCHES mismatches of the target sequence; (ii) classified as active; and (iii) predicted to be highly active.
-Using this argument requires also setting `--predict-activity-model-path` (see [Miscellaneous key arguments](#miscellaneous-key-arguments)).
+Using this argument requires also setting `--predict-activity-model-path` or `--predict-cas13a-activity-model` (see [Miscellaneous key arguments](#miscellaneous-key-arguments)).
 As noted above, MISMATCHES can be set to be sufficiently high to effectively ignore `-gm`.
 (Default: use the default thresholds included with the model.)
 * `-gp COVER_FRAC`: Design guides such that at least a fraction COVER_FRAC of the genomes are detected by the guides.
@@ -296,8 +306,8 @@ Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not acc
 
 ADAPT can enforce strict specificity so that designs will distinguish related taxa.
 
-When INPUT-TYPE is `auto-from-file`, ADAPT will automatically enforce specificity between the input taxa using a single specificity index.
-ADAPT can also enforce specificity when designing for a single taxon by parsing the `--specific-against-*` arguments.
+For all INPUT-TYPEs, ADAPT can enforce specificity by parsing the `--specific-against-*` arguments.
+When INPUT-TYPE is `auto-from-file` or `fasta`, ADAPT will also automatically enforce specificity between taxa/FASTA files using a single specificity index.
 
 To enforce specificity, the following arguments to [`design.py`](./bin/design.py) are important:
 
@@ -345,7 +355,7 @@ Note that this is only an upper bound, and in practice the number will usually b
 When INPUT-TYPE is `auto-from-{file,args}`, ADAPT will run end-to-end.
 It fetches and curates genomes, clusters and aligns them, and uses the generated alignment as input for design.
 
-Below are key arguments to [`design.py`](./bin/design.py) when SEARCH-TYPE is `auto-from-file` or `auto-from-args`:
+Below are key arguments to [`design.py`](./bin/design.py) when INPUT-TYPE is `auto-from-file` or `auto-from-args`:
 
 * `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
 * `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments to the directory specified by PREP_MEMOIZE_DIR.
@@ -371,14 +381,29 @@ Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are needed to login.
 These arguments are only necessary if saving the memoized data to an S3 bucket using PREP_MEMOIZE_DIR and AWS CLI has not been installed and configured.
 If AWS CLI has been installed and configured and these arguments are passed, they will override the AWS CLI configuration.
 
+## Using custom sequences as input
+
+When INPUT-TYPE is `fasta`, ADAPT will run on only the sequences specified in the FASTA, without curation.
+
+Below are key arguments to [`design.py`](./bin/design.py) when INPUT-TYPE is `fasta`:
+
+* `--unaligned`: Specify if any of the input FASTA files are unaligned. This will align them using MAFFT.
+* `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments. Required if `--unaligned` is specified.
+* `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
+The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
+(Default: 0.2.)
+
 ## Miscellaneous key arguments
 
 In addition to the arguments above, there are others that are often important when running [`design.py`](./bin/design.py):
 
-* `--predict-activity-model-path MODEL_C MODEL_R`: Modles that predict activity of guide-target pairs.
+* `--predict-cas13a-activity-model`: If set, use ADAPT's pre-trained Cas13 model to predict activity of guide-target pairs.
+Classification and regression model files can be viewed in [`models/`](./models).
+(Default: not set, which does not use predicted activity during design.)
+* `--predict-activity-model-path MODEL_C MODEL_R`: Models that predict activity of guide-target pairs.
 MODEL_C gives a classification model that predicts whether a guide-target pair is active, and MODEL_R gives a regression model that predicts a measure of activity on active pairs.
+This does not need to be set if `--predict-cas13a-activity-model` is specified, but it is useful for custom models.
 Each argument is a path to a serialized model in TensorFlow's SavedModel format.
-Pre-trained classification and regression models are in [`models/`](./models).
 With `--obj maximize-activity`, the models are essential because they inform ADAPT of the measurements it aims to maximize.
 With `--obj minimize-guides`, the models constrain the design such that a guide must be highly active to detect a sequence (specified by `--predict-activity-thres`).
 (Default: not set, which does not use predicted activity during design.)
@@ -459,9 +484,10 @@ This is the most simple example.
 **It does not download genomes, search for genomic regions to target, or use a predictive model of activity; for these features, see the next example.**
 
 The repository includes an alignment of Lassa virus sequences (S segment) from Sierra Leone in `examples/SLE_S.aligned.fasta`.
+If you have installed ADAPT via Bioconda or PyPI, you'll need to download the alignment from [`here`](https://raw.githubusercontent.com/broadinstitute/adapt/main/examples/SLE_S.aligned.fasta).
 Run:
 ```bash
-design.py sliding-window fasta examples/SLE_S.aligned.fasta -o probes.tsv -w 200 -gl 28 -gm 1 -gp 0.95
+design.py sliding-window fasta FASTA_PATH -o probes -w 200 -gl 28 -gm 1 -gp 0.95
 ```
 
 From this alignment, ADAPT scans each 200 nt window (`-w 200`) to find the smallest collection of probes that:
@@ -479,7 +505,7 @@ It identifies Cas13a guides using a pre-trained predictive model of activity.
 
 Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None guides.tsv -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-activity-model-path models/classify/model-51373185 models/regress/model-f8b6fd5d --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
+design.py complete-targets auto-from-args 64320 None guides -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-cas13a-activity-model --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
 This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable of MAFFT.
@@ -489,7 +515,7 @@ ADAPT designs primers and Cas13a guides within the amplicons, such that:
 * guides are 28 nt long (`-gl 28`) and primers are 30 nt long (`-pl 30`)
 * primers capture 95% of sequence diversity (`-pp 0.95`), tolerating up to 1 mismatch for each (`-pm 1`)
 
-ADAPT outputs a file, `guides.tsv.0`, that contains the best 5 design options (`--best-n-targets 5`) as measured by ADAPT's default objective function.
+ADAPT outputs a file, `guides.0.tsv`, that contains the best 5 design options (`--best-n-targets 5`) as measured by ADAPT's default objective function.
 See [Output](#output) above for a description of this file.
 
 This example randomly selects 50 sequences (`--sample-seqs 50`) prior to design to speed the runtime in this example; the command should take about 20 minutes to run in full.
@@ -516,8 +542,8 @@ This can be in the form of an [issue](https://github.com/broadinstitute/adapt/is
 
 ADAPT was started by Hayden Metsky, and is developed by Priya Pillai and Hayden.
 
-If you find ADAPT useful to your work, please cite our [preprint](https://doi.org/10.1101/2020.11.28.401877) as:
-  * Metsky HC _et al_. Diagnostic design with machine learning model-based optimization. _bioRxiv_ 2020.11.28.401877. doi:10.1101/2020.11.28.401877.
+If you find ADAPT useful to your work, please cite our [paper](https://www.nature.com/articles/s41587-022-01213-5) as:
+  * Metsky HC _et al_. Designing sensitive viral diagnostics with machine learning. _Nature Biotechnology_ (2022). doi:10.1038/s41587-022-01213-5.
 
 ## License
 

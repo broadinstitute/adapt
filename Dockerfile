@@ -28,9 +28,9 @@ RUN mkdir $OUTPUT_DIR
 RUN apt update \
     && apt-get install -y wget
 
-RUN wget https://mafft.cbrc.jp/alignment/software/mafft_7.471-1_amd64.deb \
-    && dpkg -i mafft_7.471-1_amd64.deb \
-    && rm -rf mafft_7.471-1_amd64.deb
+RUN wget https://mafft.cbrc.jp/alignment/software/mafft_7.487-1_amd64.deb \
+    && dpkg -i mafft_7.487-1_amd64.deb \
+    && rm -rf mafft_7.487-1_amd64.deb
 
 COPY ./requirements.txt .
 RUN pip install -r requirements.txt

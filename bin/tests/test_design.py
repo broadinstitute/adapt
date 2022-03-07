@@ -11,7 +11,7 @@ import logging
 from collections import OrderedDict
 from argparse import Namespace
 from adapt import alignment
-from adapt.prepare import align, ncbi_neighbors, prepare_alignment
+from adapt.prepare import align, ncbi_neighbors, prepare_alignment, cluster
 from adapt.utils import seq_io
 from bin import design
 
@@ -33,7 +33,7 @@ SP_SEQS["genome_5"] = "AA---"
 class TestDesign(object):
     """General class for testing design.py
 
-    Defines helper functions for test cases and basic setUp and 
+    Defines helper functions for test cases and basic setUp and
     tearDown functions.
     """
     class TestDesignCase(unittest.TestCase):
@@ -45,23 +45,23 @@ class TestDesign(object):
             self.input_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
             # Closes the file so that it can be reopened on Windows
             self.input_file.close()
-            
-            # Create a temporary output file 
+
+            # Create a temporary output file
             self.output_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
             self.output_file.close()
 
-            self.files = [self.input_file.name, self.output_file.name]
+            self.files_to_delete = [self.input_file.name, self.output_file.name]
 
         def check_results(self, file, expected, header='target-sequences'):
             """Check the results of the test output
-            
+
             Given a TSV file of test output and expected output, fails the test
             if the test output guide target sequences do not equal the expected
             guide target sequences
 
             Args:
                 file: string, path name of the file
-                expected: list of lists of strings, all the expected guide 
+                expected: list of lists of strings, all the expected guide
                     target sequences in each line of the output
                 header: the header of the CSV that contains the guide target
                     sequences
@@ -77,17 +77,17 @@ class TestDesign(object):
                     self.assertLess(i, len(expected) + 1)
                     guide_line = line.split('\t')[col_loc]
                     guides = guide_line.split(' ')
-                    for guide in guides: 
+                    for guide in guides:
                         self.assertIn(guide, expected[i-1])
                     self.assertEqual(len(guides), len(expected[i-1]))
                 self.assertEqual(i, len(expected))
 
-        def baseArgv(self, search_type='sliding-window', input_type='fasta', 
-                     objective='minimize-guides', model=False, specific=None, 
-                     specificity_file=None, output_loc=None):
+        def baseArgv(self, search_type='sliding-window', input_type='fasta',
+                     objective='minimize-guides', model=False, specific=None,
+                     specificity_file=None, output_loc=None, unaligned=False):
             """Get arguments for tests
-            
-            Produces the correct arguments for a test case given details of 
+
+            Produces the correct arguments for a test case given details of
             what the test case is testing. See design.py help for details
             on input
 
@@ -95,12 +95,14 @@ class TestDesign(object):
                 search_type: 'sliding-window' or 'complete-targets'
                 input_type: 'fasta', 'auto-from-args', or 'auto-from-file'
                 objective: 'minimize-guides' or 'maximize-activity'
-                model: boolean, true to use Cas13a built in model, false 
+                model: boolean, true to use Cas13a built in model, false
                     to use simple binary prediction
                 specific: None, 'fasta', or 'taxa'; what sort of input
                     to be specific against
-                output_loc: path to the output file/directory; set to 
+                output_loc: path to the output file/directory; set to
                     self.output_file.name if None
+                unaligned: boolean, if input type is FASTA, true to align seqs
+                    before designing, False otherwise
 
             Returns:
                 List of strings that are the arguments of the test
@@ -112,6 +114,8 @@ class TestDesign(object):
 
             if input_type == 'fasta':
                 argv.extend([input_file, '-o', output_loc])
+                if unaligned:
+                    argv.extend(['--unaligned'])
             elif input_type == 'auto-from-args':
                 argv.extend(['64320', 'None', output_loc])
             elif input_type == 'auto-from-file':
@@ -123,7 +127,7 @@ class TestDesign(object):
             if search_type == 'sliding-window':
                 argv.extend(['-w', '3'])
             if search_type == 'complete-targets':
-                argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl', '1', 
+                argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl', '1',
                              '--max-primers-at-site', '2'])
 
             if objective == 'minimize-guides':
@@ -139,8 +143,7 @@ class TestDesign(object):
                 argv.extend(['--specific-against-taxa', specificity_file, '--id-m', '0'])
 
             if model:
-                argv.extend(['--predict-activity-model-path', 'models/classify/model-51373185', 
-                             'models/regress/model-f8b6fd5d'])
+                argv.append('--predict-cas13a-activity-model')
             elif objective =='maximize-activity':
                 argv.extend(['--use-simple-binary-activity-prediction', '-gm', '0'])
 
@@ -149,19 +152,21 @@ class TestDesign(object):
             return argv
 
         def tearDown(self):
-            for file in self.files:
+            for file in self.files_to_delete:
                 if os.path.isfile(file):
                     os.unlink(file)
             # Re-enable logging
             logging.disable(logging.NOTSET)
 
 
-class TestDesignFasta(TestDesign.TestDesignCase):
+class TestDesignFastaAligned(TestDesign.TestDesignCase):
     """Test design.py given an input FASTA
     """
 
     def setUp(self):
         super().setUp()
+        self.real_output_file = self.output_file.name + '.tsv'
+        self.files_to_delete.append(self.real_output_file)
 
         # Write to temporary input fasta
         seq_io.write_fasta(SEQS, self.input_file.name)
@@ -172,7 +177,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
         expected = [["AA"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
     def test_max_activity(self):
         argv = super().baseArgv(objective='maximize-activity')
@@ -181,16 +186,16 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # Doesn't use model, just greedy binary prediction with 0 mismatches
         # (so same outputs as min-guides)
         expected = [["AA"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
     def test_complete_targets(self):
         argv = super().baseArgv(search_type='complete-targets')
         args = design.argv_to_args(argv)
         design.run(args)
-        # Since sequences are short and need 1 base for primer on each side, 
+        # Since sequences are short and need 1 base for primer on each side,
         # only finds 1 target in middle
         expected = [["CT"]]
-        self.check_results(self.output_file.name, expected, 
+        self.check_results(self.real_output_file, expected,
                            header='guide-target-sequences')
 
     def test_specificity_fastas(self):
@@ -201,19 +206,65 @@ class TestDesignFasta(TestDesign.TestDesignCase):
 
         seq_io.write_fasta(SP_SEQS, self.sp_fasta.name)
 
-        self.files.append(self.sp_fasta.name)
+        self.files_to_delete.append(self.sp_fasta.name)
 
-        argv = super().baseArgv(specific='fasta', 
+        argv = super().baseArgv(specific='fasta',
             specificity_file=self.sp_fasta.name)
         args = design.argv_to_args(argv)
         design.run(args)
-        # AA isn't allowed in 1st window by specificity fasta, 
+        # AA isn't allowed in 1st window by specificity fasta,
         # so 1st window changes
         expected = [["AC", "GG"], ["CT"], ["CT"]]
-        self.check_results(self.output_file.name, expected)
+        self.check_results(self.real_output_file, expected)
 
 
-class TestDesignAutos(TestDesign.TestDesignCase):
+class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
+    """Test design.py given an input FASTA
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.real_output_file = self.output_file.name + '.0.tsv'
+        self.files_to_delete.append(self.real_output_file)
+
+        unaligned_seqs = {key: value for key, value in SEQS.items()}
+        unaligned_seqs["genome_5"] = "GGCT"
+
+        # Write to temporary input fasta
+        seq_io.write_fasta(unaligned_seqs, self.input_file.name)
+
+        # We cannot access MAFFT, so override this function; store original so
+        # it can be fixed for future tests
+        self.set_mafft_exec = align.set_mafft_exec
+        align.set_mafft_exec = lambda mafft_path: None
+
+        # Aligning requires MAFFT, so override this function and output simple
+        # test sequences; store original so it can be fixed for future tests
+        self.align = align.align
+        align.align = lambda seqs, am=None: SEQS
+
+        # Clustering will not work on short sequences in FASTA, so override;
+        # store original so it can be fixed for future tests
+        self.cluster = cluster.cluster_with_minhash_signatures
+        cluster.cluster_with_minhash_signatures = lambda seqs, threshold=0.1: [seqs]
+
+    def test_min_guides(self):
+        argv = super().baseArgv(unaligned=True)
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Base args set the percentage of sequences to match at 75%
+        expected = [["AA"], ["CT"], ["CT"]]
+        self.check_results(self.real_output_file, expected)
+
+    def tearDown(self):
+        # Fix all overridden functions
+        align.set_mafft_exec = self.set_mafft_exec
+        cluster.cluster_with_minhash_signatures = self.cluster
+        align.align = self.align
+        super().tearDown()
+
+
+class TestDesignAutosPartial(TestDesign.TestDesignCase):
     """Test design.py given arguments to automatically download FASTAs
 
     Does not run the entire design.py; prematurely stops by giving a fake path
@@ -226,11 +277,11 @@ class TestDesignAutos(TestDesign.TestDesignCase):
         with open(self.input_file.name, 'w') as f:
             f.write("Zika virus\t64320\tNone\tNC_035889\n")
 
-        # Create a temporary output directory 
+        # Create a temporary output directory
         self.output_dir = tempfile.TemporaryDirectory()
 
     def test_auto_from_file(self):
-        argv = super().baseArgv(input_type='auto-from-file', 
+        argv = super().baseArgv(input_type='auto-from-file',
                         output_loc=self.output_dir.name)
         args = design.argv_to_args(argv)
         try:
@@ -260,7 +311,7 @@ class TestDesignAutos(TestDesign.TestDesignCase):
         self.output_dir.cleanup()
 
 
-class TestDesignFull(TestDesign.TestDesignCase):
+class TestDesignAutosFull(TestDesign.TestDesignCase):
     """Test design.py fully through
     """
     def setUp(self):
@@ -272,21 +323,21 @@ class TestDesignFull(TestDesign.TestDesignCase):
 
         # Create a temporary specificity file
         self.sp_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        self.sp_file.write("123\tNone\n")
+        self.sp_file.write("64286\tNone\n")
         # Closes the file so that it can be reopened on Windows
         self.sp_file.close()
 
         # 'auto-from-args' gives different outputs for every cluster
         # Our test only produces 1 cluster, so store the name of that file
-        self.real_output_file = self.output_file.name + '.0'
-        self.files.extend([self.sp_file.name, self.real_output_file])
+        self.real_output_file = self.output_file.name + '.0.tsv'
+        self.files_to_delete.extend([self.sp_file.name, self.real_output_file])
 
-        # We cannot access MAFFT, so override this function; store original so 
+        # We cannot access MAFFT, so override this function; store original so
         # it can be fixed for future tests
         self.set_mafft_exec = align.set_mafft_exec
         align.set_mafft_exec = lambda mafft_path: None
 
-        # Curating requires MAFFT, so override this function; store original so 
+        # Curating requires MAFFT, so override this function; store original so
         # it can be fixed for future tests
         self.curate_against_ref = align.curate_against_ref
 
@@ -296,29 +347,30 @@ class TestDesignFull(TestDesign.TestDesignCase):
 
         align.curate_against_ref = small_curate
 
-        # Aligning requires MAFFT, so override this function and output simple 
+        # Aligning requires MAFFT, so override this function and output simple
         # test sequences; store original so it can be fixed for future tests
         self.align = align.align
         align.align = lambda seqs, am=None: SEQS
 
-        # We don't want to fetch sequences for the specificity file since we're 
-        # doing a simple test case, so override this function; store original 
+        # We don't want to fetch sequences for the specificity file since we're
+        # doing a simple test case, so override this function; store original
         # so it can be fixed for future tests
         self.fetch_sequences_for_taxonomy = prepare_alignment.fetch_sequences_for_taxonomy
 
         def small_fetch(taxid, segment):
-            # 123 is the taxonomic ID used in our specificity file
-            if taxid == 123:
-                return SP_SEQS
-            # If it's not the specificity taxonomic ID, test fetching the real sequences,
-            # although they won't be used
-            else:
-                return self.fetch_sequences_for_taxonomy(taxid, segment)
+            # Test fetching the real sequences, but don't return them as they
+            # won't be used
+            # Note, this function is only used for specificity
+            self.fetch_sequences_for_taxonomy(taxid, segment)
+            return SP_SEQS
 
         prepare_alignment.fetch_sequences_for_taxonomy = small_fetch
 
+        # Disable warning logging to avoid annotation warning
+        logging.disable(logging.WARNING)
+
     def test_specificity_taxa(self):
-        argv = super().baseArgv(input_type='auto-from-args', specific='taxa', 
+        argv = super().baseArgv(input_type='auto-from-args', specific='taxa',
             specificity_file=self.sp_file.name)
         args = design.argv_to_args(argv)
         design.run(args)

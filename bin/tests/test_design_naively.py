@@ -45,7 +45,26 @@ class TestDesignNaively(unittest.TestCase):
 
         args.consensus = False
         args.mode = True
-        self.assertEqual(test_seqs(seqs, args), [('GG', 0.5), ('AA', 0.375), ('AA', 0.5), ('AA', 0.75)])
+        self.assertEqual(test_seqs(seqs, args),  [((['GG'], [0.5]), 0.5),
+                                                  ((['AA'], [0.375]), 0.375),
+                                                  ((['AA'], [0.5]), 0.5),
+                                                  ((['AA'], [0.75]), 0.75)])
+        args.mode_n = 2
+        self.assertEqual(test_seqs(seqs, args),  [((['GG', 'AA'], [0.5, 0.375]), 0.875),
+                                                  ((['AA', 'GA'], [0.375, 0.25]), 0.625),
+                                                  ((['AA', 'AT'], [0.5, .25]), 0.75),
+                                                  ((['AA','TA'], [0.75, 0.25]), 1)])
+        args.mode_n = 3
+        self.assertEqual(test_seqs(seqs, args),  [((['GG', 'AA', 'AC'], [0.5, 0.375, 0.125]), 1),
+                                                  ((['AA', 'GA', 'GT'], [0.375, 0.25, 0.25]), 0.875),
+                                                  ((['AA', 'AT', 'TA'], [0.5, 0.25, 0.25]), 1),
+                                                  ((['AA','TA'], [0.75, 0.25]), 1)])
+
+        args.mode_n = 4
+        self.assertEqual(test_seqs(seqs, args),  [((['GG', 'AA', 'AC'], [0.5, 0.375, 0.125]), 1),
+                                                  ((['AA', 'GA', 'GT', 'CA'], [0.375, 0.25, 0.25, 0.125]), 1),
+                                                  ((['AA', 'AT', 'TA'], [0.5, 0.25, 0.25]), 1),
+                                                  ((['AA','TA'], [0.75, 0.25]), 1)])
 
         args.mode = False
         args.diversity = 'entropy'
@@ -78,7 +97,22 @@ class TestDesignNaively(unittest.TestCase):
 
         args.consensus = False
         args.mode = True
-        self.assertEqual(test_seqs(seqs, args), [('None', 0), ('GT', 0.25), ('AT', 0.25), ('None', 0)])
+        self.assertEqual(test_seqs(seqs, args), [(('None', [0]), 0),
+                                                 ((['GT'], [0.25]), 0.25),
+                                                 ((['AT'], [0.25]), 0.25),
+                                                 (('None', [0]), 0)])
+
+        args.mode_n = 2
+        self.assertEqual(test_seqs(seqs, args), [(('None', [0]), 0),
+                                                 ((['GT'], [0.25]), 0.25),
+                                                 ((['AT', "TA"], [0.25, 0.25]), 0.5),
+                                                 (('None', [0]), 0)])
+
+        args.mode_n = 3
+        self.assertEqual(test_seqs(seqs, args), [(('None', [0]), 0),
+                                                 ((['GT'], [0.25]), 0.25),
+                                                 ((['AT', 'TA', 'AA'], [0.25, 0.25, 0.125]), 0.625),
+                                                 (('None', [0]), 0)])
 
         args.mode = False
         args.diversity = 'entropy'
@@ -161,6 +195,7 @@ def baseArgs():
     args.allow_gu_pairs = False
     args.best_n = 3
     args.required_flanking_seqs = (None, None)
+    args.mode_n = 1
 
     return args
 

@@ -3,11 +3,11 @@
 
 from collections import OrderedDict
 import tempfile
+import logging
 from os import unlink
 import unittest
 try:
     import boto3
-    import botocore
     S3 = boto3.client()
     resource = S3.list_buckets()
 except:
@@ -15,7 +15,6 @@ except:
 else:
     cloud = True
     import random
-    import warnings
 
 from adapt.prepare import align
 
@@ -25,6 +24,9 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 class TestAlignStats(unittest.TestCase):
     """Tests functions manipulating and computing stats on alignments.
     """
+    def setUp(self):
+        # Disable logging
+        logging.disable(logging.WARNING)
 
     def test_aln_identity(self):
         a = 'ATCGATGGAT--G'
@@ -61,6 +63,29 @@ class TestAlignStats(unittest.TestCase):
         self.assertEqual(align._collapse_consecutive_gaps(a, b),
             (expected_a, expected_b))
 
+    def test_convert_to_index_with_gaps(self):
+        # Reference Indexes:
+        #    012345678
+        #    123    45
+        a = 'ATC----GA'
+        #      12 3 4
+        b = '--CA-C-G-'
+        #      (none)
+        c = '---------'
+
+        i = [1, 3, 5]
+
+        expected_a = [0, 2, 8]
+        expected_b = [2, 5, None]
+        expected_c = [None, None, None]
+
+        self.assertEqual(align.convert_to_index_with_gaps(a, i), expected_a)
+        self.assertEqual(align.convert_to_index_with_gaps(b, i), expected_b)
+        self.assertEqual(align.convert_to_index_with_gaps(c, i), expected_c)
+
+    def tearDown(self):
+        # Re-enable logging
+        logging.disable(logging.NOTSET)
 
 class TestIO(unittest.TestCase):
     """Tests i/o functions.

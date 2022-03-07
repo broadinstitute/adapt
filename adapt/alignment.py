@@ -584,13 +584,13 @@ class Alignment(SequenceList):
 
         return consensus
 
-    def determine_most_common_sequence(self, seqs_to_consider=None,
-            skip_ambiguity=False):
+    def determine_most_common_sequences(self, seqs_to_consider=None,
+            skip_ambiguity=False, n=1):
         """Determine the most common of the sequences from the alignment.
 
         If we imagine each sequence in the alignment as existing some
         number of times in the alignment, this effectively picks the
-        mode.
+        mode when n is 1.
 
         Ties are broken arbitrarily but deterministically.
 
@@ -600,10 +600,12 @@ class Alignment(SequenceList):
             skip_ambiguity: if True, ignore any sequences that contain
                 an ambiguity code (i.e., only count sequences where all
                 bases are 'A', 'T', 'C', or 'G')
+            n: number of sequences to return. If there are <n unique sequences,
+                all sequences are returned
 
         Returns:
-            str representing the mode of the sequences (or None if there
-            are no suitable strings)
+            list of str representing the n most common of the sequences in
+            order of count (or None if there are no suitable strings)
         """
         if seqs_to_consider is None:
             seqs_to_consider = range(self.num_sequences)
@@ -631,10 +633,11 @@ class Alignment(SequenceList):
             # There are no suitable strings (e.g., all contain ambiguity)
             return None
 
-        # Find the most common sequence (sort to break ties deterministically)
-        counts_sorted = sorted(list(seq_count.items()))
-        max_seq_str = max(counts_sorted, key=lambda x: x[1])[0]
-        return max_seq_str
+        # Find the most common sequence (break ties by arbitrarily by sequence)
+        counts_sorted = sorted(list(seq_count.items()),
+                               key=lambda x: (-x[1], x[0]))
+        max_seq_strs = [count_sorted[0] for count_sorted in counts_sorted[0:n]]
+        return max_seq_strs
 
     def determine_representative_guides(self, start, guide_length,
             seqs_to_consider, guide_clusterer, missing_threshold=1,
@@ -732,7 +735,7 @@ class Alignment(SequenceList):
             representatives.add(gd)
         return representatives
 
-    def compute_activity(self, start, gd_sequence, predictor):
+    def compute_activity(self, start, gd_sequence, predictor, mutator=None):
         """Compute activity between a guide sequence and every target sequence
         in the alignment.
 
@@ -743,15 +746,45 @@ class Alignment(SequenceList):
             start: start position in alignment at which to target
             gd_sequence: str representing guide sequence
             predictor: a adapt.utils.predict_activity.Predictor object
+            mutator: a adapt.utils.mutate.Mutator object
 
         Returns:
             numpy array x where x[i] gives the predicted activity between
-            gd_sequence and the sequence in the alignment at index i
+            gd_sequence and the sequence in the alignment at index i. If
+            mutator is not None, x[i] gives the predicted activity after the
+            mutations specified in the mutator.
         """
         guide_length = len(gd_sequence)
         assert start + guide_length <= self.seq_length
 
         if isinstance(predictor, predict_activity.SimpleBinaryPredictor):
+            if mutator:
+                # Extract the target sequences, including context to use with
+                # prediction (i.e. the flanking sequences, if they exist)
+                left_context = 0
+                right_context = 0
+                if predictor:
+                    if predictor.required_flanking_seqs[0]:
+                        left_context = len(predictor.required_flanking_seqs[0])
+                    if predictor.required_flanking_seqs[1]:
+                        right_context = len(predictor.required_flanking_seqs[1])
+
+                aln_for_guide_with_context = self.extract_range(
+                        start - left_context,
+                        start + guide_length + right_context)
+                seq_rows_with_context = aln_for_guide_with_context.make_list_of_seqs()
+
+                # Start array of predicted activities; make this all 0s so that
+                # sequences for which activities are not computed (e.g., gap)
+                # have activity=0
+                activities = np.zeros(self.num_sequences)
+                for i, seq_with_context in enumerate(seq_rows_with_context):
+                    activity = mutator.compute_mutated_activity(predictor,
+                                                                seq_with_context,
+                                                                gd_sequence,
+                                                                start=start)
+                    activities[i] = activity
+                return activities
             # Do not use a model; just predict binary activity (1 or 0)
             # based on distance between guide and targets
             return predictor.compute_activity(start, gd_sequence, self)
@@ -785,12 +818,24 @@ class Alignment(SequenceList):
         # is best to batch these
         pairs_to_eval = []
         pairs_to_eval_seq_idx = []
-        for seq_with_context, seq_idx in seq_rows_with_context:
-            pair = (seq_with_context, gd_sequence)
-            pairs_to_eval += [pair]
-            pairs_to_eval_seq_idx += [seq_idx]
-        # Evaluate activity
-        evals = predictor.compute_activity(start, pairs_to_eval)
+        evals = []
+
+        if mutator:
+            for seq_with_context, seq_idx in seq_rows_with_context:
+                activity = mutator.compute_mutated_activity(predictor,
+                                                            seq_with_context,
+                                                            gd_sequence,
+                                                            start=start)
+                evals.append(activity)
+                pairs_to_eval_seq_idx.append(seq_idx)
+        else:
+            for seq_with_context, seq_idx in seq_rows_with_context:
+                pair = (seq_with_context, gd_sequence)
+                pairs_to_eval.append(pair)
+                pairs_to_eval_seq_idx.append(seq_idx)
+            # Evaluate activity
+            evals = predictor.compute_activity(start, pairs_to_eval)
+
         for activity, seq_idx in zip(evals, pairs_to_eval_seq_idx):
             # Fill in the activity for seq_idx
             activities[seq_idx] = activity
@@ -859,6 +904,27 @@ class Alignment(SequenceList):
             position_entropy.append(this_position_entropy)
 
         return position_entropy
+
+    def base_percentages(self):
+        """Determines the percentage of each base pair in the alignment.
+
+        Returns:
+            dictionary of base pair to its percentage in the alignment
+        """
+        counts = {'A': 0, 'T': 0, 'C': 0, 'G': 0}
+        for i in range(self.seq_length):
+            for b in [self.seqs[i][j] for j in range(self.num_sequences)]:
+                if b in counts:
+                    counts[b] += 1
+                elif b in guide.FASTA_CODES:
+                    for c in guide.FASTA_CODES[b]:
+                        counts[c] += 1.0 / len(guide.FASTA_CODES[b])
+                elif b != '-':
+                    raise ValueError("Unknown base call %s" % b)
+        total = sum(counts.values())
+        for base in counts:
+            counts[base] /= total
+        return counts
 
     @staticmethod
     def from_list_of_seqs(seqs):
