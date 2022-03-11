@@ -294,23 +294,26 @@ def prepare_for(taxid, segment, ref_accs, out,
         seqs_aligned = align.align(seqs_unaligned_curated_in_cluster,
             am=aln_memoizer)
 
-        cluster_annotation_tsv = None if annotation_tsv is None else \
-            "%s.%i.annotation.tsv" % (annotation_tsv, cluster_idx)
-        cluster_annotations = fetch_annotations(seqs_aligned, ref_accs,
-                annotation_tsv=cluster_annotation_tsv)
+        if len(ref_accs) > 0:
+            cluster_annotation_tsv = None if annotation_tsv is None else \
+                "%s.%i.annotation.tsv" % (annotation_tsv, cluster_idx)
+            cluster_annotations = fetch_annotations(seqs_aligned, ref_accs,
+                    annotation_tsv=cluster_annotation_tsv)
 
-        if len(cluster_annotations) == 0:
-            logger.warning("No reference sequence were in cluster %d, "
-                           "so no genomic annotations could be determined."
-                           % cluster_idx)
-        annotations.append(cluster_annotations)
+            if len(cluster_annotations) == 0:
+                logger.warning("No reference sequence were in cluster %d, "
+                               "so no genomic annotations could be determined."
+                               % cluster_idx)
+            annotations.append(cluster_annotations)
 
-        # Remove reference sequences that were only added for curation
-        for ref_acc in added_ref_accs_to_fetch:
-            for accver in seqs_aligned:
-                if ref_acc in accver:
-                    del seqs_aligned[accver]
-                    break
+            # Remove reference sequences that were only added for curation
+            for ref_acc in added_ref_accs_to_fetch:
+                for accver in seqs_aligned:
+                    if ref_acc in accver:
+                        del seqs_aligned[accver]
+                        break
+        else:
+            annotations.append([])
 
         # Write a fasta file of aligned sequences
         fasta_file = os.path.join(out, str(cluster_idx) + '.fasta')

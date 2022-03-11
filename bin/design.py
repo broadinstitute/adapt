@@ -229,56 +229,17 @@ def prepare_alignments(args):
     # Set the path to mafft
     align.set_mafft_exec(args.mafft_path)
 
-    # Setup alignment and alignment stat memoizers
-    if args.prep_memoize_dir:
-        if args.prep_memoize_dir[:5] == "s3://":
-            bucket = args.prep_memoize_dir.split("/")[2]
-            try:
-                if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
-                    S3 = boto3.client("s3", aws_access_key_id=args.aws_access_key_id,
-                        aws_secret_access_key=args.aws_secret_access_key)
-                else:
-                    S3 = boto3.client("s3")
-                S3.head_bucket(Bucket=bucket)
-            except ClientError as e:
-                if e.response['Error']['Code'] == "404":
-                    S3.create_bucket(Bucket=bucket)
-                elif e.response['Error']['Code'] == "403":
-                    raise Exception(("Incorrect AWS Access Key ID or Secret Access Key")) from e
-                else:
-                    raise
-            except ConnectionError as e:
-                raise Exception(("Cannot connect to Amazon S3")) from e
-            if args.prep_memoize_dir[-1] == "/":
-                align_memoize_dir = '%saln' % args.prep_memoize_dir
-                align_stat_memoize_dir = '%sstats' % args.prep_memoize_dir
-            else:
-                align_memoize_dir = '%s/aln' % args.prep_memoize_dir
-                align_stat_memoize_dir = '%s/stats' % args.prep_memoize_dir
-        else:
-            if not os.path.isdir(args.prep_memoize_dir):
-                raise Exception(("Path '%s' does not exist") %
-                    args.prep_memoize_dir)
-            align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
-            if not os.path.exists(align_memoize_dir):
-                os.makedirs(align_memoize_dir)
-            align_stat_memoize_dir = os.path.join(args.prep_memoize_dir, 'stats')
-            if not os.path.exists(align_stat_memoize_dir):
-                os.makedirs(align_stat_memoize_dir)
-
-        am = align.AlignmentMemoizer(align_memoize_dir,
-            aws_access_key_id=args.aws_access_key_id,
-            aws_secret_access_key=args.aws_secret_access_key)
-        asm = align.AlignmentStatMemoizer(align_stat_memoize_dir,
-            aws_access_key_id=args.aws_access_key_id,
-            aws_secret_access_key=args.aws_secret_access_key)
-    else:
-        am = None
-        asm = None
+    # Initialize variables to None
+    am = None
+    asm = None
+    sequences_to_use = None
+    accessions_to_use = None
+    taxs_to_design_for = None
 
     # Read list of taxonomies
     if args.input_type == 'auto-from-args':
         s = None if args.segment == 'None' else args.segment
+        args.tax_id = ncbi_neighbors.determine_current_taxid(args.tax_id)
         ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
             if not args.ref_accs else args.ref_accs
         meta_filt = None
@@ -290,29 +251,78 @@ def prepare_alignments(args):
         taxs = [(None, args.tax_id, s, ref_accs, meta_filt, meta_filt_against)]
     elif args.input_type == 'auto-from-file':
         taxs = seq_io.read_taxonomies(args.in_tsv)
+    elif args.input_type == 'fasta':
+        sequences_to_use = {}
+        taxs = []
+        args.sample_seqs = None
+        args.prep_influenza = False
+        args.write_annotation = False
+        args.write_input_seqs = False
+        for i, unaligned_fasta in enumerate(args.in_fasta):
+            sequences_to_use[(i, None)] = seq_io.read_fasta(unaligned_fasta)
+            taxs.append((None, i, None, [], None, None))
     else:
         raise Exception(("Unknown input type '%s'") % args.input_type)
 
-    # Read specified accessions, if provided
-    if args.use_accessions:
-        accessions_to_use = seq_io.read_accessions_for_taxonomies(
-                args.use_accessions)
-    else:
-        accessions_to_use = None
+    if args.input_type in ['auto-from-args', 'auto-from-file']:
+        # Setup alignment and alignment stat memoizers
+        if args.prep_memoize_dir:
+            if args.prep_memoize_dir[:5] == "s3://":
+                bucket = args.prep_memoize_dir.split("/")[2]
+                try:
+                    if args.aws_access_key_id is not None and args.aws_secret_access_key is not None:
+                        S3 = boto3.client("s3", aws_access_key_id=args.aws_access_key_id,
+                            aws_secret_access_key=args.aws_secret_access_key)
+                    else:
+                        S3 = boto3.client("s3")
+                    S3.head_bucket(Bucket=bucket)
+                except ClientError as e:
+                    if e.response['Error']['Code'] == "404":
+                        S3.create_bucket(Bucket=bucket)
+                    elif e.response['Error']['Code'] == "403":
+                        raise Exception(("Incorrect AWS Access Key ID or Secret Access Key")) from e
+                    else:
+                        raise
+                except ConnectionError as e:
+                    raise Exception(("Cannot connect to Amazon S3")) from e
+                if args.prep_memoize_dir[-1] == "/":
+                    align_memoize_dir = '%saln' % args.prep_memoize_dir
+                    align_stat_memoize_dir = '%sstats' % args.prep_memoize_dir
+                else:
+                    align_memoize_dir = '%s/aln' % args.prep_memoize_dir
+                    align_stat_memoize_dir = '%s/stats' % args.prep_memoize_dir
+            else:
+                if not os.path.isdir(args.prep_memoize_dir):
+                    raise Exception(("Path '%s' does not exist") %
+                        args.prep_memoize_dir)
+                align_memoize_dir = os.path.join(args.prep_memoize_dir, 'aln')
+                if not os.path.exists(align_memoize_dir):
+                    os.makedirs(align_memoize_dir)
+                align_stat_memoize_dir = os.path.join(args.prep_memoize_dir, 'stats')
+                if not os.path.exists(align_stat_memoize_dir):
+                    os.makedirs(align_stat_memoize_dir)
 
-    # Read specified sequences, if provided
-    if args.use_fasta:
-        sequences_to_use = seq_io.read_sequences_for_taxonomies(
-                args.use_fasta)
-    else:
-        sequences_to_use = None
+            am = align.AlignmentMemoizer(align_memoize_dir,
+                aws_access_key_id=args.aws_access_key_id,
+                aws_secret_access_key=args.aws_secret_access_key)
+            asm = align.AlignmentStatMemoizer(align_stat_memoize_dir,
+                aws_access_key_id=args.aws_access_key_id,
+                aws_secret_access_key=args.aws_secret_access_key)
 
-    # Only design for certain taxonomies, if provided
-    if args.only_design_for:
-        taxs_to_design_for = seq_io.read_taxonomies_to_design_for(
-                args.only_design_for)
-    else:
-        taxs_to_design_for = None
+        # Read specified accessions, if provided
+        if args.use_accessions:
+            accessions_to_use = seq_io.read_accessions_for_taxonomies(
+                    args.use_accessions)
+
+        # Read specified sequences, if provided
+        if args.use_fasta:
+            sequences_to_use = seq_io.read_sequences_for_taxonomies(
+                    args.use_fasta)
+
+        # Only design for certain taxonomies, if provided
+        if args.only_design_for:
+            taxs_to_design_for = seq_io.read_taxonomies_to_design_for(
+                    args.only_design_for)
 
     # Construct alignments for each taxonomy
     in_fasta = []
@@ -383,11 +393,15 @@ def prepare_alignments(args):
         aln_tmp_dirs += [aln_file_dir]
 
         if label is None:
-            out_tsv += [args.out_tsv + '.' + str(i) + '.tsv' for i in range(nc)]
+            if args.input_type == 'fasta':
+                # If the input is a FASTA, the 'tax_id' is actually an index number
+                out_tsv.extend([args.out_tsv[tax_id] + '.' + str(i) + '.tsv' for i in range(nc)])
+            else:
+                out_tsv.extend([args.out_tsv + '.' + str(i) + '.tsv' for i in range(nc)])
         else:
             for i in range(nc):
                 out_name = label + '.' + str(i) + '.tsv'
-                out_tsv += [os.path.join(args.out_tsv_dir, out_name)]
+                out_tsv.append(os.path.join(args.out_tsv_dir, out_name))
 
         if args.write_input_seqs:
             # Write the sequences that are in the alignment being used
@@ -401,7 +415,7 @@ def prepare_alignments(args):
             if label is None:
                 # args.write_input_seqs gives the path to where to write
                 # the list
-                out_file = args.write_input_seqs
+                out_file = args.write_input_seqs + '.txt'
             else:
                 # Determine where to write the sequence names based on
                 # the label and args.out_tsv_dir
@@ -415,9 +429,13 @@ def prepare_alignments(args):
             for i in range(nc):
                 fn = os.path.join(aln_file_dir.name, str(i) + '.fasta')
                 if label is None:
-                    # args.write_input_aln gives the prefix of the path to
-                    # which to write the alignment
-                    copy_path = args.write_input_aln + '.' + str(i) + '.fasta'
+                    if args.input_type == 'fasta':
+                        # If the input is a FASTA, the 'tax_id' is actually an index number
+                        copy_path = args.write_input_aln[tax_id] + '.' + str(i) + '.fasta'
+                    else:
+                        # args.write_input_aln gives the prefix of the path to
+                        # which to write the alignment
+                        copy_path = args.write_input_aln + '.' + str(i) + '.fasta'
                 else:
                     # Determine where to write the alignment based on the
                     # label and args.out_tsv_dir
@@ -508,9 +526,10 @@ def design_for_id(args):
     if args.specific_against_taxa:
         taxs_to_be_specific_against = seq_io.read_taxonomies_to_design_for(
                 args.specific_against_taxa)
-        for taxid, segment in taxs_to_be_specific_against:
+        for given_taxid, segment in taxs_to_be_specific_against:
             logger.info(("Fetching sequences to be specific against tax "
-                "%d (segment: %s)"), taxid, segment)
+                "%d (segment: %s)"), given_taxid, segment)
+            taxid = ncbi_neighbors.determine_current_taxid(given_taxid)
             seqs = prepare_alignment.fetch_sequences_for_taxonomy(
                     taxid, segment)
             seqs_list = alignment.SequenceList(list(seqs.values()))
@@ -828,20 +847,37 @@ def run(args):
         if len(args.in_fasta) != len(args.out_tsv):
             raise Exception(("Number output TSVs must match number of input "
                 "FASTAs"))
-        args.out_tsv = [out_tsv + '.tsv' for out_tsv in args.out_tsv]
+        if args.write_input_aln:
+            if len(args.write_input_aln) != len(args.out_tsv):
+                raise Exception(("Number input alignment filenames must match "
+                    "number of input FASTAs"))
         args.design_for = None
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
         args.specific_against_metadata_accs = [[] for _ in range(len(args.in_fasta))]
         args.annotations = [[] for _ in range(len(args.in_fasta))]
+        aln_tmp_dirs = []
+        if args.unaligned:
+            in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, \
+            design_for, specific_against_metadata_accs, annotations = \
+            prepare_alignments(args)
+
+            args.in_fasta = in_fasta
+            args.taxid_for_fasta = taxid_for_fasta
+            args.out_tsv = out_tsv
+            args.design_for = design_for
+            args.specific_against_metadata_accs = specific_against_metadata_accs
+            args.annotations = annotations
+        else:
+            args.out_tsv = [out_tsv + '.tsv' for out_tsv in args.out_tsv]
     else:
         raise Exception("Unknown input type subcommand '%s'" % args.input_type)
 
     design_for_id(args)
 
     # Close temporary files storing alignments
+    for td in aln_tmp_dirs:
+        td.cleanup()
     if args.input_type in ['auto-from-file', 'auto-from-args']:
-        for td in aln_tmp_dirs:
-            td.cleanup()
         if years_tsv is not None:
             years_tsv.close()
 
@@ -1130,6 +1166,21 @@ def argv_to_args(argv):
               "to 500). Higher values increase accuracy, but also increase"
               "runtime."))
 
+    # Alignment
+    base_subparser.add_argument('--mafft-path',
+        help=("Path to mafft executable, used for generating alignments."
+              "Required for input types auto-from-args and auto-from-file. "
+              "Also required for input type 'fasta' if '--unaligned' is "
+              "specified"))
+    base_subparser.add_argument('--cluster-threshold',
+        type=float,
+        default=0.2,
+        help=(("Maximum inter-cluster distance to use when clustering "
+               "input sequences prior to alignment. Expressed as average "
+               "nucleotide dissimilarity (1-ANI, where ANI is average "
+               "nucleotide identity); higher values result in fewer "
+               "clusters")))
+
     # Technical options
     base_subparser.add_argument('--do-not-memoize-guide-computations',
         action='store_true',
@@ -1268,7 +1319,9 @@ def argv_to_args(argv):
         nargs='+', required=True,
         help=("Path to output TSV, without the file extension. If more than "
               "one input FASTA is given, the same number of output TSVs must "
-              "be given; each output TSV corresponds to an input FASTA."))
+              "be given; each output TSV corresponds to an input FASTA. If "
+              "FASTA is unaligned, a cluster number will be added."
+              "Filenames are 'OUT_TSV.[cluster-number].fasta'."))
     input_fasta_subparser.add_argument('--cover-by-year-decay', nargs=3,
         action=ParseCoverDecayWithYearsFile,
         help=("<A> <B> <C>; if set, group input sequences by year and set a "
@@ -1280,12 +1333,18 @@ def argv_to_args(argv):
               "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
               "year receives a desired cover fraction that decays by B -- "
               "i.e., year n is given B*(desired cover fraction of year n+1)."))
+    input_fasta_subparser.add_argument('--unaligned', action='store_true',
+        help=("If set, treats inputs as unaligned fastas and uses MAFFT to "
+              "align them, and --mafft-path is required"))
+    input_fasta_subparser.add_argument('--write-input-aln', nargs='+',
+        help=("Prefix of path to files to which to write the alignments "
+              "being used as input for design. If more than one input "
+              "FASTA is given, the same number of input alignments must "
+              "be given; each input alignment corresponds to an input FASTA."
+              "Filenames are 'WRITE_INPUT_ALN.[cluster-number].fasta'."))
 
     # Auto prepare, common arguments
     input_auto_common_subparser = argparse.ArgumentParser(add_help=False)
-    input_auto_common_subparser.add_argument('--mafft-path',
-        required=True,
-        help=("Path to mafft executable, used for generating alignments"))
     input_auto_common_subparser.add_argument('--prep-memoize-dir',
         help=("Path to directory in which to memoize alignments and "
               "statistics on them. If set to \"s3://BUCKET/PATH\", it "
@@ -1313,14 +1372,6 @@ def argv_to_args(argv):
               "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
               "year receives a desired cover fraction that decays by B -- "
               "i.e., year n is given B*(desired cover fraction of year n+1)."))
-    input_auto_common_subparser.add_argument('--cluster-threshold',
-        type=float,
-        default=0.2,
-        help=(("Maximum inter-cluster distance to use when clustering "
-               "input sequences prior to alignment. Expressed as average "
-               "nucleotide dissimilarity (1-ANI, where ANI is average "
-               "nucleotide identity); higher values result in fewer "
-               "clusters")))
     input_auto_common_subparser.add_argument('--use-accessions',
         help=("If set, use specified accessions instead of fetching neighbors "
               "for the given taxonomic ID(s). This provides a path to a TSV "
@@ -1419,8 +1470,9 @@ def argv_to_args(argv):
             "and different metadata filters with spaces (e.g. "
             "'--specific-against-metadata-filter year!=2020,2019 taxid=11060')"))
     input_autoargs_subparser.add_argument('--write-input-seqs',
-        help=("Path to a file to which to write the sequences "
-              "(accession.version) being used as input for design"))
+        help=("Prefix of path to a file to which to write the sequences "
+              "(accession.version) being used as input for design; filename "
+              "is WRITE_INPUT_SEQS.txt"))
     input_autoargs_subparser.add_argument('--write-input-aln',
         help=("Prefix of path to files to which to write the alignments "
               "being used as input for design; filenames are "

@@ -452,9 +452,6 @@ def read_metadata_filters(meta_filts):
     dict_filter_eq = {}
     dict_filter_neq = {}
     for filt in meta_filts:
-        if ' ' in filt:
-            raise ValueError("Incorrect format for filter '%s'; individual filters "
-                "should not include spaces" %filt)
         dict_to_use = dict_filter_eq
         filt_split = filt.split('!=')
         if len(filt_split) == 2:

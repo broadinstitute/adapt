@@ -1,4 +1,4 @@
-# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://travis-ci.com/broadinstitute/adapt.svg?token=cZz1u4yFrRiEZnJWzdho&branch=master)](https://travis-ci.com/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Bioconda Package](https://img.shields.io/conda/vn/bioconda/adapt)](http://bioconda.github.io/recipes/adapt/README.html) [![PyPI package](https://img.shields.io/pypi/v/adapt-diagnostics)](https://pypi.org/project/adapt-diagnostics/)
+# ADAPT &nbsp;&middot;&nbsp; [![Build Status](https://app.travis-ci.com/broadinstitute/adapt.svg?branch=main)](https://app.travis-ci.com/broadinstitute/adapt) [![codecov](https://codecov.io/gh/broadinstitute/adapt/branch/main/graph/badge.svg?token=2xAaHum6bd)](https://codecov.io/gh/broadinstitute/adapt) [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/broadinstitute/adapt/pulls) [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Bioconda Package](https://img.shields.io/conda/vn/bioconda/adapt)](http://bioconda.github.io/recipes/adapt/README.html) [![PyPI package](https://img.shields.io/pypi/v/adapt-diagnostics)](https://pypi.org/project/adapt-diagnostics/)
 #### Activity-informed Design with All-inclusive Patrolling of Targets
 
 ADAPT efficiently designs activity-informed nucleic acid diagnostics for viruses.
@@ -23,7 +23,7 @@ ADAPT includes a pre-trained model that predicts CRISPR-Cas13a guide detection a
 ADAPT's output also includes amplification primers, e.g., for use with the SHERLOCK platform.
 The framework and software are compatible with other nucleic acid technologies given appropriate models.
 
-For more information, see our [bioRxiv preprint](https://doi.org/10.1101/2020.11.28.401877) that describes ADAPT and evaluates its designs experimentally.
+For more information, see our [publication](https://www.nature.com/articles/s41587-022-01213-5) that describes ADAPT and evaluates its designs experimentally.
 
 ### Table of contents
 
@@ -40,6 +40,7 @@ For more information, see our [bioRxiv preprint](https://doi.org/10.1101/2020.11
   * [Enforcing specificity](#enforcing-specificity)
   * [Searching for complete targets](#searching-for-complete-targets)
   * [Automatically downloading and curating data](#automatically-downloading-and-curating-data)
+  * [Using custom sequences as input](#using-custom-sequences-as-input)
   * [Miscellaneous key arguments](#miscellaneous-key-arguments)
   * [Output](#output)
 * [Examples](#examples)
@@ -197,8 +198,8 @@ This is the much simpler search type and can be helpful when getting started.
 
 INPUT-TYPE is one of:
 
-* `fasta`: The input is one or more FASTA files, each containing aligned sequences for a taxon.
-If more than one file is provided, the search finds taxon-specific designs meant for differential identification of the taxa.
+* `fasta`: The input is one or more FASTA files, each containing sequences for a taxon.
+If more than one file is provided, the search finds taxon-specific designs meant for differential identification of the taxa. This assumes the FASTA files contain aligned sequences, unless otherwise specified (see [Using custom sequences as input](#using-custom-sequences-as-input))
 * `auto-from-args`: The input is a single NCBI taxonomy ID, and related information, provided as command-line arguments.
 This fetches sequences for the taxon, then curates, clusters and aligns the sequences, and finally uses the generated alignment as input for design.
 More information is in [Automatically downloading and curating data](#automatically-downloading-and-curating-data).
@@ -305,8 +306,8 @@ Note that when INPUT-TYPE is `auto-from-{file,args}`, this argument does not acc
 
 ADAPT can enforce strict specificity so that designs will distinguish related taxa.
 
-When INPUT-TYPE is `auto-from-file`, ADAPT will automatically enforce specificity between the input taxa using a single specificity index.
-ADAPT can also enforce specificity when designing for a single taxon by parsing the `--specific-against-*` arguments.
+For all INPUT-TYPEs, ADAPT can enforce specificity by parsing the `--specific-against-*` arguments.
+When INPUT-TYPE is `auto-from-file` or `fasta`, ADAPT will also automatically enforce specificity between taxa/FASTA files using a single specificity index.
 
 To enforce specificity, the following arguments to [`design.py`](./bin/design.py) are important:
 
@@ -354,7 +355,7 @@ Note that this is only an upper bound, and in practice the number will usually b
 When INPUT-TYPE is `auto-from-{file,args}`, ADAPT will run end-to-end.
 It fetches and curates genomes, clusters and aligns them, and uses the generated alignment as input for design.
 
-Below are key arguments to [`design.py`](./bin/design.py) when SEARCH-TYPE is `auto-from-file` or `auto-from-args`:
+Below are key arguments to [`design.py`](./bin/design.py) when INPUT-TYPE is `auto-from-file` or `auto-from-args`:
 
 * `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments.
 * `--prep-memoize-dir PREP_MEMOIZE_DIR`: Memoize alignments and statistics on these alignments to the directory specified by PREP_MEMOIZE_DIR.
@@ -379,6 +380,18 @@ When using AWS S3 to memoize information across runs (`--prep-memoize-dir`), the
 Both AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are needed to login.
 These arguments are only necessary if saving the memoized data to an S3 bucket using PREP_MEMOIZE_DIR and AWS CLI has not been installed and configured.
 If AWS CLI has been installed and configured and these arguments are passed, they will override the AWS CLI configuration.
+
+## Using custom sequences as input
+
+When INPUT-TYPE is `fasta`, ADAPT will run on only the sequences specified in the FASTA, without curation.
+
+Below are key arguments to [`design.py`](./bin/design.py) when INPUT-TYPE is `fasta`:
+
+* `--unaligned`: Specify if any of the input FASTA files are unaligned. This will align them using MAFFT.
+* `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments. Required if `--unaligned` is specified.
+* `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
+The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
+(Default: 0.2.)
 
 ## Miscellaneous key arguments
 
@@ -529,8 +542,8 @@ This can be in the form of an [issue](https://github.com/broadinstitute/adapt/is
 
 ADAPT was started by Hayden Metsky, and is developed by Priya Pillai and Hayden.
 
-If you find ADAPT useful to your work, please cite our [preprint](https://doi.org/10.1101/2020.11.28.401877) as:
-  * Metsky HC _et al_. Diagnostic design with machine learning model-based optimization. _bioRxiv_ 2020.11.28.401877. doi:10.1101/2020.11.28.401877.
+If you find ADAPT useful to your work, please cite our [paper](https://www.nature.com/articles/s41587-022-01213-5) as:
+  * Metsky HC _et al_. Designing sensitive viral diagnostics with machine learning. _Nature Biotechnology_ (2022). doi:10.1038/s41587-022-01213-5.
 
 ## License
 
