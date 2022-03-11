@@ -3,6 +3,7 @@
 
 from collections import defaultdict
 import logging
+import math
 
 import numpy as np
 
@@ -118,7 +119,7 @@ class CoverageAnalyzer:
 
     def evaluate_pos_by_terminal_mismatches_and_mismatches(self, seq,
             target_seq, pos, mismatches, terminal_mismatches,
-            bases_from_terminal, left, allow_gu_pairs=False):
+            bases_from_terminal, left, allow_gu_pairs=False, save=None):
         """Evaluate binding with a mismatch model.
 
         Args:
@@ -136,28 +137,39 @@ class CoverageAnalyzer:
                 consider the 3' end as the left end (and so check the first
                 bases_from_terminal bases for mismatches)
             allow_gu_pairs: if True, tolerate G-U base pairs between
-                seq and a subsequence of target_seq
+                seq and a subsequence of target_seq (defaults to False)
+            save: if set, save computed mismatches and terminal mismatches in
+                this dictionary
 
         Returns:
             set of positions in pos where seq binds to target_seq
         """
+        if save is not None:
+            if allow_gu_pairs:
+                mismatches_fn = guide.seq_mismatches_with_gu_pairs
+            else:
+                mismatches_fn = guide.seq_mismatches
+
         start_shift = len(seq)-bases_from_terminal if left else 0
         end_shift = len(seq) if left else bases_from_terminal
-        subseq = seq[start_shift:end_shift]
+        termseq = seq[start_shift:end_shift]
 
         bind_pos = set()
         for i in pos:
-            target_subseq = target_seq[(i+start_shift):(i+end_shift)]
-            if guide.guide_binds(subseq, target_subseq, terminal_mismatches,
+            target_termseq = target_seq[(i+start_shift):(i+end_shift)]
+            if guide.guide_binds(termseq, target_termseq, terminal_mismatches,
                     allow_gu_pairs):
                 target_subseq = target_seq[i:(i + len(seq))]
                 if guide.guide_binds(seq, target_subseq, mismatches,
                         allow_gu_pairs):
                     bind_pos.add(i)
+                    if save is not None:
+                        save[i] = (mismatches_fn(seq, target_subseq),
+                                   mismatches_fn(termseq, target_termseq))
         return bind_pos
 
     def evaluate_pos_by_mismatches(self, seq, target_seq, pos,
-            mismatches, allow_gu_pairs):
+            mismatches, allow_gu_pairs, save=None):
         """Evaluate binding with a mismatch model.
 
         Args:
@@ -169,16 +181,25 @@ class CoverageAnalyzer:
                 whether seq binds to target_seq at a position
             allow_gu_pairs: if True, tolerate G-U base pairs between
                 seq and a subsequence of target_seq
+            save: if set, save computed mismatches in this dictionary
 
         Returns:
             set of positions in pos where seq binds to target_seq
         """
+        if save is not None:
+            if allow_gu_pairs:
+                mismatches_fn = guide.seq_mismatches_with_gu_pairs
+            else:
+                mismatches_fn = guide.seq_mismatches
+
         bind_pos = set()
         for i in pos:
             target_subseq = target_seq[i:(i + len(seq))]
             if guide.guide_binds(seq, target_subseq, mismatches,
                     allow_gu_pairs):
                 bind_pos.add(i)
+                if save is not None:
+                    save[i] = (mismatches_fn(seq, target_subseq), )
         return bind_pos
 
     def guide_bind_fn(self, seq, target_seq, pos):
@@ -189,7 +210,7 @@ class CoverageAnalyzer:
         raise NotImplementedError()
 
     def find_binding_pos(self, target_seq_name, seq, bind_fn,
-            save_activities=None):
+            save=None):
         """Find if and where a sequence binds to in a target sequence.
 
         This takes a naive (but fully sensitive) approach: it simply
@@ -208,7 +229,7 @@ class CoverageAnalyzer:
             seq: guide or primer sequence to lookup
             bind_fn: function accepting (seq, target_seq, pos) and outputs
                 positions in pos to which seq binds to target_seq
-            save_activities: if set, pass along to guide_fn to save computed
+            save: if set, pass along to guide_fn to save computed
                 activities
 
         Returns:
@@ -236,11 +257,10 @@ class CoverageAnalyzer:
                 self._index_seqs(index_only=target_seq_name)
 
         def bind_fn_with_save(seq, target_seq, pos):
-            if save_activities is None:
+            if save is None:
                 return bind_fn(seq, target_seq, pos)
             else:
-                return bind_fn(seq, target_seq, pos,
-                        save_activities=save_activities)
+                return bind_fn(seq, target_seq, pos, save=save)
 
         target_seq = self.seqs[target_seq_name]
 
@@ -279,6 +299,70 @@ class CoverageAnalyzer:
         pos_to_evaluate = list(range(len(target_seq) - len(seq) + 1))
         bind_pos = bind_fn_with_save(seq, target_seq, pos_to_evaluate)
         return bind_pos
+
+    def scores_where_oligo_binds(self, oligo_seqs, bind_fn, obj_type='min'):
+        """Determine binding score for oligo per target sequence.
+        'Binding score' is either the number of mismatches with the target or
+        a predicted activity
+
+        Args:
+            oligo_seqs: oligo sequences
+            bind_fn: function that calculates a 'binding score';
+                takes in seq, target_seq, pos, save
+            obj_type: 'min' (default) if the binding score should be minimized;
+                'max' if the binding score should be maximized
+
+        Returns:
+            dict {target seq name in self.seqs: (binding score,
+                                                 best oligo sequence,
+                                                 start position)}
+        """
+        target_scores = {}
+        if obj_type == 'min':
+            compare = lambda a,b: a<b
+            default_oligo = ((math.inf, ), None, None)
+        elif obj_type == 'max':
+            compare = lambda a,b: a>b
+            default_oligo = ((0, ), None, None)
+        else:
+            raise ValueError("Objective type must be either 'min' or 'max'")
+        for seq_name in self.seqs:
+            target_scores[seq_name] = default_oligo
+            for oligo_seq in oligo_seqs:
+                scores = {}
+                bind_pos = self.find_binding_pos(seq_name, oligo_seq, bind_fn,
+                    save=scores)
+                if len(bind_pos) > 0:
+                    # oligo_seq binds somewhere in target_seq
+                    # As its best binding site, take the minimum over multiple
+                    # positions (if there is more than one where it may bind)
+                    for start_pos in bind_pos:
+                        # If this score is better than the previous, store it
+                        # If there's multiple scores saved, compare by first score
+                        if compare(scores[start_pos][0], target_scores[seq_name][0][0]):
+                            target_scores[seq_name] = (scores[start_pos],
+                                                         oligo_seq,
+                                                         start_pos)
+        return target_scores
+
+    # def mismatches_where_oligo_binds(self, oligo_seqs, mismatches,
+    #         allow_gu_pairs, ):
+    #     """Determine mismatches for oligo set per target sequence.
+
+    #     Args:
+    #         oligo_seqs: oligo sequences
+    #         mismatches: maximum number of mismatches to allow while binding
+    #         allow_gu_pairs: boolean, whether or not to allow GU base pairing
+
+    #     Returns:
+    #         dict {target seq in self.seqs: (mismatches,
+    #                                         best oligo sequence,
+    #                                         start position)}
+    #     """
+    #     def bind_fn(seq, target_seq, pos, save=None):
+    #         return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
+    #             mismatches, allow_gu_pairs, save=save)
+    #     return self.scores_where_oligo_binds(oligo_seqs, bind_fn)
 
     def seqs_where_guides_bind(self, guide_seqs):
         """Determine sequences to which guide binds.
@@ -549,9 +633,86 @@ class CoverageAnalyzer:
         for design_id, design in self.designs.items():
             logger.info(("Computing mean activities of guides in design "
                 "'%s'"), str(design_id))
-            activities_across_targets = self.activities_where_guide_binds(design.guides)
-            mean_activities[design_id] = np.mean(list(activities_across_targets.values()))
+            activities_across_targets = self.scores_where_oligo_binds(
+                design.guides, self.guide_bind_fn, obj_type='max')
+            mean_activities[design_id] = np.mean(
+                [guide_stats[0] for guide_stats in
+                 activities_across_targets.values()])
         return mean_activities
+
+    def per_seq_guide_activities(self):
+        """Determine the per sequence activities of guides from each design.
+
+        Returns:
+            dict mapping design identifier (self.designs.keys()) to a tuple of
+            the best guide activity per target sequence of its guide set
+            and the best guide per target sequence of its guide set
+        """
+        activities = {}
+        for design_id, design in self.designs.items():
+            logger.info(("Computing per sequence activities of guides in design "
+                "'%s'"), str(design_id))
+            activities[design_id] = self.scores_where_oligo_binds(
+                design.guides, self.guide_bind_fn, obj_type='max')
+        return activities
+
+    def per_seq_primer_mismatches(self):
+        """Determine the per sequence mismatches of primers from each design.
+
+        Returns:
+            tuple of two dicts (first for the left, second for the right)
+            mapping design identifier (self.designs.keys()) to a tuple of
+            the best primer mismatches per target sequence of its primer set
+            and the best primer per target sequence of its primer set
+        """
+        left_mismatches = {}
+        right_mismatches = {}
+        for design_id, design in self.designs.items():
+            logger.info(("Computing per sequence mismatches of primers in design "
+                "'%s'"), str(design_id))
+            if self.primer_terminal_mismatches is None:
+                def bind_fn(seq, target_seq, pos, save=None):
+                    return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
+                        self.primer_mismatches, False, save=save)
+                left_bind_fn = bind_fn
+                right_bind_fn = bind_fn
+            else:
+                def left_bind_fn(seq, target_seq, pos, save=None):
+                    return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                        seq, target_seq, pos, self.primer_mismatches,
+                        self.primer_terminal_mismatches,
+                        self.bases_from_terminal, True, allow_gu_pairs=False,
+                        save=save)
+                def right_bind_fn(seq, target_seq, pos, save=None):
+                    return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                        seq, target_seq, pos, self.primer_mismatches,
+                        self.primer_terminal_mismatches,
+                        self.bases_from_terminal, False, allow_gu_pairs=False,
+                        save=save)
+            left_mismatches[design_id] = self.scores_where_oligo_binds(
+                design.primers[0], left_bind_fn)
+            right_mismatches[design_id] = self.scores_where_oligo_binds(
+                design.primers[1], right_bind_fn)
+        return (left_mismatches, right_mismatches)
+
+    def per_seq_guide_mismatches(self):
+        """Determine the per sequence mismatches of guides from each design.
+
+        Returns:
+            dict mapping design identifier (self.designs.keys()) to a tuple of
+            the best guide mismatches per target sequence of its guide set
+            and the best guide per target sequence of its guide set
+        """
+        mismatches = {}
+        for design_id, design in self.designs.items():
+            logger.info(("Computing per sequence mismatches of guides in design "
+                "'%s'"), str(design_id))
+            def bind_fn(seq, target_seq, pos, save=None):
+                    return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
+                        self.guide_mismatches, True, save=save)
+            mismatches[design_id] =  self.scores_where_oligo_binds(
+                design.guides, bind_fn)
+        return mismatches
 
 
 class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
@@ -579,7 +740,7 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
     def activities_where_guide_binds(self, guide_seqs):
         raise NotImplementedError()
 
-    def guide_bind_fn(self, seq, target_seq, pos):
+    def guide_bind_fn(self, seq, target_seq, pos, save=None):
         """Evaluate binding with a mismatch model.
 
         Args:
@@ -592,8 +753,7 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
             set of positions in pos where seq binds to target_seq
         """
         return self.evaluate_pos_by_mismatches(seq, target_seq,
-                pos, self.guide_mismatches, self.allow_gu_pairs)
-
+                pos, self.guide_mismatches, self.allow_gu_pairs, save=save)
 
 class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
     """Methods to analyze coverage of a design using model that determines
@@ -626,27 +786,13 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
             guide_seqs: guide sequences to lookup (treat as a guide set)
 
         Returns:
-            dict {target seq in self.seqs: predicted activity}
+            (dict {target seq in self.seqs: (predicted activity,
+                                             best guide sequence,
+                                             start position)})
         """
-        target_act = {}
-        for seq_name, target_seq in self.seqs.items():
-            activities_for_target = []
-            for guide_seq in guide_seqs:
-                activities = {}
-                bind_pos = self.find_binding_pos(seq_name, guide_seq,
-                        self.guide_bind_fn, save_activities=activities)
-                if len(bind_pos) > 0:
-                    # guide_seq binds somewhere in target_seq
-                    # As its activity, take the maximum over multiple
-                    # positions (if there is more than one where it may bind)
-                    activities_for_target += [max(activities.values())]
-                else:
-                    activities_for_target += [0]
-            # If there are multiple guides, take the max across them
-            target_act[target_seq] = max(activities_for_target)
-        return target_act
+        return self.scores_where_oligo_binds(guide_seqs, self.guide_bind_fn, obj_type='max')
 
-    def guide_bind_fn(self, seq, target_seq, pos, save_activities=None):
+    def guide_bind_fn(self, seq, target_seq, pos, save=None):
         """Evaluate binding with a predictor -- i.e., based on what is
         predicted to be highly active.
 
@@ -655,8 +801,8 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
             target_seq: target sequence against which to check
             pos: list of positions indicating subsequence in target_seq
                 to check for binding of seq
-            save_activities: if set, this saves computed activities as
-                save_activites[p]=activity for each p in pos for which
+            save: if set, this saves computed activities as
+                save[p]=activity for each p in pos for which
                 this can compute activity; self.highly_active must be False
 
         Returns:
@@ -683,15 +829,15 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
         if self.highly_active:
             predictions = self.predictor.determine_highly_active(-1,
                     pairs_to_evaluate)
-            if save_activities is not None:
-                raise Exception(("Cannot use save_activities when using "
+            if save is not None:
+                raise Exception(("Cannot use save when using "
                     "'highly active' as a criterion"))
         else:
             predictions = self.predictor.compute_activity(-1,
                     pairs_to_evaluate)
-            if save_activities is not None:
+            if save is not None:
                 for i, p in zip(pos_evaluating, predictions):
-                    save_activities[i] = p
+                    save[i] = (p, )
             predictions = [bool(p > 0) for p in predictions]
         bind_pos = set()
         for i, p in zip(pos_evaluating, predictions):

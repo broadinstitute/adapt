@@ -3,12 +3,14 @@
 
 import argparse
 import logging
+import os
 
 from adapt import coverage_analysis
 from adapt.prepare import ncbi_neighbors
 from adapt.utils import log
 from adapt.utils import predict_activity
 from adapt.utils import seq_io
+from adapt.utils.version import get_project_path, get_latest_model_version
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -136,6 +138,87 @@ def write_mean_activity_of_guides(designs, mean_activities, out_fn):
             row = [design_id, guides, mean_activities[design_id]]
             fw.write('\t'.join([str(x) for x in row]) + '\n')
 
+def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
+                  per_seq_primers=None, guide_activity_model=True,
+                  primer_terminal_mismatches=False):
+    """Write table giving the fraction of sequences bound by a target.
+
+    Args:
+        designs: dict {design_id: design} where design_id is an
+            identifier for design and design is a coverage_analysis.
+            Design object
+        seqs: dict {seq_name: target sequence} where seq_name is the name of
+            a sequence in the input FASTA file
+        out_fn: path to TSV file at which to write table
+        per_seq_guides: output of CoverageAnalyzer.per_seq_guide_mismatches;
+            dict mapping design identifier (self.designs.keys()) to a tuple of
+            the best guide scores per target sequence of its guide set
+            and the best guide per target sequence of its guide set
+        per_seq_primers: output of CoverageAnalyzer.per_seq_primer_mismatches;
+            tuple of two dicts (first for the left, second for the right)
+            mapping design identifier (self.designs.keys()) to a tuple of
+            the best primer mismatches per target sequence of its primer set
+            and the best primer per target sequence of its primer set
+        guide_activity_model: if True (default), per_seq_guides contains
+            activity score; if False, per_seq_guides contains number of
+            mismatches against the target
+        primer_terminal_mismatches: if True, per_seq_primers contains a tuple
+            of mismatches and terminal mismatches in the score; if False
+            (default), per_seq_primers contains the number of mismatches in
+            the score
+    """
+    header = ['design_id', 'seq_name']
+
+    if per_seq_primers:
+        header.extend(['target-start', 'target-end', 'target-length'])
+        if primer_terminal_mismatches:
+            header.extend(['left-primer-mismatches',
+                           'left-primer-terminal-mismatches',
+                           'left-primer-ideal-target-sequence',
+                           'left-primer-start',
+                           'right-primer-mismatches',
+                           'right-primer-terminal-mismatches',
+                           'right-primer-ideal-target-sequence',
+                           'right-primer-start'])
+        else:
+            header.extend(['left-primer-mismatches',
+                           'left-primer-ideal-target-sequence',
+                           'left-primer-start',
+                           'right-primer-mismatches',
+                           'right-primer-ideal-target-sequence',
+                           'right-primer-start'])
+    if per_seq_guides:
+        if guide_activity_model:
+            header.append('guide-activity')
+        else:
+            header.append('guide-mismatches')
+        header.extend(['guide-ideal-target-sequence', 'guide-start'])
+    with open(out_fn, 'w') as fw:
+        fw.write('\t'.join(header) + '\n')
+        for design_id in sorted(list(designs.keys())):
+            for seq_name in seqs:
+                row = [design_id, seq_name]
+                if per_seq_primers:
+                    # Get left primer start pos for target start
+                    target_start = per_seq_primers[0][design_id][seq_name][2]
+                    target_length = None
+                    # Get right primer end pos + right primer length for target end
+                    if per_seq_primers[1][design_id][seq_name][2] is not None:
+                        target_end = per_seq_primers[1][design_id][seq_name][2] + len(per_seq_primers[1][design_id][seq_name][1])
+                        if target_start is not None:
+                            target_length = target_end-target_start
+                    else:
+                        target_end = None
+                    row.extend([target_start, target_end, target_length])
+                    row.extend([*per_seq_primers[0][design_id][seq_name][0],
+                                *per_seq_primers[0][design_id][seq_name][1:],
+                                *per_seq_primers[1][design_id][seq_name][0],
+                                *per_seq_primers[1][design_id][seq_name][1:]])
+                if per_seq_guides:
+                    row.extend([*per_seq_guides[design_id][seq_name][0],
+                                *per_seq_guides[design_id][seq_name][1:]])
+                fw.write('\t'.join([str(x) for x in row]) + '\n')
+
 
 def main(args):
     # Allow G-U base pairing, unless it is explicitly disallowed
@@ -173,8 +256,31 @@ def main(args):
                 primer_terminal_mismatches=args.primer_terminal_mismatches,
                 bases_from_terminal=args.bases_from_terminal,
                 max_target_length=args.max_target_length)
-    elif args.predict_activity_model_path:
-        cla_path, reg_path = args.predict_activity_model_path
+    elif args.predict_activity_model_path or args.predict_cas13a_activity_model is not None:
+        if args.predict_activity_model_path:
+            cla_path, reg_path = args.predict_activity_model_path
+        else:
+            dir_path = get_project_path()
+            cla_path_all = os.path.join(dir_path, 'models', 'classify',
+                                    'cas13a')
+            reg_path_all = os.path.join(dir_path, 'models', 'regress',
+                                    'cas13a')
+            if len(args.predict_cas13a_activity_model) not in (0,2):
+                raise Exception(("If setting versions for "
+                    "--predict-cas13a-activity-model, both a version for "
+                    "the classifier and the regressor must be set."))
+            if (len(args.predict_cas13a_activity_model) == 0 or
+                    args.predict_cas13a_activity_model[0] == 'latest'):
+                cla_version = get_latest_model_version(cla_path_all)
+            else:
+                cla_version = args.predict_cas13a_activity_model[0]
+            if (len(args.predict_cas13a_activity_model) == 0 or
+                    args.predict_cas13a_activity_model[1] == 'latest'):
+                reg_version = get_latest_model_version(reg_path_all)
+            else:
+                reg_version = args.predict_cas13a_activity_model[1]
+            cla_path = os.path.join(cla_path_all, cla_version)
+            reg_path = os.path.join(reg_path_all, reg_version)
         if args.predict_activity_thres:
             # Use specified thresholds on classification and regression
             cla_thres, reg_thres = args.predict_activity_thres
@@ -194,7 +300,8 @@ def main(args):
                 bases_from_terminal=args.bases_from_terminal,
                 max_target_length=args.max_target_length)
     else:
-        raise Exception(("One of --guide-mismatches or "
+        raise Exception(("One of --guide-mismatches, "
+            "--predict-cas13a-activity-model, or"
             "--predict-activity-model-path must be set"))
 
     # Perform analyses
@@ -204,7 +311,8 @@ def main(args):
         write_frac_bound(designs, frac_bound, args.write_frac_bound)
         performed_analysis = True
     if args.write_mean_activity_of_guides:
-        if (not args.predict_activity_model_path or
+        if (not (args.predict_activity_model_path or
+                 args.predict_cas13a_activity_model is not None) or
                 args.predict_activity_require_highly_active):
             raise Exception(("To use --write-mean-activity-of-guides, "
                     "a predictive model must be set and "
@@ -213,6 +321,32 @@ def main(args):
         mean_activity = analyzer.mean_activity_of_guides()
         write_mean_activity_of_guides(designs, mean_activity,
                 args.write_mean_activity_of_guides)
+        performed_analysis = True
+    if args.write_per_seq:
+        per_seq_guides = None
+        guide_activity_model = None
+        if args.predict_activity_model_path or args.predict_cas13a_activity_model is not None:
+            per_seq_guides = analyzer.per_seq_guide_activities()
+            guide_activity_model = True
+        elif args.guide_mismatches is not None:
+            per_seq_guides = analyzer.per_seq_guide_mismatches()
+            guide_activity_model = False
+        else:
+            raise Exception(("One of --guide-mismatches, "
+            "--predict-cas13a-activity-model, or"
+            "--predict-activity-model-path must be set"))
+        if args.predict_activity_require_highly_active:
+            # TODO: Could in theory use this to create a binary "highly
+            # active" column
+            logger.warning(("When using --write-per-seq, "
+                    "--predict-activity-require-highly-active is not "
+                    "used"))
+        per_seq_primers = analyzer.per_seq_primer_mismatches()
+        write_per_seq(designs, seqs, args.write_per_seq,
+                      per_seq_guides=per_seq_guides,
+                      per_seq_primers=per_seq_primers,
+                      guide_activity_model=guide_activity_model,
+                      primer_terminal_mismatches=(args.primer_terminal_mismatches is not None))
         performed_analysis = True
 
     if not performed_analysis:
@@ -252,6 +386,15 @@ if __name__ == "__main__":
               "a TSV file at which to write the table. If set, a predictive "
               "model must be set without "
               "--predict-activity-require-highly-active"))
+    parser.add_argument('--write-per-seq',
+        help=("If set, write a table in which each row represents an assay's "
+              "performance on an input sequence with the activity and "
+              "objective score. The 'seq_name' gives the sequence name in the "
+              "FASTA alignment provided; the 'design_id' column gives the row "
+              "number of the design in the designs input (1 for the first "
+              "design). The provided argument is a path to a TSV file at "
+              "which to write the table. If set, a predictive model must be "
+              "set without --predict-activity-require-highly-active"))
 
     # Parameter determining whether a primer binds to target
     parser.add_argument('-pm', '--primer-mismatches',
@@ -276,8 +419,9 @@ if __name__ == "__main__":
     parser.add_argument('-gm', '--guide-mismatches',
         type=int,
         help=("Allow for this number of mismatches when "
-              "determining whether a guide covers a sequence; either this "
-              "or --predict-activity-model-path should be set"))
+              "determining whether a guide covers a sequence.  Required if "
+              "--predict-activity-model-path or predict-cas13a-activity-model "
+              "is not set."))
     parser.add_argument('--do-not-allow-gu-pairing',
         action='store_true',
         help=("When determining whether a guide binds to a region of "
@@ -288,8 +432,14 @@ if __name__ == "__main__":
               "in the target (since the synthesized guide is the reverse "
               "complement of the output guide sequence)"))
 
-    # Parameters determining whether a guide binds to target based on
-    # trained model
+    # Use models to predict activity
+    parser.add_argument('--predict-cas13a-activity-model',
+        nargs='*',
+        help=("Use ADAPT's premade Cas13a model to predict guide-target "
+              "activity. Optionally, two arguments can be included to indicate "
+              "version number, in the format 'v1_0' or 'latest'. Versions "
+              "will default to latest. Required if --guide-mismatches or "
+              "predict-activity-model-path is not set."))
     parser.add_argument('--predict-activity-model-path',
         nargs=2,
         help=("Paths to directories containing serialized models in "
@@ -298,8 +448,8 @@ if __name__ == "__main__":
               "model to determine which guides are active; (2) regression "
               "model, which is used to determine which guides (among "
               "active ones) are highly active. The models/ directory "
-              "contains example models. Either this or --guide-mismatches "
-              "should be set."))
+              "contains example models. Required if --guide-mismatches or"
+              "predict-cas13a-activity-model is not set."))
     parser.add_argument('--predict-activity-thres',
         type=float,
         nargs=2,
