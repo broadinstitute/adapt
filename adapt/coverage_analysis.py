@@ -9,7 +9,7 @@ import numpy as np
 
 from adapt.utils import guide
 
-__author__ = 'Hayden Metsky <hayden@mit.edu>'
+__author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya Pillai <ppillai@broadinstitute.org>'
 
 logger = logging.getLogger(__name__)
 
@@ -313,17 +313,17 @@ class CoverageAnalyzer:
                 'max' if the binding score should be maximized
 
         Returns:
-            dict {target seq name in self.seqs: (binding score,
-                                                 best oligo sequence,
-                                                 start position)}
+            dict {target seq name: [tuple of binding scores,
+                                    best oligo sequence,
+                                    start position]}
         """
         target_scores = {}
         if obj_type == 'min':
             compare = lambda a,b: a<b
-            default_oligo = ((math.inf, ), None, None)
+            default_oligo = [(math.inf, ), None, None]
         elif obj_type == 'max':
             compare = lambda a,b: a>b
-            default_oligo = ((0, ), None, None)
+            default_oligo = [(0, ), None, None]
         else:
             raise ValueError("Objective type must be either 'min' or 'max'")
         for seq_name in self.seqs:
@@ -340,29 +340,23 @@ class CoverageAnalyzer:
                         # If this score is better than the previous, store it
                         # If there's multiple scores saved, compare by first score
                         if compare(scores[start_pos][0], target_scores[seq_name][0][0]):
-                            target_scores[seq_name] = (scores[start_pos],
-                                                         oligo_seq,
-                                                         start_pos)
+                            target_scores[seq_name] = [scores[start_pos],
+                                                       oligo_seq,
+                                                       start_pos]
         return target_scores
 
-    # def mismatches_where_oligo_binds(self, oligo_seqs, mismatches,
-    #         allow_gu_pairs, ):
-    #     """Determine mismatches for oligo set per target sequence.
+    def scores_where_guide_binds(self, guide_seqs):
+        """Determine scores across the target sequences.
 
-    #     Args:
-    #         oligo_seqs: oligo sequences
-    #         mismatches: maximum number of mismatches to allow while binding
-    #         allow_gu_pairs: boolean, whether or not to allow GU base pairing
+        Args:
+            guide_seqs: guide sequences to lookup (treat as a guide set)
 
-    #     Returns:
-    #         dict {target seq in self.seqs: (mismatches,
-    #                                         best oligo sequence,
-    #                                         start position)}
-    #     """
-    #     def bind_fn(seq, target_seq, pos, save=None):
-    #         return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
-    #             mismatches, allow_gu_pairs, save=save)
-    #     return self.scores_where_oligo_binds(oligo_seqs, bind_fn)
+        Returns:
+            (dict {target seq in self.seqs: (score,
+                                             best guide sequence,
+                                             start position)})
+        """
+        raise NotImplementedError()
 
     def seqs_where_guides_bind(self, guide_seqs):
         """Determine sequences to which guide binds.
@@ -622,48 +616,31 @@ class CoverageAnalyzer:
             frac_bound[design_id] = float(len(seqs_bound)) / len(self.seqs)
         return frac_bound
 
-    def mean_activity_of_guides(self):
-        """Determine the mean activity of guides from each design.
-
-        Returns:
-            dict mapping design identifier (self.designs.keys()) to the
-            mean activity, across the target sequences, of its guide set
-        """
-        mean_activities = {}
-        for design_id, design in self.designs.items():
-            logger.info(("Computing mean activities of guides in design "
-                "'%s'"), str(design_id))
-            activities_across_targets = self.scores_where_oligo_binds(
-                design.guides, self.guide_bind_fn, obj_type='max')
-            mean_activities[design_id] = np.mean(
-                [guide_stats[0] for guide_stats in
-                 activities_across_targets.values()])
-        return mean_activities
-
-    def per_seq_guide_activities(self):
-        """Determine the per sequence activities of guides from each design.
+    def per_seq_guide(self):
+        """Determine the per sequence score of guides from each design.
 
         Returns:
             dict mapping design identifier (self.designs.keys()) to a tuple of
-            the best guide activity per target sequence of its guide set
+            the best guide score per target sequence of its guide set
             and the best guide per target sequence of its guide set
         """
-        activities = {}
+        scores = {}
         for design_id, design in self.designs.items():
-            logger.info(("Computing per sequence activities of guides in design "
+            logger.info(("Computing per sequence scores of guides in design "
                 "'%s'"), str(design_id))
-            activities[design_id] = self.scores_where_oligo_binds(
-                design.guides, self.guide_bind_fn, obj_type='max')
-        return activities
+            scores[design_id] = self.scores_where_guide_binds(design.guides)
+        return scores
 
     def per_seq_primer_mismatches(self):
         """Determine the per sequence mismatches of primers from each design.
 
         Returns:
             tuple of two dicts (first for the left, second for the right)
-            mapping design identifier (self.designs.keys()) to a tuple of
-            the best primer mismatches per target sequence of its primer set
-            and the best primer per target sequence of its primer set
+            mapping design identifier (self.designs.keys()) to a
+            dict {target seq name: ((primer mismatches,
+                                     (optional) primer terminal mismatchs),
+                                     best primer sequence,
+                                     start position)}
         """
         left_mismatches = {}
         right_mismatches = {}
@@ -695,25 +672,6 @@ class CoverageAnalyzer:
                 design.primers[1], right_bind_fn)
         return (left_mismatches, right_mismatches)
 
-    def per_seq_guide_mismatches(self):
-        """Determine the per sequence mismatches of guides from each design.
-
-        Returns:
-            dict mapping design identifier (self.designs.keys()) to a tuple of
-            the best guide mismatches per target sequence of its guide set
-            and the best guide per target sequence of its guide set
-        """
-        mismatches = {}
-        for design_id, design in self.designs.items():
-            logger.info(("Computing per sequence mismatches of guides in design "
-                "'%s'"), str(design_id))
-            def bind_fn(seq, target_seq, pos, save=None):
-                    return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
-                        self.guide_mismatches, True, save=save)
-            mismatches[design_id] =  self.scores_where_oligo_binds(
-                design.guides, bind_fn)
-        return mismatches
-
 
 class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
     """Methods to analyze coverage of a design using model with fixed number
@@ -737,8 +695,19 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
         self.guide_mismatches = guide_mismatches
         self.allow_gu_pairs = allow_gu_pairs
 
-    def activities_where_guide_binds(self, guide_seqs):
-        raise NotImplementedError()
+    def scores_where_guide_binds(self, guide_seqs):
+        """Determine mismatch scores across the target sequences.
+
+        Args:
+            guide_seqs: guide sequences to lookup (treat as a guide set)
+
+        Returns:
+            dict {target seq name: ((number of mismatches, ),
+                                    best guide sequence,
+                                    start position)}
+        """
+        return self.scores_where_oligo_binds(guide_seqs, self.guide_bind_fn,
+                                             obj_type='min')
 
     def guide_bind_fn(self, seq, target_seq, pos, save=None):
         """Evaluate binding with a mismatch model.
@@ -779,18 +748,37 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
         self.predictor = predictor
         self.highly_active = highly_active
 
-    def activities_where_guide_binds(self, guide_seqs):
+    def scores_where_guide_binds(self, guide_seqs):
         """Determine activities across the target sequences.
 
         Args:
             guide_seqs: guide sequences to lookup (treat as a guide set)
 
         Returns:
-            (dict {target seq in self.seqs: (predicted activity,
-                                             best guide sequence,
-                                             start position)})
+            dict {target seq name: ((predicted activity, ),
+                                    best guide sequence,
+                                    start position)}
         """
-        return self.scores_where_oligo_binds(guide_seqs, self.guide_bind_fn, obj_type='max')
+        return self.scores_where_oligo_binds(guide_seqs, self.guide_bind_fn,
+                                             obj_type='max')
+
+    def mean_activity_of_guides(self):
+        """Determine the mean activity of guides from each design.
+
+        Returns:
+            dict mapping design identifier (self.designs.keys()) to the
+            mean activity, across the target sequences, of its guide set
+        """
+        mean_activities = {}
+        for design_id, design in self.designs.items():
+            logger.info(("Computing mean activities of guides in design "
+                "'%s'"), str(design_id))
+            activities_across_targets = self.scores_where_guide_binds(
+                design.guides)
+            mean_activities[design_id] = np.mean(
+                [guide_stats[0] for guide_stats in
+                 activities_across_targets.values()])
+        return mean_activities
 
     def guide_bind_fn(self, seq, target_seq, pos, save=None):
         """Evaluate binding with a predictor -- i.e., based on what is

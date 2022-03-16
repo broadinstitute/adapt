@@ -4,6 +4,8 @@
 import argparse
 import logging
 import os
+import sys
+import math
 
 from adapt import coverage_analysis
 from adapt.prepare import ncbi_neighbors
@@ -190,8 +192,10 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
     if per_seq_guides:
         if guide_activity_model:
             header.append('guide-activity')
+            guide_none = 0
         else:
             header.append('guide-mismatches')
+            guide_none = math.inf
         header.extend(['guide-ideal-target-sequence', 'guide-start'])
     with open(out_fn, 'w') as fw:
         fw.write('\t'.join(header) + '\n')
@@ -210,17 +214,29 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
                     else:
                         target_end = None
                     row.extend([target_start, target_end, target_length])
+                    if per_seq_primers[0][design_id][seq_name][0][0] == math.inf:
+                        if primer_terminal_mismatches:
+                            per_seq_primers[0][design_id][seq_name][0] = (None, None)
+                        else:
+                            per_seq_primers[0][design_id][seq_name][0] = (None, )
+                    if per_seq_primers[1][design_id][seq_name][0][0] == math.inf:
+                        if primer_terminal_mismatches:
+                            per_seq_primers[1][design_id][seq_name][0] = (None, None)
+                        else:
+                            per_seq_primers[1][design_id][seq_name][0] = (None, )
                     row.extend([*per_seq_primers[0][design_id][seq_name][0],
                                 *per_seq_primers[0][design_id][seq_name][1:],
                                 *per_seq_primers[1][design_id][seq_name][0],
                                 *per_seq_primers[1][design_id][seq_name][1:]])
                 if per_seq_guides:
+                    if per_seq_guides[design_id][seq_name][0][0] == guide_none:
+                        per_seq_guides[design_id][seq_name][0] = (None, )
                     row.extend([*per_seq_guides[design_id][seq_name][0],
                                 *per_seq_guides[design_id][seq_name][1:]])
                 fw.write('\t'.join([str(x) for x in row]) + '\n')
 
 
-def main(args):
+def run(args):
     # Allow G-U base pairing, unless it is explicitly disallowed
     allow_gu_pairs = not args.do_not_allow_gu_pairing
 
@@ -323,18 +339,16 @@ def main(args):
                 args.write_mean_activity_of_guides)
         performed_analysis = True
     if args.write_per_seq:
-        per_seq_guides = None
         guide_activity_model = None
         if args.predict_activity_model_path or args.predict_cas13a_activity_model is not None:
-            per_seq_guides = analyzer.per_seq_guide_activities()
             guide_activity_model = True
         elif args.guide_mismatches is not None:
-            per_seq_guides = analyzer.per_seq_guide_mismatches()
             guide_activity_model = False
         else:
             raise Exception(("One of --guide-mismatches, "
             "--predict-cas13a-activity-model, or"
             "--predict-activity-model-path must be set"))
+        per_seq_guides = analyzer.per_seq_guide()
         if args.predict_activity_require_highly_active:
             # TODO: Could in theory use this to create a binary "highly
             # active" column
@@ -357,7 +371,7 @@ def main(args):
         seqs_tempfile.close()
 
 
-if __name__ == "__main__":
+def argv_to_args(argv):
     parser = argparse.ArgumentParser()
 
     # Required inputs
@@ -400,18 +414,19 @@ if __name__ == "__main__":
     parser.add_argument('-pm', '--primer-mismatches',
         type=int, default=0,
         help=("Allow for this number of mismatches when determining "
-              "whether a primer covers a sequence (ignore this if "
+              "whether a primer covers a sequence. (ignore this if "
               "the targets only consist of guides)"))
     parser.add_argument('-ptm', '--primer-terminal-mismatches',
         type=int,
         help=("Allow for this number of mismatches in the BASES_FROM_TERMINAL "
               "bases from the 3' end when determining whether a primer covers "
-              "a sequence (ignore this if the targets only consist of "
-              "guides)"))
+              "a sequence. Default is unset (and therefore unused). (ignore "
+              "this if the targets only consist of guides)"))
     parser.add_argument('--bases-from-terminal',
         type=int, default=5,
         help=("Allow for PRIMER_TERMINAL_MISMATCHES in this many bases from "
-              "the 3' end when determining whether a primer covers a sequence"
+              "the 3' end when determining whether a primer covers a sequence."
+              "Default is 5 and is only used if PRIMER_TERMINAL_MISMATCHES set"
               "(ignore this if the targets only consist of guides)"))
 
     # Parameters determining whether a guide binds to target based on
@@ -420,8 +435,8 @@ if __name__ == "__main__":
         type=int,
         help=("Allow for this number of mismatches when "
               "determining whether a guide covers a sequence.  Required if "
-              "--predict-activity-model-path or predict-cas13a-activity-model "
-              "is not set."))
+              "neither --predict-activity-model-path nor "
+              "predict-cas13a-activity-model is not set."))
     parser.add_argument('--do-not-allow-gu-pairing',
         action='store_true',
         help=("When determining whether a guide binds to a region of "
@@ -504,6 +519,10 @@ if __name__ == "__main__":
         const=logging.INFO,
         help=("Verbose output"))
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv[1:])
     log.configure_logging(args.log_level)
-    main(args)
+
+    return args
+
+if __name__ == "__main__":
+    run(argv_to_args(sys.argv))

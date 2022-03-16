@@ -11,7 +11,7 @@ import logging
 from collections import OrderedDict
 from argparse import Namespace
 from adapt import alignment
-from adapt.prepare import align, ncbi_neighbors, prepare_alignment, cluster
+from adapt.prepare import align, prepare_alignment, cluster
 from adapt.utils import seq_io
 from bin import design
 
@@ -70,12 +70,12 @@ class TestDesign(object):
             with open(file) as f:
                 for i, line in enumerate(f):
                     if i == 0:
-                        headers = line.split('\t')
+                        headers = line[:-1].split('\t')
                         # Will raise an error if header is not in output
                         col_loc = headers.index(header)
                         continue
                     self.assertLess(i, len(expected) + 1)
-                    guide_line = line.split('\t')[col_loc]
+                    guide_line = line[:-1].split('\t')[col_loc]
                     guides = guide_line.split(' ')
                     for guide in guides:
                         self.assertIn(guide, expected[i-1])
