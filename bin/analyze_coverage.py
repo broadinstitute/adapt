@@ -237,7 +237,7 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
                         per_seq_guides[design_id][seq_name]
                     if guide_scores[0] == guide_none:
                         guide_scores = (None, )
-                    row.extend([guide_scores, guide_target, guide_start])
+                    row.extend([*guide_scores, guide_target, guide_start])
                 fw.write('\t'.join([str(x) for x in row]) + '\n')
 
 
