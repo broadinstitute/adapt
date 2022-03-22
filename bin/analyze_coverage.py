@@ -197,42 +197,47 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
             header.append('guide-mismatches')
             guide_none = math.inf
         header.extend(['guide-ideal-target-sequence', 'guide-start'])
+    left_primers = per_seq_primers[0]
+    right_primers = per_seq_primers[1]
     with open(out_fn, 'w') as fw:
         fw.write('\t'.join(header) + '\n')
         for design_id in sorted(list(designs.keys())):
             for seq_name in seqs:
                 row = [design_id, seq_name]
                 if per_seq_primers:
-                    # Get left primer start pos for target start
-                    target_start = per_seq_primers[0][design_id][seq_name][2]
+                    left_scores, left_target, left_start = \
+                        left_primers[design_id][seq_name]
+                    right_scores, right_target, right_start = \
+                        right_primers[design_id][seq_name]
+                    # Get left primer start for target start
+                    target_start = left_start
                     target_length = None
-                    # Get right primer end pos + right primer length for target end
-                    if per_seq_primers[1][design_id][seq_name][2] is not None:
-                        target_end = per_seq_primers[1][design_id][seq_name][2] + len(per_seq_primers[1][design_id][seq_name][1])
+                    # Get right primer end + right primer len for target end
+                    if right_start is not None:
+                        target_end = right_start + len(right_target)
                         if target_start is not None:
                             target_length = target_end-target_start
                     else:
                         target_end = None
                     row.extend([target_start, target_end, target_length])
-                    if per_seq_primers[0][design_id][seq_name][0][0] == math.inf:
+                    if left_scores[0] == math.inf:
                         if primer_terminal_mismatches:
-                            per_seq_primers[0][design_id][seq_name][0] = (None, None)
+                            left_scores = (None, None)
                         else:
-                            per_seq_primers[0][design_id][seq_name][0] = (None, )
-                    if per_seq_primers[1][design_id][seq_name][0][0] == math.inf:
+                            left_scores = (None, )
+                    if right_scores[0] == math.inf:
                         if primer_terminal_mismatches:
-                            per_seq_primers[1][design_id][seq_name][0] = (None, None)
+                            right_scores = (None, None)
                         else:
-                            per_seq_primers[1][design_id][seq_name][0] = (None, )
-                    row.extend([*per_seq_primers[0][design_id][seq_name][0],
-                                *per_seq_primers[0][design_id][seq_name][1:],
-                                *per_seq_primers[1][design_id][seq_name][0],
-                                *per_seq_primers[1][design_id][seq_name][1:]])
+                            right_scores = (None, )
+                    row.extend([*left_scores, left_target, left_start,
+                                *right_scores, right_target, right_start])
                 if per_seq_guides:
-                    if per_seq_guides[design_id][seq_name][0][0] == guide_none:
-                        per_seq_guides[design_id][seq_name][0] = (None, )
-                    row.extend([*per_seq_guides[design_id][seq_name][0],
-                                *per_seq_guides[design_id][seq_name][1:]])
+                    guide_scores, guide_target, guide_start = \
+                        per_seq_guides[design_id][seq_name]
+                    if guide_scores[0] == guide_none:
+                        guide_scores = (None, )
+                    row.extend([guide_scores, guide_target, guide_start])
                 fw.write('\t'.join([str(x) for x in row]) + '\n')
 
 

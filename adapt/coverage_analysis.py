@@ -117,7 +117,7 @@ class CoverageAnalyzer:
         self.seqs_index.clear()
         self.seqs_are_indexed = False
 
-    def evaluate_pos_by_terminal_mismatches_and_mismatches(self, seq,
+    def evaluate_pos_by_terminal_mismatches_and_total_mismatches(self, seq,
             target_seq, pos, mismatches, terminal_mismatches,
             bases_from_terminal, left, allow_gu_pairs=False, save=None):
         """Evaluate binding with a mismatch model.
@@ -127,7 +127,9 @@ class CoverageAnalyzer:
             target_seq: target sequence against which to check
             pos: list of positions indicating subsequence in target_seq
                 to check for binding of seq
-            mismatches: number of mismatches to tolerate in the
+            mismatches: number of mismatches to tolerate when determining
+                whether seq binds to target_seq at a position
+            terminal_mismatches: number of mismatches to tolerate in the
                 bases_from_terminal bases when determining whether seq binds to
                 target_seq at a position
             bases_from_terminal: number of bases from 3' end in which to check
@@ -362,7 +364,7 @@ class CoverageAnalyzer:
         """Determine sequences to which guide binds.
 
         Args:
-            guide_seqs: guide sequences to lookup
+            guide_seqs: collection of guide sequences to lookup
 
         Returns:
             collection of names of sequences in self.seqs to which a guide
@@ -380,24 +382,24 @@ class CoverageAnalyzer:
         return seqs_bound
 
     def seqs_where_primers_bind(self, primer_left_seqs, primer_right_seqs):
-        """Determine sequences to which a primer pair binds.
+        """Determine sequences for which a primer pair can amplify.
 
         Args:
-            primer_left_seqs: primers on the 5' end of the target
-            primer_right_seqs: primers on the 3' end of the target
+            primer_left_seqs: collection of primers on the 5' end of the target
+            primer_right_seqs: collection of primers on the 3' end of the target
 
         Returns:
             collection of names of sequences in self.seqs to which
-            some pair of primers binds
+            some pair of primers can amplify
         """
         if self.primer_terminal_mismatches is not None:
             def primer_left_bind_fn(seq, target_seq, pos):
-                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                     seq, target_seq, pos, self.primer_mismatches,
                     self.primer_terminal_mismatches, self.bases_from_terminal,
                     True)
             def primer_right_bind_fn(seq, target_seq, pos):
-                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                     seq, target_seq, pos, self.primer_mismatches,
                     self.primer_terminal_mismatches, self.bases_from_terminal,
                     False)
@@ -470,9 +472,9 @@ class CoverageAnalyzer:
         """Determine sequences to which a target binds.
 
         Args:
-            guide_seqs: guide sequences in the target
-            primer_left_seqs: primers on the 5' end of the target
-            primer_right_seqs: primers on the 3' end of the target
+            guide_seqs: collection of guide sequences in the target
+            primer_left_seqs: collection of primers on the 5' end of the target
+            primer_right_seqs: collection of primers on the 3' end of the target
 
         Returns:
             collection of names of sequences in self.seqs to which
@@ -480,12 +482,12 @@ class CoverageAnalyzer:
         """
         if self.primer_terminal_mismatches is not None:
             def primer_left_bind_fn(seq, target_seq, pos):
-                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                     seq, target_seq, pos, self.primer_mismatches,
                     self.primer_terminal_mismatches, self.bases_from_terminal,
                     True)
             def primer_right_bind_fn(seq, target_seq, pos):
-                return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                     seq, target_seq, pos, self.primer_mismatches,
                     self.primer_terminal_mismatches, self.bases_from_terminal,
                     False)
@@ -589,8 +591,8 @@ class CoverageAnalyzer:
             design: Design object
 
         Returns:
-            collection of sequences that are bound by the guides (and
-            possibly primers) in design
+            collection of sequences that are bound by the guides and/or
+            primers in design
         """
         if len(design.guides) == 0:
             return self.seqs_where_primers_bind(*design.primers)
@@ -655,13 +657,13 @@ class CoverageAnalyzer:
                 right_bind_fn = bind_fn
             else:
                 def left_bind_fn(seq, target_seq, pos, save=None):
-                    return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                    return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches,
                         self.bases_from_terminal, True, allow_gu_pairs=False,
                         save=save)
                 def right_bind_fn(seq, target_seq, pos, save=None):
-                    return self.evaluate_pos_by_terminal_mismatches_and_mismatches(
+                    return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches,
                         self.bases_from_terminal, False, allow_gu_pairs=False,

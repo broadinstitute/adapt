@@ -33,8 +33,8 @@ def process_fasta(f, replace_degenerate=False,
             curr_seq_name = line[1:]
             if curr_seq_name in m:
                 logger.warning(("The sequence name '%s' is in the FASTA file "
-                    "multiple times; the sequence will be overwritten by the "
-                    "latest occurrence of it in the file" %curr_seq_name))
+                    "multiple times; only the last occurrence of the sequence "
+                    "with that name will be used" %curr_seq_name))
             m[curr_seq_name] = ''
         else:
             # Append the sequence
