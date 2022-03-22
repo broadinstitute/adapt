@@ -429,6 +429,7 @@ class GuideSearcher:
                 raise Exception(("Guide must be selected and its position "
                     "saved"))
 
+            per_gd_activities[gd_seq] = np.zeros(self.aln.num_sequences)
             # The guide could hit multiple places
             for start in self._selected_guide_positions[gd_seq]:
                 if start < window_start or start > window_end - len(gd_seq):
@@ -442,9 +443,12 @@ class GuideSearcher:
                     # does not have enough context_nt; skip it
                     continue
 
-                per_gd_activities[gd_seq] = gd_activities
-                # Update activities with gd_activities
-                activities = np.maximum(activities, gd_activities)
+                # Update per_gd_activities with this start's activities
+                per_gd_activities[gd_seq] = np.maximum(
+                    per_gd_activities[gd_seq], gd_activities)
+
+            # Update activities with this guide's activities
+            activities = np.maximum(activities, per_gd_activities[gd_seq])
 
         return per_gd_activities, activities
 
@@ -470,9 +474,15 @@ class GuideSearcher:
 
         per_gd_expected_activities = {}
         for gd_seq in guide_set:
+            # best_guide serves as a mask to only take the mean of the
+            # sequences for which this guide has the maximum activity
             best_guide = per_gd_activities[gd_seq] == activities
             per_gd_expected_activities[gd_seq] = np.mean(
                 per_gd_activities[gd_seq][best_guide])
+            if np.isnan(per_gd_expected_activities[gd_seq]):
+                logger.warning("%s is not the best guide for any sequence; it "
+                    "may not be necessary in the assay." %gd_seq)
+                per_gd_expected_activities[gd_seq] = 0
 
         return per_gd_expected_activities
 
