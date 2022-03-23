@@ -957,6 +957,41 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
                 guides, [5, 50])
         self.assertEqual(activities_percentile, [0, 2])
 
+    def test_guide_set_activities_per_guide(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGAGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='greedy')
+        # Guides should be 'AATT' and 'AGGG'
+        guides = gs._find_guides_in_window(2, 8)
+
+        per_gd_activities, activities = gs.guide_set_activities_per_guide(
+            2, 8, guides)
+        np.testing.assert_equal(activities, np.array([2, 2, 0, 2],))
+        self.assertIn('AATT', per_gd_activities)
+        self.assertIn('AGGG', per_gd_activities)
+        np.testing.assert_equal(per_gd_activities['AATT'], np.array([2, 0, 0, 2]))
+        np.testing.assert_equal(per_gd_activities['AGGG'], np.array([0, 2, 0, 0]))
+
+    def test_guide_set_activities_expected_value_per_guide(self):
+        gs = self.make_gs(['ATCGAATTCG',
+                           'GGGAGGGGGG',
+                           'CCCCCCCCCC',
+                           'AACGAATTCG'],
+                           hard_guide_constraint=2,
+                           algorithm='greedy')
+        # Guides should be 'AATT' and 'AGGG'
+        guides = gs._find_guides_in_window(2, 8)
+
+        per_gd_expected = gs.guide_set_activities_expected_value_per_guide(
+            2, 8, guides)
+        self.assertIn('AATT', per_gd_expected)
+        self.assertIn('AGGG', per_gd_expected)
+        self.assertEqual(per_gd_expected['AATT'], 4/3)
+        self.assertEqual(per_gd_expected['AGGG'], 1)
+
     def test_guide_activities_expected_value(self):
         gs = self.make_gs(['ATCGAATTCG',
                            'GGGAGGGGGG',

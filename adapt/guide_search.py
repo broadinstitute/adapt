@@ -398,6 +398,94 @@ class GuideSearcher:
 
         return np.mean(activities)
 
+    def guide_set_activities_per_guide(self, window_start,
+            window_end, guide_set):
+        """Compute expected activity across target sequences for
+        a guide set in a window.
+
+        This assumes the distribution across target sequences is uniform,
+        so it is equivalent to the mean.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            guide_set: set of strings representing guide sequences that
+                have been selected to be in a guide set
+
+        Returns:
+            ({guide sequence: list of activities per sequence}, max_activity)
+                where max_activity is a list of activities across the target
+                sequences (self.aln) yielded by the best of guide_set on each
+                seq
+        """
+        if self.predictor is None:
+            raise NoPredictorError(("Cannot compute activities when "
+                "predictor is not set"))
+
+        activities = np.zeros(self.aln.num_sequences)
+        per_gd_activities = {}
+        for gd_seq in guide_set:
+            if gd_seq not in self._selected_guide_positions:
+                raise Exception(("Guide must be selected and its position "
+                    "saved"))
+
+            per_gd_activities[gd_seq] = np.zeros(self.aln.num_sequences)
+            # The guide could hit multiple places
+            for start in self._selected_guide_positions[gd_seq]:
+                if start < window_start or start > window_end - len(gd_seq):
+                    # Guide is outside window
+                    continue
+                try:
+                    gd_activities = self.aln.compute_activity(start, gd_seq,
+                            self.predictor)
+                except alignment.CannotConstructGuideError:
+                    # Most likely this site is too close to an endpoint and
+                    # does not have enough context_nt; skip it
+                    continue
+
+                # Update per_gd_activities with this start's activities
+                per_gd_activities[gd_seq] = np.maximum(
+                    per_gd_activities[gd_seq], gd_activities)
+
+            # Update activities with this guide's activities
+            activities = np.maximum(activities, per_gd_activities[gd_seq])
+
+        return per_gd_activities, activities
+
+    def guide_set_activities_expected_value_per_guide(self, window_start,
+            window_end, guide_set):
+        """Compute expected activity across target sequences for
+        a guide set in a window.
+
+        This assumes the distribution across target sequences is uniform,
+        so it is equivalent to the mean.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            guide_set: set of strings representing guide sequences that
+                have been selected to be in a guide set
+
+        Returns:
+            expected (here, mean) activity
+        """
+        per_gd_activities, activities = self.guide_set_activities_per_guide(
+            window_start, window_end, guide_set)
+
+        per_gd_expected_activities = {}
+        for gd_seq in guide_set:
+            # best_guide serves as a mask to only take the mean of the
+            # sequences for which this guide has the maximum activity
+            best_guide = per_gd_activities[gd_seq] == activities
+            per_gd_expected_activities[gd_seq] = np.mean(
+                per_gd_activities[gd_seq][best_guide])
+            if np.isnan(per_gd_expected_activities[gd_seq]):
+                logger.warning("%s is not the best guide for any sequence; it "
+                    "may not be necessary in the assay." %gd_seq)
+                per_gd_expected_activities[gd_seq] = 0
+
+        return per_gd_expected_activities
+
     def guide_activities_expected_value(self, window_start, window_end, gd_seq):
         """Compute expected activity across target sequences for a single
         guide in a window.
@@ -1902,9 +1990,12 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                 positions = [self._selected_guide_positions[gd_seq]
                              for gd_seq in guide_seqs_sorted]
                 positions_str = ' '.join(str(p) for p in positions)
+                expected_activities_per_guide_dict = \
+                        self.guide_set_activities_expected_value_per_guide(
+                            start, end, guide_seqs)
                 expected_activities_per_guide = \
-                        [self.guide_activities_expected_value(start, end,
-                            gd_seq) for gd_seq in guide_seqs_sorted]
+                        [expected_activities_per_guide_dict[gd_seq]
+                         for gd_seq in guide_seqs_sorted]
                 expected_activities_per_guide_str = ' '.join(
                         str(a) for a in expected_activities_per_guide)
                 line = [start, end, count, obj, frac_bound,
