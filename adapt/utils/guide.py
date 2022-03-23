@@ -242,10 +242,9 @@ def guide_overlap_in_seq(guide_seqs, target_seq, mismatches, allow_gu_pairs):
         assert len(target_seq) >= len(guide_seq)
 
     indices_bound = set()
-
-    for i in range(0, len(target_seq) - len(guide_seq) + 1):
-        target_seq_at_i = target_seq[i:(i + len(guide_seq))]
-        for guide_seq in guide_seqs:
+    for guide_seq in guide_seqs:
+        for i in range(0, len(target_seq) - len(guide_seq) + 1):
+            target_seq_at_i = target_seq[i:(i + len(guide_seq))]
             binds = guide_binds(guide_seq, target_seq_at_i, mismatches,
                     allow_gu_pairs)
             if binds:

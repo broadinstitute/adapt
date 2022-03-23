@@ -31,6 +31,10 @@ def process_fasta(f, replace_degenerate=False,
             assert line.startswith('>')
         if line.startswith('>'):
             curr_seq_name = line[1:]
+            if curr_seq_name in m:
+                logger.warning(("The sequence name '%s' is in the FASTA file "
+                    "multiple times; only the last occurrence of the sequence "
+                    "with that name will be used" %curr_seq_name))
             m[curr_seq_name] = ''
         else:
             # Append the sequence
