@@ -627,7 +627,7 @@ class TargetSearcher:
                 window_end = p2.start
                 if self.gs.predictor is not None:
                     expected_activities_per_guide_dict = \
-                            self.guide_set_activities_expected_value_per_guide(
+                            self.gs.guide_set_activities_expected_value_per_guide(
                                 window_start, window_end, guides_seqs_sorted)
                     expected_activities_per_guide = \
                             [expected_activities_per_guide_dict[gd_seq]
