@@ -12,6 +12,7 @@ from adapt import alignment
 from adapt.utils import index_compress
 from adapt.utils import lsh
 from adapt.utils import predict_activity
+from adapt.utils import weight
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -131,8 +132,8 @@ class GuideSearcher:
 
         self.predictor = predictor
 
-    def _compute_guide_memoized(self, start, call_fn, key_fn,
-            use_last=False, compress=True):
+    def _compute_guide_memoized(self, start, call_fn, key_fn, use_last=False,
+            compress=True):
         """Make a memoized call to compute a guide.
 
         The actual computation is defined in a subclass and passed as
@@ -369,8 +370,7 @@ class GuideSearcher:
             activities = self.guide_set_activities(window_start, window_end,
                     guide_set)
 
-        # Do not interpolate (choose lower value)
-        p = np.percentile(activities, q, interpolation='lower')
+        p = weight.percentile(activities, q, self.aln.seq_norm_weights)
         return list(p)
 
     def guide_set_activities_expected_value(self, window_start, window_end,
@@ -396,7 +396,7 @@ class GuideSearcher:
             activities = self.guide_set_activities(window_start, window_end,
                     guide_set)
 
-        return np.mean(activities)
+        return np.average(activities, weights=self.aln.seq_norm_weights)
 
     def guide_set_activities_per_guide(self, window_start,
             window_end, guide_set):
@@ -477,8 +477,9 @@ class GuideSearcher:
             # best_guide serves as a mask to only take the mean of the
             # sequences for which this guide has the maximum activity
             best_guide = per_gd_activities[gd_seq] == activities
-            per_gd_expected_activities[gd_seq] = np.mean(
-                per_gd_activities[gd_seq][best_guide])
+            per_gd_expected_activities[gd_seq] = np.average(
+                per_gd_activities[gd_seq][best_guide],
+                weights=np.array(self.aln.seq_norm_weights)[best_guide])
             if np.isnan(per_gd_expected_activities[gd_seq]):
                 logger.warning("%s is not the best guide for any sequence; it "
                     "may not be necessary in the assay." %gd_seq)
@@ -536,7 +537,7 @@ class GuideSearcher:
 
             activities = np.maximum(activities, gd_activities)
 
-        return np.mean(activities)
+        return np.average(activities, weights=self.aln.seq_norm_weights)
 
     def _find_guides_for_each_window(self, window_size,
             window_step=1, hide_warnings=False):
@@ -697,19 +698,19 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         return (gd, covered_seqs)
 
     def _construct_guide_memoized(self, start, seqs_to_consider,
-            num_needed=None, use_last=False, memoize_threshold=0.1):
+            percent_needed=None, use_last=False, memoize_threshold=0.1):
         """Make a memoized call to alignment.Alignment.construct_guide().
 
         Args:
             start: start position in alignment at which to target
             seqs_to_consider: dict mapping universe group ID to collection
                 of indices to use when constructing the guide
-            num_needed: dict mapping universe group ID to the number of
-                sequences from the group that are left to cover in order to
-                achieve the desired partial cover
+            percent_needed: dict mapping universe group ID to the percent of
+                sequences from the group of the total that are left to cover
+                in order to achieve the desired partial cover
             use_last: if set, check for a memoized result by using the last
                 key constructed (it is assumed that seqs_to_consider and
-                num_needed are identical to the last provided values)
+                percent_needed are identical to the last provided values)
             memoize_threshold: only memoize results when the total fraction
                 of sequences in seqs_to_consider (compared to the whole
                 alignment) exceeds this threshold
@@ -721,7 +722,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             try:
                 p = self.aln.construct_guide(start, self.guide_length,
                         seqs_to_consider, self.mismatches, self.allow_gu_pairs,
-                        self.guide_clusterer, num_needed=num_needed,
+                        self.guide_clusterer, percent_needed=percent_needed,
                         missing_threshold=self.missing_threshold,
                         guide_is_suitable_fn=self.guide_is_suitable_fn,
                         required_flanking_seqs=self.required_flanking_seqs,
@@ -737,6 +738,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         # there is little need to memoize the result) and the call to
         # construct_guide() should be relatively quick (so it is ok to have
         # to repeat the call if we do re-encounter the same seqs_to_consider)
+        # Do not use weighting here, as weighting is irrelevant to memoization
         num_seqs_to_consider = sum(len(v) for k, v in seqs_to_consider.items())
         frac_seqs_to_consider = float(num_seqs_to_consider) / self.aln.num_sequences
         should_memoize = frac_seqs_to_consider >= memoize_threshold
@@ -757,12 +759,12 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 v_compressed = index_compress.compress_mostly_contiguous(v)
                 seqs_to_consider_frozen.add((k, frozenset(v_compressed)))
             seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
-            if num_needed is None:
-                num_needed_frozen = None
+            if percent_needed is None:
+                percent_needed_frozen = None
             else:
-                num_needed_frozen = frozenset(num_needed.items())
+                percent_needed_frozen = frozenset(percent_needed.items())
 
-            key = (seqs_to_consider_frozen, num_needed_frozen)
+            key = (seqs_to_consider_frozen, percent_needed_frozen)
             return key
 
         p = super()._compute_guide_memoized(start, construct_p, make_key,
@@ -792,7 +794,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         return 1.0
 
     def _find_optimal_guide_in_window(self, start, end, seqs_to_consider,
-            num_needed):
+            percent_needed):
         """Find the guide that hybridizes to the most sequences in a given window.
 
         This considers each position within the specified window at which a guide
@@ -805,9 +807,9 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             start/end: boundaries of the window; the window spans [start, end)
             seqs_to_consider: dict mapping universe group ID to collection of
                 indices of sequences to use when selecting a guide
-            num_needed: dict mapping universe group ID to the number of
-                sequences from the group that are left to cover in order to
-                achieve the desired (partial) cover
+            percent_needed: dict mapping universe group ID to the percent of
+                sequences from the group of the total that are left to cover
+                in order to achieve the desired (partial) cover
 
         Returns:
             tuple (w, x, y, z) where:
@@ -816,7 +818,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                     sequence IDs in seqs_to_consider) to which guide w will
                     hybridize
                 y is the starting position of w in the alignment
-                z is a score representing the amount of the remaining
+                z is a score representing the percent of the remaining
                     universe that w covers
         """
         if start < 0:
@@ -840,14 +842,14 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 p = None
             else:
                 # After the first call to self._construct_guide_memoized in
-                # this window, seqs_to_consider and num_needed will all be
+                # this window, seqs_to_consider and percent_needed will all be
                 # the same as the first call, so tell the function to
                 # take advantage of this (by avoiding hashing these
                 # dicts)
                 use_last = pos > start and called_construct_guide
 
                 p = self._construct_guide_memoized(pos, seqs_to_consider,
-                    num_needed, use_last=use_last)
+                    percent_needed, use_last=use_last)
                 called_construct_guide = True
 
             if p is None:
@@ -860,14 +862,15 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 # Calculate a score for this guide based on the partial
                 # coverage it achieves across the groups
                 score = 0
-                for group_id, needed in num_needed.items():
+                for group_id, needed in percent_needed.items():
                     covered_in_group = covered_seqs & seqs_to_consider[group_id]
 
                     # needed is the number of elements that have yet to be
                     # covered in order to obtain the desired partial cover
                     # in group_id; there is no reason to favor a guide that
                     # covers more than needed
-                    score += min(needed, len(covered_in_group))
+                    score += min(needed,
+                                 self.aln.seq_idxs_weighted(covered_in_group))
 
                 if max_guide_cover is None:
                     max_guide_cover = (gd, covered_seqs, pos, score)
@@ -877,8 +880,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                         max_guide_cover = (gd, covered_seqs, pos, score)
         return max_guide_cover
 
-    def _find_guides_in_window(self, start, end,
-            only_consider=None):
+    def _find_guides_in_window(self, start, end, only_consider=None):
         """Find a collection of guides that cover sequences in a given window.
 
         This attempts to find the smallest number of guides such that, within
@@ -985,19 +987,20 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             if only_consider is not None:
                 universe[group_id] = universe[group_id] & only_consider
 
-        num_that_can_be_uncovered = {}
-        num_left_to_cover = {}
+        percent_that_can_be_uncovered = {}
+        percent_left_to_cover = {}
         for group_id, seq_ids in universe.items():
-            num_that_can_be_uncovered[group_id] = int(len(seq_ids) -
-                self.cover_frac[group_id] * len(seq_ids))
+            percent_that_can_be_uncovered[group_id] = max(0,
+                (self.aln.seq_idxs_weighted(seq_ids) -
+                 self.cover_frac[group_id]))
             # Above, use int(..) to take the floor. Also, expand out
             # len(seq_ids) rather than use
             # int((1.0-self.cover_frac[.])*len(seq_ids)) due to precision
             # errors in Python -- e.g., int((1.0-0.8)*5) yields 0
             # on some machines.
 
-            num_left_to_cover[group_id] = (len(seq_ids) -
-                num_that_can_be_uncovered[group_id])
+            percent_left_to_cover[group_id] = (1 -
+                percent_that_can_be_uncovered[group_id])
 
         guides_in_cover = set()
         def add_guide_to_cover(gd, gd_covered_seqs, gd_pos):
@@ -1006,20 +1009,22 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             # universe
             logger.debug(("Adding guide '%s' (at %d) to cover; it covers "
                 "%d sequences") % (gd, gd_pos, len(gd_covered_seqs)))
-            logger.debug(("Before adding, there are %s left to cover "
-                "per-group") % ([num_left_to_cover[gid] for gid in universe.keys()]))
+            logger.debug(("Before adding, there are %s percent left to cover "
+                "per-group") % ([percent_left_to_cover[gid]
+                                 for gid in universe.keys()]))
 
             guides_in_cover.add(gd)
             for group_id in universe.keys():
                 universe[group_id].difference_update(gd_covered_seqs)
-                num_left_to_cover[group_id] = max(0,
-                    len(universe[group_id]) - num_that_can_be_uncovered[group_id])
+                percent_left_to_cover[group_id] = max(0,
+                    (self.aln.seq_idxs_weighted(universe[group_id]) -
+                     percent_that_can_be_uncovered[group_id]))
             # Save the position of this guide in case the guide needs to be
             # revisited
             self._selected_guide_positions[gd].add(gd_pos)
 
-            logger.debug(("After adding, there are %s left to cover "
-                "per-group") % ([num_left_to_cover[gid] for gid in universe.keys()]))
+            logger.debug(("After adding, there are %s percent left to cover "
+                "per-group") % ([percent_left_to_cover[gid] for gid in universe.keys()]))
 
         # Place all guides from self.required_guides that fall within this
         # window into guides_in_cover
@@ -1034,8 +1039,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             if r in self._memoized_seqs_covered_by_required_guides:
                 gd_covered_seqs = self._memoized_seqs_covered_by_required_guides[r]
             else:
-                # Determine which sequences are bound by gd, and memoize
-                # them
+                # Determine which sequences are bound by gd, and memoize them
                 gd_covered_seqs = self.aln.sequences_bound_by_guide(
                     gd, gd_pos, self.mismatches, self.allow_gu_pairs,
                     required_flanking_seqs=self.required_flanking_seqs)
@@ -1061,13 +1065,13 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         logger.debug(("Iterating to achieve coverage; universe has %s "
             "elements per-group, with %s that can be uncovered per-group") %
             ([len(universe[gid]) for gid in universe.keys()],
-             [num_that_can_be_uncovered for gid in universe.keys()]))
+             [percent_that_can_be_uncovered[gid] for gid in universe.keys()]))
         while [True for group_id in universe.keys()
-               if num_left_to_cover[group_id] > 0]:
+               if percent_left_to_cover[group_id] > 0]:
             # Find the guide that hybridizes to the most sequences, among
             # those that are not in the cover
             gd, gd_covered_seqs, gd_pos, gd_score = self._find_optimal_guide_in_window(
-                start, end, universe, num_left_to_cover)
+                start, end, universe, percent_left_to_cover)
 
             if gd is None or len(gd_covered_seqs) == 0:
                 # No suitable guides could be constructed within the window
@@ -1116,12 +1120,19 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         """
         # For each group, calculate the number of sequences in the group
         # that ought to be covered and also store the seq_ids as a set
-        num_needed_to_cover_in_group = {}
-        total_num_needed_to_cover = 0
+        percent_needed_to_cover_in_group = {}
+        total_percent_needed_to_cover = 0
         for group_id, seq_ids in self.seq_groups.items():
-            num_needed = math.ceil(self.cover_frac[group_id] * len(seq_ids))
-            num_needed_to_cover_in_group[group_id] = (num_needed, set(seq_ids))
-            total_num_needed_to_cover += num_needed
+            # The 'percent needed' is the weighted percent of sequences from
+            # the group that need to be covered of all the sequences.
+            # seq_idxs_weighted determines the weight of the group, normalized
+            # so that all groups/sequences sum to 1
+            percent_needed = (self.cover_frac[group_id] *
+                              self.aln.seq_idxs_weighted(seq_ids))
+            percent_needed_to_cover_in_group[group_id] = \
+                (percent_needed, set(seq_ids))
+            total_percent_needed_to_cover += percent_needed
+
 
         # For each guide gd_seq, calculate the fraction of sequences that
         # need to be covered that are covered by gd_seq
@@ -1137,17 +1148,20 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             # For each group, find the number of sequences that need to
             # be covered that are covered by gd_seq, and sum these over
             # all the groups
-            total_num_covered = 0
-            for group_id in num_needed_to_cover_in_group.keys():
-                num_needed, seqs_in_group = num_needed_to_cover_in_group[group_id]
+            total_percent_covered = 0
+            for group_id in percent_needed_to_cover_in_group.keys():
+                percent_needed, seqs_in_group = \
+                    percent_needed_to_cover_in_group[group_id]
                 covered_in_group = seqs_bound & seqs_in_group
-                num_covered = min(num_needed, len(covered_in_group))
-                total_num_covered += num_covered
+                percent_covered = min(
+                    percent_needed,
+                    self.aln.seq_idxs_weighted(covered_in_group))
+                total_percent_covered += percent_covered
 
             # Calculate the fraction of sequences that need to be covered
-            # (total_num_needed_to_cover) that are covered by gd_seq
-            # (total_num_covered)
-            frac_bound = float(total_num_covered) / total_num_needed_to_cover
+            # (total_percent_needed_to_cover) that are covered by gd_seq
+            # (total_percent_covered)
+            frac_bound = total_percent_covered / total_percent_needed_to_cover
             sum_of_frac_of_seqs_bound += frac_bound
 
         score = sum_of_frac_of_seqs_bound / float(len(guides))
@@ -1187,8 +1201,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             total fraction of all sequences bound by a guide
         """
         seqs_bound = self._seqs_bound_by_guides(guides)
-        frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
-        return frac_bound
+        return self.aln.seq_idxs_weighted(seqs_bound)
 
     def find_guides_with_sliding_window(self, window_size, out_fn,
                                window_step=1, sort=False, print_analysis=True):
@@ -1376,8 +1389,9 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             activities = self.guide_set_activities(window_start, window_end,
                     guide_set)
 
-        # Use the mean (i.e., uniform prior over target sequences)
-        expected_activity = np.mean(activities)
+        # Use the weighted average
+        expected_activity = np.average(activities,
+                                       weights=self.aln.seq_norm_weights)
 
         num_guides = len(guide_set)
 
@@ -1421,9 +1435,10 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                     guide_set)
 
         # Calculate fraction of activity values >0
-        num_active = sum(1 for x in activities if x > 0)
+        frac_active = sum(self.aln.seq_norm_weights[i]
+                         for i, x in enumerate(activities) if x > 0)
 
-        return float(num_active) / len(activities)
+        return frac_active
 
     def _ground_set_with_activities_memoized(self, start):
         """Make a memoized call to determine a ground set of guides at a site.
@@ -1514,7 +1529,8 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                 # That is, their expected activity has to exceed the
                 # threshold described above
                 # This ensures that the objective is non-negative
-                expected_activity = np.mean(activities)
+                expected_activity = np.average(activities,
+                    weights=self.aln.seq_norm_weights)
                 if expected_activity < nonnegativity_threshold:
                     # Guide does not exceed threshold; ignore it
                     continue
@@ -1596,7 +1612,8 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         for x, activities_for_x in ground_set_with_activities.items():
             curr_activities_with_x = self._activities_after_adding_guide(
                     curr_activities, activities_for_x)
-            expected_activities[x] = np.mean(curr_activities_with_x)
+            expected_activities[x] = np.average(curr_activities_with_x,
+                weights=self.aln.seq_norm_weights)
         return expected_activities
 
     def _analyze_guides_memoized(self, start, curr_activities,
@@ -1680,7 +1697,8 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
         # fit completely within the window
         search_end = end - self.guide_length + 1
 
-        curr_expected_activity = np.mean(curr_activities)
+        curr_expected_activity = np.average(curr_activities,
+                                            weights=self.aln.seq_norm_weights)
         curr_num_guides = len(curr_guide_set)
         curr_obj = self._obj_value_from_params(curr_expected_activity,
                 curr_num_guides)
@@ -1877,8 +1895,8 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
             gd_activities = self.aln.compute_activity(
                     gd_pos, gd, self.predictor)
             logger.info(("Adding required guide '%s' to the guide set; it "
-                "has mean activity %f over the targets"), gd,
-                np.mean(gd_activities))
+                "has average activity %f over the targets"), gd,
+                np.average(gd_activities, weights=self.aln.seq_norm_weights))
             add_guide(gd, gd_pos, gd_activities)
 
         # At each iteration of the greedy algorithm (random or deterministic),

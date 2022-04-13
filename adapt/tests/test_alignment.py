@@ -69,6 +69,10 @@ class TestAlignment(unittest.TestCase):
         self.assertIn(self.a.determine_consensus_sequence([1,2]),
                       ['ATCGAT', 'ATCGAA'])
 
+        # Check weighted consensus
+        self.a.seq_norm_weights = [0.1, 0.6, 0.1, 0.1, 0.1]
+        self.assertEqual(self.a.determine_consensus_sequence(), 'ATCGAT')
+
     def test_determine_consensus_sequence_b(self):
         self.assertEqual(self.b.determine_consensus_sequence(), 'ATCGAT')
 
@@ -77,6 +81,20 @@ class TestAlignment(unittest.TestCase):
             # Should fail when determining consensus sequence given an indel
             self.c.determine_consensus_sequence()
         self.assertIn(self.c.determine_consensus_sequence([0]), 'ATCGAA')
+
+    def test_seq_idxs_weighted(self):
+        seqs = ['ATCGAA',
+                'GGGCCC',
+                'ATCGAA']
+        seqs_aln = alignment.Alignment.from_list_of_seqs(
+            seqs, seq_norm_weights=[3/7, 2/7, 2/7])
+
+        # 'ATCGAA' is most sequences, and let's construct a guide by
+        # needing more from the group consisting of these sequences
+        self.assertEqual(seqs_aln.seq_idxs_weighted([]), 0)
+        self.assertAlmostEqual(seqs_aln.seq_idxs_weighted([1]), 2/7)
+        self.assertAlmostEqual(seqs_aln.seq_idxs_weighted([0, 2]), 5/7)
+        self.assertAlmostEqual(seqs_aln.seq_idxs_weighted([0, 1, 2]), 1)
 
     def test_seqs_with_gap(self):
         self.assertCountEqual(self.a.seqs_with_gap(), [])
@@ -253,7 +271,26 @@ class TestAlignment(unittest.TestCase):
             # Should fail when the only sequence given (1) has an indel
             self.c.construct_guide(0, 4, {0: {1}}, 0, False, self.gc)
 
-    def test_construct_guide_with_large_group_needed(self):
+    def test_construct_guide_with_weights(self):
+        seqs = ['ATCGAA',
+                'GGGCCC',
+                'GGGCCC',
+                'ATCGAA',
+                'ATCGAA']
+        seqs_aln = alignment.Alignment.from_list_of_seqs(
+            seqs, seq_norm_weights=[1/7, 2/7, 2/7, 1/7, 1/7])
+
+        self.assertEqual(seqs_aln.construct_guide(0, 4, {0: {0, 1, 2, 3, 4}},
+                            0, False, self.gc),
+                         ('GGGC', {1, 2}))
+
+        seqs_to_consider = {0: {0, 1}, 1: {2, 3, 4}}
+        percent_needed = {0: 2/7, 1: 2/7}
+        self.assertEqual(seqs_aln.construct_guide(0, 4, seqs_to_consider, 0,
+                            False, self.gc, percent_needed=percent_needed),
+                         ('GGGC', {1, 2}))
+
+    def test_construct_guide_with_groups_needed(self):
         seqs = ['ATCGAA',
                 'ATCGAA',
                 'GGGCCC',
@@ -264,29 +301,18 @@ class TestAlignment(unittest.TestCase):
         seqs_aln = alignment.Alignment.from_list_of_seqs(seqs)
 
         seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
-        num_needed = {0: 3, 1: 1}
+        percent_needed = {0: 3/7, 1: 1/7}
         # 'ATCGAA' is most sequences, and let's construct a guide by
         # needing more from the group consisting of these sequences
         self.assertEqual(seqs_aln.construct_guide(0, 4, seqs_to_consider, 0,
-                            False, self.gc, num_needed=num_needed),
+                            False, self.gc, percent_needed=percent_needed),
                          ('ATCG', {0, 1, 3, 4, 5}))
 
-    def test_construct_guide_with_small_group_needed(self):
-        seqs = ['ATCGAA',
-                'ATCGAA',
-                'GGGCCC',
-                'ATCGAA',
-                'ATCGAA',
-                'ATCGAA',
-                'GGGCCC']
-        seqs_aln = alignment.Alignment.from_list_of_seqs(seqs)
-
-        seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
-        num_needed = {0: 1, 1: 2}
+        percent_needed = {0: 1/7, 1: 2/7}
         # 'ATCGAA' is most sequences, but let's construct a guide by
         # needing more from a group consisting of the 'GGGCCC' sequences
         self.assertEqual(seqs_aln.construct_guide(0, 4, seqs_to_consider, 0,
-                            False, self.gc, num_needed=num_needed),
+                            False, self.gc, percent_needed=percent_needed),
                          ('GGGC', {2, 6}))
 
     def test_construct_guide_with_suitable_fn(self):
@@ -556,6 +582,25 @@ class TestAlignment(unittest.TestCase):
                             n=3),
                          ['ATCGAA','GGGCCC'])
 
+    def test_most_common_sequence_weighted(self):
+        seqs = ['ATCGAA',
+                'GGGCCC',
+                'ATCGAA']
+        seqs_aln = alignment.Alignment.from_list_of_seqs(
+            seqs, seq_norm_weights=[1/7, 5/7, 1/7])
+        self.assertEqual(seqs_aln.determine_most_common_sequences(
+                            skip_ambiguity=False),
+                         ['GGGCCC'])
+        self.assertEqual(seqs_aln.determine_most_common_sequences(
+                            skip_ambiguity=True),
+                         ['GGGCCC'])
+        self.assertEqual(seqs_aln.determine_most_common_sequences(
+                            n=2),
+                         ['GGGCCC','ATCGAA'])
+        self.assertEqual(seqs_aln.determine_most_common_sequences(
+                            n=3),
+                         ['GGGCCC','ATCGAA'])
+
     def test_most_common_sequence_with_ambiguity(self):
         seqs = ['ATCNAA',
                 'ATCNAA',
@@ -594,6 +639,22 @@ class TestAlignment(unittest.TestCase):
         entropy = [sum([-p*log2(p) for p in ps]) for ps in all_ps]
         self.assertEqual(aln.position_entropy(), entropy)
 
+    def test_position_entropy_weighted(self):
+        seqs = ['ACCCC',
+                'AAGGC',
+                'AAATA',
+                'AAAAA']
+        aln = alignment.Alignment.from_list_of_seqs(seqs,
+            seq_norm_weights = [0, 0.25, 0.5, 0.25])
+        all_ps = [[1],
+                  [1],
+                  [0.25, 0.75],
+                  [0.25, 0.5, 0.25],
+                  [0.25, 0.75]]
+
+        entropy = [sum([-p*log2(p) for p in ps]) for ps in all_ps]
+        self.assertEqual(aln.position_entropy(), entropy)
+
     def test_position_entropy_with_ambiguity(self):
         seqs = ['MRWSYKVHDBN-']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
@@ -624,6 +685,23 @@ class TestAlignment(unittest.TestCase):
             'C': 0.25,
             'G': 0.1,
             'T': 0.05
+        }
+
+        self.assertEqual(aln.base_percentages(), base_p)
+
+    def test_base_percentages_weighted(self):
+        seqs = ['ACCCC',
+                'AAGGC',
+                'AAATA',
+                'AAAAA']
+
+        aln = alignment.Alignment.from_list_of_seqs(seqs,
+            seq_norm_weights = [0, 0.25, 0.5, 0.25])
+        base_p = {
+            'A': 0.75,
+            'C': 0.05,
+            'G': 0.1,
+            'T': 0.1
         }
 
         self.assertEqual(aln.base_percentages(), base_p)

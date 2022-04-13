@@ -399,7 +399,7 @@ def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
     fp = tempfile.NamedTemporaryFile(delete=False)
 
     # Only write the header once; otherwise, it will be written for each
-    # beach, and then the file will not be able to be parsed
+    # batch, and then the file will not be able to be parsed
     def is_xml_header(line):
         return (line.startswith('<?xml ') or line.startswith('<!DOCTYPE '))
 
@@ -780,8 +780,6 @@ def parse_taxonomy_xml_for_aka_taxid(raw_xml):
         The alternative taxonomic ID if it exists; 0 if it does not
     """
     doc = minidom.parse(raw_xml)
-
-    gene_features = []
 
     result = doc.getElementsByTagName('eSummaryResult')[0]
     doc_sum = result.getElementsByTagName('DocSum')

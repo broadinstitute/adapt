@@ -84,7 +84,8 @@ class TestDesign(object):
 
         def baseArgv(self, search_type='sliding-window', input_type='fasta',
                      objective='minimize-guides', model=False, specific=None,
-                     specificity_file=None, output_loc=None, unaligned=False):
+                     specificity_file=None, output_loc=None, unaligned=False,
+                     weighted=False):
             """Get arguments for tests
 
             Produces the correct arguments for a test case given details of
@@ -103,6 +104,8 @@ class TestDesign(object):
                     self.output_file.name if None
                 unaligned: boolean, if input type is FASTA, true to align seqs
                     before designing, False otherwise
+                weighted: if input type is FASTA, true to use manual weights
+                    for sequences (self.weight_file must be defined);
 
             Returns:
                 List of strings that are the arguments of the test
@@ -116,6 +119,8 @@ class TestDesign(object):
                 argv.extend([input_file, '-o', output_loc])
                 if unaligned:
                     argv.extend(['--unaligned'])
+                if weighted:
+                    argv.extend(['--weight-sequences', self.weight_file.name])
             elif input_type == 'auto-from-args':
                 argv.extend(['64320', 'None', output_loc])
             elif input_type == 'auto-from-file':
@@ -159,7 +164,7 @@ class TestDesign(object):
             logging.disable(logging.NOTSET)
 
 
-class TestDesignFastaAligned(TestDesign.TestDesignCase):
+class TestDesignFasta(TestDesign.TestDesignCase):
     """Test design.py given an input FASTA
     """
 
@@ -262,6 +267,54 @@ class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
         cluster.cluster_with_minhash_signatures = self.cluster
         align.align = self.align
         super().tearDown()
+
+
+class TestDesignFastaWeighted(TestDesign.TestDesignCase):
+    """Test design.py given an input FASTA
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.real_output_file = self.output_file.name + '.tsv'
+        self.files_to_delete.append(self.real_output_file)
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            self.weight_file = f
+            f.write("genome_1\t70\ngenome_2\t5\n"
+                    "genome_3\t15\ngenome_4\t5\n")
+
+        self.files_to_delete.extend([self.real_output_file,
+                                     self.weight_file.name])
+
+        # Write to temporary input fasta
+        seq_io.write_fasta(SEQS, self.input_file.name)
+
+    def test_min_guides_weighted(self):
+        argv = super().baseArgv(weighted=True)
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Base args set the percentage of sequences to match at 75%
+        expected = [["AA"], ["AC"], ["CT"]]
+        self.check_results(self.real_output_file, expected)
+
+    def test_max_activity_weighted(self):
+        argv = super().baseArgv(weighted=True, objective='maximize-activity')
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Doesn't use model, just greedy binary prediction with 0 mismatches
+        # (so same outputs as min-guides)
+        expected = [["AA"], ["AC"], ["CT"]]
+        self.check_results(self.real_output_file, expected)
+
+    def test_complete_targets_weighted(self):
+        argv = super().baseArgv(weighted=True, search_type='complete-targets')
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Since sequences are short and need 1 base for primer on each side,
+        # only finds 1 target in middle
+        expected = [["AC"]]
+        self.check_results(self.real_output_file, expected,
+                           header='guide-target-sequences')
 
 
 class TestDesignAutosPartial(TestDesign.TestDesignCase):

@@ -26,6 +26,7 @@ from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
 from adapt.utils import mutate
+from adapt.utils import weight
 from adapt.utils.version import get_project_path, get_latest_model_version
 
 try:
@@ -107,7 +108,7 @@ def check_obj_args(args):
                 vars(args)[arg] = OBJ_PARAM_DEFAULTS['maximize-activity'][arg]
 
 
-def seqs_grouped_by_year(seqs, args):
+def seqs_grouped_by_year(seqs, args, sequence_weights=None):
     """Group sequences according to their year and assigned partial covers.
 
     Args:
@@ -127,14 +128,18 @@ def seqs_grouped_by_year(seqs, args):
         args.primer_cover_frac)
     """
     years_fn, year_highest_cover, year_cover_decay = args.cover_by_year_decay
+    norm_weights = weight.normalize(sequence_weights, seqs.keys())
 
     # Map sequence names to index in alignment, and construct alignment
     seq_list = []
+    seq_norm_weights = []
     seq_idx = {}
     for i, (name, seq) in enumerate(seqs.items()):
         seq_idx[name] = i
-        seq_list += [seq]
-    aln = alignment.Alignment.from_list_of_seqs(seq_list)
+        seq_list.append(seq)
+        seq_norm_weights.append(norm_weights[name])
+    aln = alignment.Alignment.from_list_of_seqs(
+        seq_list, seq_norm_weights=seq_norm_weights)
 
     # Read sequences for each year, and check that every sequence has
     # a year
@@ -259,8 +264,8 @@ def prepare_alignments(args):
         args.write_annotation = False
         args.write_input_seqs = False
         for i, unaligned_fasta in enumerate(args.in_fasta):
-            sequences_to_use[(i, None)] = seq_io.read_fasta(unaligned_fasta)
-            taxs.append((None, i, None, [], None, None))
+            sequences_to_use[(0, unaligned_fasta)] = seq_io.read_fasta(unaligned_fasta)
+            taxs.append((None, 0, unaligned_fasta, [], None, None))
     else:
         raise Exception(("Unknown input type '%s'") % args.input_type)
 
@@ -333,6 +338,7 @@ def prepare_alignments(args):
     design_for = []
     specific_against_metadata_accs = []
     annotations = []
+    sequence_weights = []
     for label, tax_id, segment, ref_accs, meta_filt, meta_filt_against in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -366,7 +372,7 @@ def prepare_alignments(args):
         annotation_tsv = os.path.join(args.out_tsv_dir, label) if label \
             else args.write_annotation
 
-        nc, specific_against_metadata_acc, annotation = \
+        nc, specific_against_metadata_acc, annotation, sequence_weight = \
             prepare_alignment.prepare_for(
                 tax_id, segment, ref_accs,
                 aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
@@ -385,6 +391,7 @@ def prepare_alignments(args):
             taxid_for_fasta += [tax_id]
             specific_against_metadata_accs.append(specific_against_metadata_acc)
             annotations.append(annotation[i])
+            sequence_weights.append(sequence_weight[i])
             if taxs_to_design_for is None:
                 design_for += [True]
             else:
@@ -457,7 +464,8 @@ def prepare_alignments(args):
         years_tsv = None
 
     return (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv,
-            design_for, specific_against_metadata_accs, annotations)
+            design_for, specific_against_metadata_accs, annotations,
+            sequence_weights)
 
 
 def design_for_id(args):
@@ -473,17 +481,24 @@ def design_for_id(args):
     seq_groups_per_input = []
     guide_cover_frac_per_input = []
     primer_cover_frac_per_input = []
-    for in_fasta in args.in_fasta:
+    for i, in_fasta in enumerate(args.in_fasta):
         seqs = seq_io.read_fasta(in_fasta)
         if args.cover_by_year_decay:
-            aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args)
+            aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args,
+                sequence_weights=args.sequence_weights[i])
             if args.search_cmd == 'complete-targets':
                 guide_cover_frac, primer_cover_frac = cover_frac
             else:
                 guide_cover_frac = cover_frac
                 primer_cover_frac = None
         else:
-            aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+            seq_names = list(seqs.keys())
+            seq_list = [seqs[seq_name] for seq_name in seq_names]
+            norm_weights = weight.normalize(args.sequence_weights[i], seq_names)
+            seq_norm_weights = [norm_weights[seq_name]
+                                for seq_name in seq_names]
+            aln = alignment.Alignment.from_list_of_seqs(
+                seq_list, seq_norm_weights=seq_norm_weights)
             seq_groups = None
             guide_cover_frac = args.guide_cover_frac
             if args.search_cmd == 'complete-targets':
@@ -813,12 +828,9 @@ def run(args):
 
     logger.info("Running design.py with arguments: %s", args)
 
-    # Set NCBI API key
     if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.ncbi_api_key:
             ncbi_neighbors.ncbi_api_key = args.ncbi_api_key
-
-    if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.input_type == 'auto-from-file':
             if not os.path.isdir(args.out_tsv_dir):
                 raise Exception(("Output directory '%s' does not exist") %
@@ -826,8 +838,8 @@ def run(args):
 
         # Prepare input alignments, stored in temp fasta files
         in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, \
-            design_for, specific_against_metadata_accs, annotations = \
-            prepare_alignments(args)
+            design_for, specific_against_metadata_accs, annotations, \
+            sequence_weights = prepare_alignments(args)
 
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
@@ -835,6 +847,7 @@ def run(args):
         args.design_for = design_for
         args.specific_against_metadata_accs = specific_against_metadata_accs
         args.annotations = annotations
+        args.sequence_weights = sequence_weights
 
         if args.cover_by_year_decay:
             # args.cover_by_year_decay contains two parameters: the year
@@ -848,9 +861,18 @@ def run(args):
             raise Exception(("Number output TSVs must match number of input "
                 "FASTAs"))
         if args.write_input_aln:
-            if len(args.write_input_aln) != len(args.out_tsv):
+            if len(args.in_fasta) != len(args.write_input_aln):
                 raise Exception(("Number input alignment filenames must match "
                     "number of input FASTAs"))
+        if args.weight_sequences:
+            if len(args.in_fasta) != len(args.weight_sequences):
+                raise Exception(("Number input alignment filenames must match "
+                    "number of sequence weight TSVs"))
+            args.sequence_weights = [seq_io.read_sequence_weights(fn) for
+                                     fn in args.weight_sequences]
+        else:
+            args.sequence_weights = [defaultdict(lambda: 1) for _ in
+                                     args.in_fasta]
         args.design_for = None
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
         args.specific_against_metadata_accs = [[] for _ in range(len(args.in_fasta))]
@@ -858,8 +880,8 @@ def run(args):
         aln_tmp_dirs = []
         if args.unaligned:
             in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, \
-            design_for, specific_against_metadata_accs, annotations = \
-            prepare_alignments(args)
+                design_for, specific_against_metadata_accs, annotations, \
+                sequence_weights = prepare_alignments(args)
 
             args.in_fasta = in_fasta
             args.taxid_for_fasta = taxid_for_fasta
@@ -1333,6 +1355,15 @@ def argv_to_args(argv):
               "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
               "year receives a desired cover fraction that decays by B -- "
               "i.e., year n is given B*(desired cover fraction of year n+1)."))
+    input_fasta_subparser.add_argument('--weight-sequences', nargs='+',
+        help=("If set, file path to TSV giving a weight to each input "
+              "sequence (col 1 is sequence name matching that in the "
+              "respective input FASTA, col 2 is weight). If more than one "
+              "input FASTA is given, the same number of output TSVs must be "
+              "given; each output TSV corresponds to an input FASTA. The "
+              "weights will be normalized and used when calculating expected "
+              "activity and percent coverage. Any sequence not listed will be "
+              "given a default weight of 1."))
     input_fasta_subparser.add_argument('--unaligned', action='store_true',
         help=("If set, treats inputs as unaligned fastas and uses MAFFT to "
               "align them, and --mafft-path is required"))
