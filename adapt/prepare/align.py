@@ -346,7 +346,7 @@ def align(seqs, am=None):
     out_fasta = tempfile.NamedTemporaryFile(delete=False)
 
     # Setup arguments to mafft
-    params = ['--preservecase', '--thread', '-1']
+    params = ['--preservecase', '--thread', '-1', '--adjustdirection']
     max_seq_len = max(len(seq) for seq in seqs.values())
     if len(seqs) < 10 and max_seq_len < 10000:
         # Accuracy oriented
