@@ -335,7 +335,7 @@ def prepare_for(taxid, segment, ref_accs, out,
         if subtaxa_weight:
             subtaxa_groups = ncbi_neighbors.get_subtaxa_groups(
                 seqs_aligned.keys(), subtaxa_weight)
-            sequence_weights.append(weight.weight_by_log_subtaxa(subtaxa_groups))
+            sequence_weights.append(weight.weight_by_log_group(subtaxa_groups))
         else:
             sequence_weights.append(defaultdict(lambda: 1))
 

@@ -292,6 +292,7 @@ def ncbi_search_taxonomy_url(taxon_name):
     # Use safe=',' to not encode ',' as '%2'
     params_url = urllib.parse.urlencode(params, safe=',')
     url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?%s' % params_url
+    return url
 
 
 def ncbi_influenza_genomes_url(database='genomeset'):
@@ -860,6 +861,12 @@ def parse_taxonomy_xml_for_rank(fn, rank):
 
     taxon = doc.getElementsByTagName('TaxaSet')[0] \
                .getElementsByTagName('Taxon')[0]
+    current_rank = parse_xml_node_value(taxon, 'Rank')
+
+    # Check if current rank is the correct rank
+    if current_rank == rank:
+        return parse_xml_node_value(taxon, 'ScientificName')
+
     lineage_taxa = taxon.getElementsByTagName('LineageEx')[0] \
                         .getElementsByTagName('Taxon')
     all_lineage_ranks = set()
@@ -872,7 +879,7 @@ def parse_taxonomy_xml_for_rank(fn, rank):
 
     # Sometimes subspecies aren't labeled
     if ((rank == 'subspecies' and 'species' in all_lineage_ranks) and
-            parse_xml_node_value(taxon, 'Rank') == 'no rank'):
+            current_rank == 'no rank'):
         return parse_xml_node_value(taxon, 'ScientificName')
 
     return None
@@ -1018,16 +1025,17 @@ def fetch_metadata(accessions):
         metadata[accession] = {'country': country, 'year': year,
                 'entry_create_year': entry_create_year, 'taxid': taxid}
 
-    # Delete the tempfile
-    unlink(xml_tf.name)
+    try:
+        # Delete the tempfile
+        unlink(xml_tf.name)
+    except FileNotFoundError:
+        pass
 
     return metadata
 
 
 def fetch_taxonomies(accessions):
     """Fetch taxonomies from GenBank for accessions.
-
-    This currently only parses out country and collection year.
 
     Args:
         accessions: collection of accessions to fetch for
@@ -1050,8 +1058,12 @@ def fetch_taxonomies(accessions):
         organism = parse_xml_node_value(seq, 'GBSeq_organism')
         taxonomy.append(organism)
         taxonomies[accession] = taxonomy
-    # Delete the tempfile
-    unlink(xml_tf.name)
+
+    try:
+        # Delete the tempfile
+        unlink(xml_tf.name)
+    except FileNotFoundError:
+        pass
 
     return taxonomies
 
@@ -1070,8 +1082,11 @@ def get_annotations(ref_acc):
     xml_tf = fetch_xml([ref_acc])
     gene_annotations = parse_genbank_xml_for_gene_features(xml_tf.name)
 
-    # Delete the tempfile
-    unlink(xml_tf.name)
+    try:
+        # Delete the tempfile
+        unlink(xml_tf.name)
+    except FileNotFoundError:
+        pass
 
     return gene_annotations
 
@@ -1092,7 +1107,7 @@ def get_rank(taxon_name, rank):
     taxid = parse_taxonomy_xml_for_taxid(raw_search_xml)
 
     # Get details about taxonomy to determine lineage rank name
-    detail_url = ncbi_detail_taxonomy_url(taxid)
+    detail_url = ncbi_detail_taxonomy_url(taxid[0])
     raw_detail_xml = urlopen_with_tries(detail_url)
 
     return parse_taxonomy_xml_for_rank(raw_detail_xml, rank)
@@ -1112,12 +1127,14 @@ def get_subtaxa_groups(accessions, subtaxa_rank):
     subtaxa_groups = {}
     for acc, taxonomy in taxonomies.items():
         group_found = False
+
         # Check if subtaxon has already been seen before
         for subtaxon in subtaxa_groups:
             if subtaxon in taxonomy:
                 subtaxa_groups[subtaxon].append(acc)
                 group_found = True
                 break
+
         # If not seen, check what the subtaxon is and add it to the dictionary
         if not group_found:
             subtaxon = get_rank(taxonomy[-1], subtaxa_rank)

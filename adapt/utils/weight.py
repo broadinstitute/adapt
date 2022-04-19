@@ -10,51 +10,27 @@ from adapt.prepare import ncbi_neighbors
 __author__ = 'Priya P. Pillai <ppillai@broadinstitute.org>'
 
 
-def weight_by_log_subtaxa(accessions, subtaxa_rank):
-    """Weight sequences by the log of the number of sequences in their subtaxa
+def weight_by_log_group(groups):
+    """Weight sequences by the log of the number of sequences in the group
 
     Args:
-        accessions: logging level below which logging messages are ignored
-        subtaxa_rank: level of taxonomy at which to take the log of the number
-            of sequences
+        groups: dictionary {group name: collection of accessions in group}
 
     Returns:
         dictionary {accession: unnormalized weight}
     """
-    taxonomies = ncbi_neighbors.fetch_taxonomies(accessions)
-    subtaxa_count = {}
-    acc_to_subtaxa = {}
-    for acc, taxonomy in taxonomies.items():
-        for subtaxon in subtaxa_count:
-            if subtaxon in taxonomy:
-                subtaxa_count[subtaxon] += 1
-                acc_to_subtaxa[acc] = subtaxon
-                break
-        if acc not in acc_to_subtaxa:
-            subtaxon = ncbi_neighbors.get_rank(taxonomy[-1],
-                                               subtaxa_rank)
-            subtaxa_count[subtaxon] = 1
-            acc_to_subtaxa[acc] = subtaxon
+    weights = {}
+    for group in groups:
+        num_in_group = len(groups[group])
+        # Each group's weight should total to the log of the number of
+        # sequences in that group, so the weight per accession should be that
+        # divided by the number in the group
+        # Add one to the numerator to make sure weights aren't 0
+        weight_per_acc = math.log(num_in_group+1) / num_in_group
+        for acc in groups[group]:
+            weights[acc] = weight_per_acc
 
-    # Each subtaxa's weight should total to the log of the number of sequences
-    # in that subtaxa
-    subtaxa_weights = {subtaxon: math.log(subtaxa_count[subtaxon])
-                       for subtaxon in subtaxa_count}
-
-    # # Normalize by total of the subtaxa weights
-    # normalization_factor = sum(subtaxa_weights.values())
-    # subtaxa_weights_norm = {subtaxon: (subtaxa_weights[subtaxon] /
-    #                                    normalization_factor)
-    #                         for subtaxon in subtaxa_weights}
-
-    # Divide by the number of sequences to determine the per sequence weight
-    subtaxa_weights_per_seq = {subtaxon: (subtaxa_weights[subtaxon] /
-                                          subtaxa_count[subtaxon])
-                               for subtaxon in subtaxa_weights}
-
-    # Return a dictionary that matches accessions to their weight
-    return {acc: subtaxa_weights_per_seq[acc_to_subtaxa[acc]]
-            for acc in acc_to_subtaxa}
+    return weights
 
 
 def normalize(sequence_weights, accessions):
