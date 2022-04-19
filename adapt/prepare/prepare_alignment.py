@@ -26,7 +26,8 @@ def prepare_for(taxid, segment, ref_accs, out,
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         annotation_tsv=None, cluster_threshold=0.1, accessions_to_use=None,
-        sequences_to_use=None, meta_filt=None, meta_filt_against=None):
+        sequences_to_use=None, meta_filt=None, meta_filt_against=None,
+        subtaxa_weight=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -92,6 +93,9 @@ def prepare_for(taxid, segment, ref_accs, out,
             first are a collection of what to include in accessions to be
             specific against and the second are what to exclude. Only usable if
             input type is not a FASTA.
+        subtaxa_weight: string of the sub-taxonomy level at
+            which to use to determine weights (either 'subspecies', 'species',
+            'subgenus', or 'genus'). Only usable if input type is not a FASTA.
 
     Returns:
         number of clusters, set of accessions filtered out by meta_filt_against
@@ -328,7 +332,12 @@ def prepare_for(taxid, segment, ref_accs, out,
         else:
             annotations.append([])
 
-        sequence_weights.append(defaultdict(lambda: 1))
+        if subtaxa_weight:
+            subtaxa_groups = ncbi_neighbors.get_subtaxa_groups(
+                seqs_aligned.keys(), subtaxa_weight)
+            sequence_weights.append(weight.weight_by_log_subtaxa(subtaxa_groups))
+        else:
+            sequence_weights.append(defaultdict(lambda: 1))
 
         # Write a fasta file of aligned sequences
         fasta_file = os.path.join(out, str(cluster_idx) + '.fasta')

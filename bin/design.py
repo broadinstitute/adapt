@@ -263,6 +263,7 @@ def prepare_alignments(args):
         args.prep_influenza = False
         args.write_annotation = False
         args.write_input_seqs = False
+        args.weight_by_log_size_of_subtaxa = False
         for i, unaligned_fasta in enumerate(args.in_fasta):
             sequences_to_use[(0, unaligned_fasta)] = seq_io.read_fasta(unaligned_fasta)
             taxs.append((None, 0, unaligned_fasta, [], None, None))
@@ -384,7 +385,8 @@ def prepare_alignments(args):
                 accessions_to_use=accessions_to_use_for_tax,
                 sequences_to_use=sequences_to_use_for_tax,
                 meta_filt=meta_filt,
-                meta_filt_against=meta_filt_against)
+                meta_filt_against=meta_filt_against,
+                subtaxa_weight=args.weight_by_log_size_of_subtaxa)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
@@ -1403,6 +1405,13 @@ def argv_to_args(argv):
               "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
               "year receives a desired cover fraction that decays by B -- "
               "i.e., year n is given B*(desired cover fraction of year n+1)."))
+    input_auto_common_subparser.add_argument('--weight-by-log-size-of-subtaxa',
+        help=("If set, weight sequences by the log of the number of sequences "
+              "that are in the same subtaxa of rank specified here (one of "
+              "'subspecies', 'species', 'subgenus', or 'genus'). Must be a "
+              "smaller rank than the taxon being designed for. The weights "
+              "will be normalized and used when calculating expected activity "
+              "and percent coverage."))
     input_auto_common_subparser.add_argument('--use-accessions',
         help=("If set, use specified accessions instead of fetching neighbors "
               "for the given taxonomic ID(s). This provides a path to a TSV "
