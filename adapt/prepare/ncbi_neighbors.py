@@ -1028,7 +1028,7 @@ def fetch_metadata(accessions):
     try:
         # Delete the tempfile
         unlink(xml_tf.name)
-    except FileNotFoundError:
+    except:
         pass
 
     return metadata
@@ -1041,7 +1041,7 @@ def fetch_taxonomies(accessions):
         accessions: collection of accessions to fetch for
 
     Returns:
-        dict {accession: taxonomy (list)}
+        dict {accession.version: (taxonomy (list), taxonomic ID)}
     """
     taxonomies = defaultdict(list)
 
@@ -1054,17 +1054,33 @@ def fetch_taxonomies(accessions):
 
         seqs = doc.getElementsByTagName('GBSeq')
         for seq in seqs:
-            accession = parse_xml_node_value(seq, 'GBSeq_primary-accession')
+            accession = parse_xml_node_value(seq, 'GBSeq_accession-version')
             taxonomy_str = parse_xml_node_value(seq, 'GBSeq_taxonomy')
             taxonomy = taxonomy_str.split('; ')
             organism = parse_xml_node_value(seq, 'GBSeq_organism')
             taxonomy.append(organism)
-            taxonomies[accession] = taxonomy
+
+            feature_table = seq.getElementsByTagName('GBSeq_feature-table')[0]
+            taxid = None
+            for feature in feature_table.getElementsByTagName('GBFeature'):
+                if taxid is not None:
+                    break
+                feature_key = parse_xml_node_value(feature, 'GBFeature_key')
+                if feature_key == 'source':
+                    quals = feature.getElementsByTagName('GBFeature_quals')[0]
+                    for qualifier in quals.getElementsByTagName('GBQualifier'):
+                        qual_name = parse_xml_node_value(qualifier, 'GBQualifier_name')
+                        if qual_name == 'db_xref':
+                            qual_value = parse_xml_node_value(qualifier, 'GBQualifier_value')
+                            taxid = int(re.search(r"\d+", qual_value)[0])
+                            break
+
+            taxonomies[accession] = (taxonomy, taxid)
 
         try:
             # Delete the tempfile
             unlink(xml_tf.name)
-        except FileNotFoundError:
+        except:
             pass
 
     return taxonomies
@@ -1087,29 +1103,38 @@ def get_annotations(ref_acc):
     try:
         # Delete the tempfile
         unlink(xml_tf.name)
-    except FileNotFoundError:
+    except:
         pass
 
     return gene_annotations
 
 
-def get_rank(taxon_name, rank):
-    """Given a taxon name, get the name of its specified lineage rank
+def get_taxid(taxon_name):
+    """Determine tax ID for this taxon name
 
     Args:
         taxon_name: name of the taxonomy for which to fetch
+
+    Returns:
+        numerical taxonomic ID
+    """
+    search_url = ncbi_search_taxonomy_url(taxon_name)
+    raw_search_xml = urlopen_with_tries(search_url)
+
+    return parse_taxonomy_xml_for_taxid(raw_search_xml)[0]
+
+
+def get_rank(taxid, rank):
+    """Given a taxononomic ID, get the name of its specified lineage rank
+
+    Args:
+        taxid: name of the taxonomy for which to fetch
         rank: lineage rank to return
 
     Returns:
         string of the name of the specified lineage rank
     """
-    # Determine tax ID for this taxon name
-    search_url = ncbi_search_taxonomy_url(taxon_name)
-    raw_search_xml = urlopen_with_tries(search_url)
-    taxid = parse_taxonomy_xml_for_taxid(raw_search_xml)
-
-    # Get details about taxonomy to determine lineage rank name
-    detail_url = ncbi_detail_taxonomy_url(taxid[0])
+    detail_url = ncbi_detail_taxonomy_url(taxid)
     raw_detail_xml = urlopen_with_tries(detail_url)
 
     return parse_taxonomy_xml_for_rank(raw_detail_xml, rank)
@@ -1127,7 +1152,8 @@ def get_subtaxa_groups(accessions, subtaxa_rank):
     """
     taxonomies = fetch_taxonomies(accessions)
     subtaxa_groups = {}
-    for acc, taxonomy in taxonomies.items():
+    for acc, taxonomic_info in taxonomies.items():
+        taxonomy, taxid = taxonomic_info
         group_found = False
 
         # Check if subtaxon has already been seen before
@@ -1139,7 +1165,9 @@ def get_subtaxa_groups(accessions, subtaxa_rank):
 
         # If not seen, check what the subtaxon is and add it to the dictionary
         if not group_found:
-            subtaxon = get_rank(taxonomy[-1], subtaxa_rank)
+            if taxid is None:
+                taxid = get_taxid(taxonomy[-1])
+            subtaxon = get_rank(taxid, subtaxa_rank)
             subtaxa_groups[subtaxon] = [acc]
 
     return subtaxa_groups

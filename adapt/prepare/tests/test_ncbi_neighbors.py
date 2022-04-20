@@ -127,11 +127,22 @@ class TestTaxonomies(unittest.TestCase):
                     '"https://www.ncbi.nlm.nih.gov/dtd/NCBI_GBSeq.dtd">\n'
                     '<GBSet>\n'
                     '  <GBSeq>\n'
-                    '    <GBSeq_primary-accession>OK054351</GBSeq_primary-accession>\n'
+                    '    <GBSeq_accession-version>OK054351.1</GBSeq_accession-version>\n'
                     '    <GBSeq_organism>Zika virus</GBSeq_organism>\n'
                     '    <GBSeq_taxonomy>Viruses; Riboviria; Orthornavirae; '
                     'Kitrinoviricota; Flasuviricetes; Amarillovirales; '
                     'Flaviviridae; Flavivirus</GBSeq_taxonomy>\n'
+                    '    <GBSeq_feature-table>\n'
+                    '      <GBFeature>\n'
+                    '        <GBFeature_key>source</GBFeature_key>\n'
+                    '        <GBFeature_quals>\n'
+                    '          <GBQualifier>\n'
+                    '            <GBQualifier_name>db_xref</GBQualifier_name>\n'
+                    '            <GBQualifier_value>taxon:64320</GBQualifier_value>\n'
+                    '          </GBQualifier>\n'
+                    '        </GBFeature_quals>\n'
+                    '      </GBFeature>\n'
+                    '    </GBSeq_feature-table>\n'
                     '  </GBSeq>\n'
                     '</GBSet>\n')
             else:
@@ -141,18 +152,40 @@ class TestTaxonomies(unittest.TestCase):
                     '"https://www.ncbi.nlm.nih.gov/dtd/NCBI_GBSeq.dtd">\n'
                     '<GBSet>\n'
                     '  <GBSeq>\n'
-                    '    <GBSeq_primary-accession>OK054351</GBSeq_primary-accession>\n'
+                    '    <GBSeq_accession-version>OK054351.1</GBSeq_accession-version>\n'
                     '    <GBSeq_organism>Zika virus</GBSeq_organism>\n'
                     '    <GBSeq_taxonomy>Viruses; Riboviria; Orthornavirae; '
                     'Kitrinoviricota; Flasuviricetes; Amarillovirales; '
                     'Flaviviridae; Flavivirus</GBSeq_taxonomy>\n'
+                    '    <GBSeq_feature-table>\n'
+                    '      <GBFeature>\n'
+                    '        <GBFeature_key>source</GBFeature_key>\n'
+                    '        <GBFeature_quals>\n'
+                    '          <GBQualifier>\n'
+                    '            <GBQualifier_name>db_xref</GBQualifier_name>\n'
+                    '            <GBQualifier_value>taxon:64320</GBQualifier_value>\n'
+                    '          </GBQualifier>\n'
+                    '        </GBFeature_quals>\n'
+                    '      </GBFeature>\n'
+                    '    </GBSeq_feature-table>\n'
                     '  </GBSeq>\n'
                     '  <GBSeq>\n'
-                    '    <GBSeq_primary-accession>OK605599</GBSeq_primary-accession>\n'
+                    '    <GBSeq_accession-version>OK605599.1</GBSeq_accession-version>\n'
                     '    <GBSeq_organism>Dengue virus</GBSeq_organism>\n'
                     '    <GBSeq_taxonomy>Viruses; Riboviria; Orthornavirae; '
                     'Kitrinoviricota; Flasuviricetes; Amarillovirales; '
                     'Flaviviridae; Flavivirus</GBSeq_taxonomy>\n'
+                    '    <GBSeq_feature-table>\n'
+                    '      <GBFeature>\n'
+                    '        <GBFeature_key>source</GBFeature_key>\n'
+                    '        <GBFeature_quals>\n'
+                    '          <GBQualifier>\n'
+                    '            <GBQualifier_name>db_xref</GBQualifier_name>\n'
+                    '            <GBQualifier_value>taxon:11070</GBQualifier_value>\n'
+                    '          </GBQualifier>\n'
+                    '        </GBFeature_quals>\n'
+                    '      </GBFeature>\n'
+                    '    </GBSeq_feature-table>\n'
                     '  </GBSeq>\n'
                     '</GBSet>\n')
 
@@ -215,27 +248,32 @@ class TestTaxonomies(unittest.TestCase):
         nn.urlopen_with_tries = fake_urlopen_with_tries
 
     def test_fetch_taxonomies(self):
-        taxonomies = nn.fetch_taxonomies(['OK054351'])
+        taxonomies = nn.fetch_taxonomies(['OK054351.1'])
         expected_taxonomies = defaultdict(list)
-        expected_taxonomies['OK054351'] = ['Viruses', 'Riboviria',
+        expected_taxonomies['OK054351.1'] = (['Viruses', 'Riboviria',
             'Orthornavirae', 'Kitrinoviricota', 'Flasuviricetes',
-            'Amarillovirales', 'Flaviviridae', 'Flavivirus', 'Zika virus']
+            'Amarillovirales', 'Flaviviridae', 'Flavivirus', 'Zika virus'],
+            64320)
         self.assertDictEqual(taxonomies, expected_taxonomies)
 
+    def test_get_taxid(self):
+        self.assertEqual(nn.get_taxid('Zika virus'),
+                         64320)
+
     def test_get_rank(self):
-        species = nn.get_rank('Zika virus', 'species')
+        species = nn.get_rank(64320, 'species')
         self.assertEqual(species, 'Zika virus')
-        subspecies = nn.get_rank('Zika virus', 'subspecies')
+        subspecies = nn.get_rank(64320, 'subspecies')
         self.assertIsNone(subspecies)
-        genus = nn.get_rank('Zika virus', 'genus')
+        genus = nn.get_rank(64320, 'genus')
         self.assertEqual(genus, 'Flavivirus')
 
     def test_get_subtaxa_groups(self):
         # Zika & Dengue
-        subtaxa_groups = nn.get_subtaxa_groups(['OK054351', 'OK605599'],
+        subtaxa_groups = nn.get_subtaxa_groups(['OK054351.1', 'OK605599.1'],
                                                'species')
-        expected_subtaxa_groups = {'Dengue virus': ['OK605599'],
-                                   'Zika virus': ['OK054351']}
+        expected_subtaxa_groups = {'Dengue virus': ['OK605599.1'],
+                                   'Zika virus': ['OK054351.1']}
         self.assertDictEqual(subtaxa_groups, expected_subtaxa_groups)
 
     def tearDown(self):

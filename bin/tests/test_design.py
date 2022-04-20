@@ -21,11 +21,11 @@ __author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
 # GU pairing allows AA to match GG in 1st window
 SEQS = OrderedDict()
 # 1 Dengue accession
-SEQS["OK605599"] = "AACTA"
+SEQS["OK605599.1"] = "AACTA"
 # 3 Zika accessions
-SEQS["OK571913"] = "AAACT"
-SEQS["OK054351"] = "GGCTA"
-SEQS["MZ008356"] = "GGCTT"
+SEQS["OK571913.1"] = "AAACT"
+SEQS["OK054351.1"] = "GGCTA"
+SEQS["MZ008356.1"] = "GGCTT"
 
 # Specificity seq stops AA from being the best guide in the 1st window
 SP_SEQS = OrderedDict()
@@ -293,8 +293,8 @@ class TestDesignFastaWeighted(TestDesign.TestDesignCase):
 
         with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
             self.weight_file = f
-            f.write("OK605599\t70\nOK571913\t5\n"
-                    "OK054351\t15\nMZ008356\t5\n")
+            f.write("OK605599.1\t70\nOK571913.1\t5\n"
+                    "OK054351.1\t15\nMZ008356.1\t5\n")
 
         self.files_to_delete.extend([self.real_output_file,
                                      self.weight_file.name])
