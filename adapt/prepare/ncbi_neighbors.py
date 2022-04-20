@@ -1043,27 +1043,29 @@ def fetch_taxonomies(accessions):
     Returns:
         dict {accession: taxonomy (list)}
     """
-    accessions = list(set(accessions))
-    logger.info(("Fetching taxonomies for %d accessions"), len(accessions))
-
-    xml_tf = fetch_xml(accessions)
-    doc = minidom.parse(xml_tf.name)
     taxonomies = defaultdict(list)
 
-    seqs = doc.getElementsByTagName('GBSeq')
-    for seq in seqs:
-        accession = parse_xml_node_value(seq, 'GBSeq_primary-accession')
-        taxonomy_str = parse_xml_node_value(seq, 'GBSeq_taxonomy')
-        taxonomy = taxonomy_str.split('; ')
-        organism = parse_xml_node_value(seq, 'GBSeq_organism')
-        taxonomy.append(organism)
-        taxonomies[accession] = taxonomy
+    if len(accessions) > 0:
+        accessions = list(set(accessions))
+        logger.info(("Fetching taxonomies for %d accessions"), len(accessions))
 
-    try:
-        # Delete the tempfile
-        unlink(xml_tf.name)
-    except FileNotFoundError:
-        pass
+        xml_tf = fetch_xml(accessions)
+        doc = minidom.parse(xml_tf.name)
+
+        seqs = doc.getElementsByTagName('GBSeq')
+        for seq in seqs:
+            accession = parse_xml_node_value(seq, 'GBSeq_primary-accession')
+            taxonomy_str = parse_xml_node_value(seq, 'GBSeq_taxonomy')
+            taxonomy = taxonomy_str.split('; ')
+            organism = parse_xml_node_value(seq, 'GBSeq_organism')
+            taxonomy.append(organism)
+            taxonomies[accession] = taxonomy
+
+        try:
+            # Delete the tempfile
+            unlink(xml_tf.name)
+        except FileNotFoundError:
+            pass
 
     return taxonomies
 
