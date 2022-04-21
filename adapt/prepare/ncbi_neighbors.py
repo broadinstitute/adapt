@@ -1152,22 +1152,34 @@ def get_subtaxa_groups(accessions, subtaxa_rank):
     """
     taxonomies = fetch_taxonomies(accessions)
     subtaxa_groups = {}
+    # Memoize tax ID lookup, to not repeatedly look up tax ID redirects
+    taxid_to_subtaxa = {}
     for acc, taxonomic_info in taxonomies.items():
         taxonomy, taxid = taxonomic_info
-        group_found = False
+        subtaxon = None
 
-        # Check if subtaxon has already been seen before
-        for subtaxon in subtaxa_groups:
-            if subtaxon in taxonomy:
-                subtaxa_groups[subtaxon].append(acc)
-                group_found = True
-                break
+        # Check if tax ID has been seen before
+        if taxid in taxid_to_subtaxa:
+            subtaxon = taxid_to_subtaxa[taxid]
+        else:
+            group_found = False
+            # Check if subtaxon has already been seen before
+            for prev_subtaxon in subtaxa_groups:
+                if prev_subtaxon in taxonomy:
+                    subtaxon = prev_subtaxon
+                    group_found = True
+                    break
 
-        # If not seen, check what the subtaxon is and add it to the dictionary
-        if not group_found:
-            if taxid is None:
-                taxid = get_taxid(taxonomy[-1])
-            subtaxon = get_rank(taxid, subtaxa_rank)
+            # If not seen, check what the subtaxon is and add it to the dictionary
+            if not group_found:
+                if taxid is None:
+                    taxid = get_taxid(taxonomy[-1])
+                subtaxon = get_rank(taxid, subtaxa_rank)
+                taxid_to_subtaxa[taxid] = subtaxon
+
+        if subtaxon in subtaxa_groups:
+            subtaxa_groups[subtaxon].append(acc)
+        else:
             subtaxa_groups[subtaxon] = [acc]
 
     return subtaxa_groups
