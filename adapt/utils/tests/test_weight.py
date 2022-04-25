@@ -9,8 +9,8 @@ from adapt.utils import weight
 __author__ = 'Priya P. Pillai <ppillai@broadinstitute.org>'
 
 
-class TestIndexCompress(unittest.TestCase):
-    """Tests functions for compressing/de-compressing integers.
+class TestWeights(unittest.TestCase):
+    """Tests functions for weighting
     """
 
     def test_weight_by_log_group(self):
