@@ -642,7 +642,8 @@ class Alignment(SequenceList):
     def determine_representative_guides(self, start, guide_length,
             seqs_to_consider, guide_clusterer, missing_threshold=1,
             guide_is_suitable_fn=None,
-            required_flanking_seqs=(None, None)):
+            required_flanking_seqs=(None, None),
+            include_overall_consensus=True):
         """Construct a set of guides representative of the target sequences.
 
         This is similar to construct_guide(), except returns a set of
@@ -668,6 +669,10 @@ class Alignment(SequenceList):
                 the guide (in the target, not the guide) that must be
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
+            include_overall_consensus: includes, as a representative
+                sequence, the consensus across all sequences; this is
+                optional because it may not be "representative" of any
+                sequences as well as the cluster consensuses
 
         Returns:
             set of representative sequences
@@ -712,27 +717,38 @@ class Alignment(SequenceList):
             raise CannotConstructGuideError(("All sequences in region have "
                 "a gap and/or do not contain required flanking sequences"))
 
-        seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
-            include_idx=True)
+        representatives = set()
+        def consider_guide(gd):
+            if 'N' in gd:
+                # Skip this guide; all sequences at a position in the cluster
+                # under consideration are 'N'
+                return False
+            if guide_is_suitable_fn is not None:
+                if guide_is_suitable_fn(gd) is False:
+                    # Skip this guide; it is not suitable (e.g., may
+                    # not be specific)
+                    return False
+            representatives.add(gd)
+            return True
+
+        if include_overall_consensus:
+            # Make a representative guide be the consensus of all
+            # sequences
+            gd = aln_for_guide.determine_consensus_sequence(
+                    all_seqs_to_consider)
+            consider_guide(gd)
 
         # Cluster the sequences
+        seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
+            include_idx=True)
         clusters = guide_clusterer.cluster(seq_rows)
 
         # Take the consensus of each cluster to be the representative
-        representatives = set()
         for cluster_idxs in clusters:
             gd = aln_for_guide.determine_consensus_sequence(
                 cluster_idxs)
-            if 'N' in gd:
-                # Skip this; all sequences at a position in this cluster
-                # are 'N'
-                continue
-            if guide_is_suitable_fn is not None:
-                if guide_is_suitable_fn(gd) is False:
-                    # Skip this cluster; it is not suitable (e.g., may
-                    # not be specific)
-                    continue
-            representatives.add(gd)
+            consider_guide(gd)
+
         return representatives
 
     def compute_activity(self, start, gd_sequence, predictor, mutator=None):

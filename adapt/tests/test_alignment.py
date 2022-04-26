@@ -454,6 +454,10 @@ class TestAlignment(unittest.TestCase):
             k=3)
         seqs_to_consider = {0: set(range(len(seqs)))}
 
+        # Note that, along with being a cluster consensus, 'CATTTT' is also the
+        # overall consensus (according to how the consensus function is
+        # defined, which takes the most common allele)
+
         representatives = aln.determine_representative_guides(0,
                 guide_length, seqs_to_consider, guide_clusterer)
         self.assertSetEqual(representatives,
