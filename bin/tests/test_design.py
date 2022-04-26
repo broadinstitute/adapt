@@ -190,7 +190,7 @@ class TestDesignFastaAligned(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def test_max_activity(self):
@@ -208,7 +208,7 @@ class TestDesignFastaAligned(TestDesign.TestDesignCase):
         design.run(args)
         # Since sequences are short and need 1 base for primer on each side,
         # only finds 1 target in middle
-        expected = [["CT"]]
+        expected = [{("CT",), ("AC",)}]
         self.check_results(self.real_output_file, expected,
                            header='guide-target-sequences')
 
@@ -228,7 +228,7 @@ class TestDesignFastaAligned(TestDesign.TestDesignCase):
         design.run(args)
         # AA isn't allowed in 1st window by specificity fasta,
         # so 1st window changes
-        expected = [["AC", "GG"], ["CT"], ["CT"]]
+        expected = [{("AC", "GG"), ("AC",)}, {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
 
@@ -267,7 +267,7 @@ class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def tearDown(self):
@@ -389,7 +389,7 @@ class TestDesignAutosFull(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Same output as test_specificity_fasta, as sequences are the same
-        expected = [["AC", "GG"], ["CT"], ["CT"]]
+        expected = [{("AC", "GG"), ("AC",)}, {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def tearDown(self):
