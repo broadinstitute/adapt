@@ -486,9 +486,11 @@ def design_for_id(args):
     for i, in_fasta in enumerate(args.in_fasta):
         seqs = seq_io.read_fasta(in_fasta)
         # Warn if some, but not all, sequences have weights set
-        if len(args.sequence_weights) > 0 and len(args.sequence_weights) < len(seqs):
-            logger.warning("Some sequences do not have weights set; these "
-                "will be given a default weight of 1 pre-normalization.")
+        if len(args.sequence_weights[i]) > 0 and len(args.sequence_weights[i]) < len(seqs):
+            logger.warning(("Only %i sequences of %i have weights set for "
+                "alignment %i; the rest will be given a default weight of 1 "
+                "pre-normalization."
+                %(len(args.sequence_weights[i]), len(seqs), i)))
         if args.cover_by_year_decay:
             aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args,
                 sequence_weights=args.sequence_weights[i])

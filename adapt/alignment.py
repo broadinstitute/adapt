@@ -6,7 +6,7 @@ import logging
 import statistics
 
 import numpy as np
-from math import log2
+from math import log2, isclose
 
 from adapt.utils import guide
 from adapt.utils import lsh
@@ -92,7 +92,7 @@ class Alignment(SequenceList):
         if seq_norm_weights == None:
             self.seq_norm_weights = [1/self.num_sequences for _ in seqs[0]]
         else:
-            assert math.isclose(sum(seq_norm_weights), 1)
+            assert isclose(sum(seq_norm_weights), 1)
             self.seq_norm_weights = seq_norm_weights
 
         # Memoize information missing data at each position
