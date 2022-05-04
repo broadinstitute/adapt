@@ -485,6 +485,10 @@ def design_for_id(args):
     primer_cover_frac_per_input = []
     for i, in_fasta in enumerate(args.in_fasta):
         seqs = seq_io.read_fasta(in_fasta)
+        # Warn if some, but not all, sequences have weights set
+        if len(args.sequence_weights) > 0 and len(args.sequence_weights) < len(seqs):
+            logger.warning("Some sequences do not have weights set; these "
+                "will be given a default weight of 1 pre-normalization.")
         if args.cover_by_year_decay:
             aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args,
                 sequence_weights=args.sequence_weights[i])
@@ -868,8 +872,8 @@ def run(args):
                     "number of input FASTAs"))
         if args.weight_sequences:
             if len(args.in_fasta) != len(args.weight_sequences):
-                raise Exception(("Number input alignment filenames must match "
-                    "number of sequence weight TSVs"))
+                raise Exception(("Number of sequence weight TSVs must match "
+                    "number of input FASTAs"))
             args.sequence_weights = [seq_io.read_sequence_weights(fn) for
                                      fn in args.weight_sequences]
         else:
@@ -1363,8 +1367,8 @@ def argv_to_args(argv):
               "respective input FASTA, col 2 is weight). If more than one "
               "input FASTA is given, the same number of output TSVs must be "
               "given; each output TSV corresponds to an input FASTA. The "
-              "weights will be normalized and used when calculating expected "
-              "activity and percent coverage. Any sequence not listed will be "
+              "weights will be normalized and used when calculating objective "
+              "scores and summary statistics. Any sequence not listed will be "
               "given a default weight of 1."))
     input_fasta_subparser.add_argument('--unaligned', action='store_true',
         help=("If set, treats inputs as unaligned fastas and uses MAFFT to "

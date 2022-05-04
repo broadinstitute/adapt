@@ -260,12 +260,12 @@ class TestTaxonomies(unittest.TestCase):
         self.assertEqual(nn.get_taxid('Zika virus'),
                          64320)
 
-    def test_get_rank(self):
-        species = nn.get_rank(64320, 'species')
+    def test_get_taxonomy_name_of_rank(self):
+        species = nn.get_taxonomy_name_of_rank(64320, 'species')
         self.assertEqual(species, 'Zika virus')
-        subspecies = nn.get_rank(64320, 'subspecies')
+        subspecies = nn.get_taxonomy_name_of_rank(64320, 'subspecies')
         self.assertIsNone(subspecies)
-        genus = nn.get_rank(64320, 'genus')
+        genus = nn.get_taxonomy_name_of_rank(64320, 'genus')
         self.assertEqual(genus, 'Flavivirus')
 
     def test_get_subtaxa_groups(self):

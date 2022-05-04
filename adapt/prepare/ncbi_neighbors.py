@@ -1045,43 +1045,44 @@ def fetch_taxonomies(accessions):
     """
     taxonomies = defaultdict(list)
 
-    if len(accessions) > 0:
-        accessions = list(set(accessions))
-        logger.info(("Fetching taxonomies for %d accessions"), len(accessions))
+    if len(accessions) == 0:
+        return taxonomies
 
-        xml_tf = fetch_xml(accessions)
-        doc = minidom.parse(xml_tf.name)
+    accessions = list(set(accessions))
+    logger.info(("Fetching taxonomies for %d accessions"), len(accessions))
 
-        seqs = doc.getElementsByTagName('GBSeq')
-        for seq in seqs:
-            accession = parse_xml_node_value(seq, 'GBSeq_accession-version')
-            taxonomy_str = parse_xml_node_value(seq, 'GBSeq_taxonomy')
-            taxonomy = taxonomy_str.split('; ')
-            organism = parse_xml_node_value(seq, 'GBSeq_organism')
-            taxonomy.append(organism)
+    xml_tf = fetch_xml(accessions)
+    doc = minidom.parse(xml_tf.name)
 
-            feature_table = seq.getElementsByTagName('GBSeq_feature-table')[0]
-            taxid = None
-            for feature in feature_table.getElementsByTagName('GBFeature'):
-                if taxid is not None:
-                    break
-                feature_key = parse_xml_node_value(feature, 'GBFeature_key')
-                if feature_key == 'source':
-                    quals = feature.getElementsByTagName('GBFeature_quals')[0]
-                    for qualifier in quals.getElementsByTagName('GBQualifier'):
-                        qual_name = parse_xml_node_value(qualifier, 'GBQualifier_name')
-                        if qual_name == 'db_xref':
-                            qual_value = parse_xml_node_value(qualifier, 'GBQualifier_value')
-                            taxid = int(re.search(r"\d+", qual_value)[0])
-                            break
+    seqs = doc.getElementsByTagName('GBSeq')
+    for seq in seqs:
+        accession = parse_xml_node_value(seq, 'GBSeq_accession-version')
+        taxonomy_str = parse_xml_node_value(seq, 'GBSeq_taxonomy')
+        taxonomy = taxonomy_str.split('; ')
+        organism = parse_xml_node_value(seq, 'GBSeq_organism')
+        taxonomy.append(organism)
 
-            taxonomies[accession] = (taxonomy, taxid)
+        feature_table = seq.getElementsByTagName('GBSeq_feature-table')[0]
+        taxid = None
+        for feature in feature_table.getElementsByTagName('GBFeature'):
+            if taxid is not None:
+                break
+            feature_key = parse_xml_node_value(feature, 'GBFeature_key')
+            if feature_key == 'source':
+                quals = feature.getElementsByTagName('GBFeature_quals')[0]
+                for qualifier in quals.getElementsByTagName('GBQualifier'):
+                    qual_name = parse_xml_node_value(qualifier, 'GBQualifier_name')
+                    if qual_name == 'db_xref':
+                        qual_value = parse_xml_node_value(qualifier, 'GBQualifier_value')
+                        taxid = int(re.search(r"\d+", qual_value)[0])
+                        break
+        taxonomies[accession] = (taxonomy, taxid)
 
-        try:
-            # Delete the tempfile
-            unlink(xml_tf.name)
-        except:
-            pass
+    try:
+        # Delete the tempfile
+        unlink(xml_tf.name)
+    except:
+        pass
 
     return taxonomies
 
@@ -1124,7 +1125,7 @@ def get_taxid(taxon_name):
     return parse_taxonomy_xml_for_taxid(raw_search_xml)[0]
 
 
-def get_rank(taxid, rank):
+def get_taxonomy_name_of_rank(taxid, rank):
     """Given a taxononomic ID, get the name of its specified lineage rank
 
     Args:
@@ -1174,7 +1175,7 @@ def get_subtaxa_groups(accessions, subtaxa_rank):
             if not group_found:
                 if taxid is None:
                     taxid = get_taxid(taxonomy[-1])
-                subtaxon = get_rank(taxid, subtaxa_rank)
+                subtaxon = get_taxonomy_name_of_rank(taxid, subtaxa_rank)
                 taxid_to_subtaxa[taxid] = subtaxon
 
         if subtaxon in subtaxa_groups:

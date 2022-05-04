@@ -77,9 +77,11 @@ class Alignment(SequenceList):
         Args:
             seqs: list of str representing an alignment in column-major order
                 (i.e., seqs[i] is a string giving the bases in the sequences
-                at the i'th position of the alignment; it is not the i'th sequence)
+                at the i'th position of the alignment; it is not the i'th
+                sequence)
             seq_norm_weights: list of normalized weights, where
-                seq_norm_weights[j] is the weight for the j'th sequence
+                seq_norm_weights[j] is the weight for the j'th sequence, Should
+                sum to 1
         """
         self.seq_length = len(seqs)
         self.num_sequences = len(seqs[0])
@@ -90,6 +92,7 @@ class Alignment(SequenceList):
         if seq_norm_weights == None:
             self.seq_norm_weights = [1/self.num_sequences for _ in seqs[0]]
         else:
+            assert math.isclose(sum(seq_norm_weights), 1)
             self.seq_norm_weights = seq_norm_weights
 
         # Memoize information missing data at each position
@@ -114,9 +117,9 @@ class Alignment(SequenceList):
         """
         self._frac_missing = [0 for _ in range(self.seq_length)]
         for j in range(self.seq_length):
-            self._frac_missing[j] = sum(self.seq_norm_weights[i]
-                                        for i in range(self.num_sequences)
-                                        if self.seqs[j][i] == 'N')
+            num_n = sum(1 for i in range(self.num_sequences)
+                        if self.seqs[j][i] == 'N')
+            self._frac_missing[j] = float(num_n) / self.num_sequences
 
     def seq_idxs_weighted(self, seq_idxs):
         """Find the total weight of a subset of sequences in the alignment
@@ -127,8 +130,8 @@ class Alignment(SequenceList):
         Returns:
             sum of the weights of the sequences specified by seq_idxs
         """
-        return sum([self.seq_norm_weights[seq_idx]
-                    for seq_idx in seq_idxs])
+        return sum(self.seq_norm_weights[seq_idx]
+                   for seq_idx in seq_idxs)
 
     def median_sequences_with_missing_data(self):
         """Compute the median fraction of sequences with missing data, across

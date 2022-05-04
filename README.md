@@ -396,26 +396,18 @@ The distance is average nucleotide dissimilarity (1-ANI); higher values result i
 
 ## Weighting sequences
 
-The goal of ADAPT's assays is to cover as much of known variation as possible. ADAPT bases how much coverage it has of genomes on the percent of genomic sequences in the database that are covered. While this works well if the sequences represent a semi-random sample of the population, this is not always the case due to sampling biases
+By default, ADAPT bases how much coverage it has of a virus on the percent of genomic sequences in the database that are covered. While this works well if the sequences represent a random sample of the population, this is not always the case due to sampling biases. We include sequence weighting in ADAPT to allow the relative importance of sequences to be set.
 
-For the case when ADAPT is designing an assay across a taxon with multiple subtaxa, each with different levels of sampling, ADAPT can create assays that only cover a highly overrepresented subtaxon, and no other subtaxa. While having more sequences in the database is representative of a subtaxon's relative importance, it should not cause other subtaxa to be treated as unimportant,
+To manually set sequence weights when INPUT-TYPE is `fasta`, use `--weight-sequences WEIGHT_SEQUENCES`. `WEIGHT_SEQUENCES` should be a file path to a TSV with two columns: (1) A sequence name that matches to one in the input FASTA; (2) The weight of that sequence. If more than one input FASTA is given, the same number of output TSVs must be given. Each output TSV corresponds to an input FASTA. The weights will be normalized to sum to 1 and used when calculating objective scores and summary statistics. Note, any sequence not listed will be given a pre-normalized default weight of 1.
 
-We include the argument `--weight-by-log-size-of-subtaxa SUBTAXA` for when the INPUT-TYPE is `auto-from-args` or `auto-from-file` as a simple, heuristic method to help account for this problem, where `SUBTAXA` is a taxonomic rank ('genus', 'subgenus', 'species', or 'subspecies') lower than the rank of the taxon being designed for. It works as follows:
+For the case when ADAPT is designing an assay across a taxon with multiple subtaxa, each with different levels of sampling, ADAPT can create assays that only cover a highly overrepresented subtaxon and no other subtaxa. While having more sequences in the database is representative of a subtaxon's relative importance, it should not cause other subtaxa to be treated as unimportant.
+
+We include the argument `--weight-by-log-size-of-subtaxa SUBTAXA` for when the INPUT-TYPE is `auto-from-args` or `auto-from-file` as a simple method to help account for this problem, where `SUBTAXA` is a taxonomic rank ('genus', 'subgenus', 'species', or 'subspecies') lower than the rank of the taxon being designed for. It works as follows:
 
 1. Each sequence within the alignment is assigned a label based on what `SUBTAXA` group it is in.
 2. Each `SUBTAXA` group is assigned a weight equal to the log of the number of sequences in that group plus 1.
 3. Each sequence is assigned a weight equal to the weight of its `SUBTAXA` group divided by the number of sequences in its `SUBTAXA` group.
 4. Weights are normalized across all sequences in the alignment to sum to 1.
-
-To manually set sequence weights when INPUT-TYPE is `fasta`, use `--weight-sequences WEIGHT_SEQUENCES`. `WEIGHT_SEQUENCES` should be a file path to a TSV with two columns: (1) A sequence name that matches to one in the input FASTA; (2) The weight of that sequence. If more than one input FASTA is given, the same number of output TSVs must be given; each output TSV corresponds to an input FASTA. The weights will be normalized to sum to 1 and used when calculating objective scores and summary statistics. Note, any sequence not listed will be given a pre-normalized default weight of 1.
-
-Below are key arguments to [`design.py`](./bin/design.py) when INPUT-TYPE is `fasta`:
-
-* `--unaligned`: Specify if any of the input FASTA files are unaligned. This will align them using MAFFT.
-* `--mafft-path MAFFT_PATH`: Use the [MAFFT](https://mafft.cbrc.jp/alignment/software/) executable at MAFFT_PATH for generating alignments. Required if `--unaligned` is specified.
-* `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
-The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
-(Default: 0.2.)
 
 ## Miscellaneous key arguments
 

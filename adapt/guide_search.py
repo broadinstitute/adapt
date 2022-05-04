@@ -616,8 +616,10 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             guide_length: length of the guide to construct
             mismatches: threshold on number of mismatches for determining whether
                 a guide would hybridize to a target sequence
-            cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
-                 a guide; see seq_groups
+            cover_frac: minimum weighted fraction in (0, 1] of sequences that
+                must be 'captured' by a guide set; see seq_groups. The
+                weighted fraction is the sum of the normalized weights of the
+                sequences that are 'captured'.
             missing_data_params: tuple (a, b, c) specifying to not attempt to
                 design guides overlapping sites where the fraction of
                 sequences with missing data is > min(a, max(b, c*m), where m is
@@ -625,8 +627,8 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
                 alignment
             seq_groups: dict that maps group ID to collection of sequences in
                 that group. If set, cover_frac must also be a dict that maps
-                group ID to the fraction of sequences in that group that
-                must be 'captured' by a guide. If None, then do not divide
+                group ID to the weighted fraction of sequences in that group
+                that must be 'captured' by a guide. If None, then do not divide
                 the sequences into groups.
             kwargs: see GuideSearcher.__init__()
         """
@@ -658,8 +660,8 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             self.cover_frac = cover_frac
         else:
             # Setup a single dummy group containing all sequences, and make
-            # cover_frac be the fraction of sequences that must be covered in
-            # this group
+            # cover_frac be the weighted fraction of sequences that must be
+            # covered in this group
             self.seq_groups = {0: set(range(self.aln.num_sequences))}
             self.cover_frac = {0: cover_frac}
 
@@ -884,7 +886,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         """Find a collection of guides that cover sequences in a given window.
 
         This attempts to find the smallest number of guides such that, within
-        the specified window, at least the fraction self.cover_frac of
+        the specified window, at least the weighted fraction self.cover_frac of
         sequences have a guide that hybridizes to it.
 
         The solution is based on approximating the solution to an instance
@@ -993,11 +995,6 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             percent_that_can_be_uncovered[group_id] = max(0,
                 (self.aln.seq_idxs_weighted(seq_ids) -
                  self.cover_frac[group_id]))
-            # Above, use int(..) to take the floor. Also, expand out
-            # len(seq_ids) rather than use
-            # int((1.0-self.cover_frac[.])*len(seq_ids)) due to precision
-            # errors in Python -- e.g., int((1.0-0.8)*5) yields 0
-            # on some machines.
 
             percent_left_to_cover[group_id] = (1 -
                 percent_that_can_be_uncovered[group_id])
@@ -1101,11 +1098,11 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
 
         Because this is loosely defined, we use a crude heuristic to
         calculate this score. For a set of guides S, the score is the
-        average fraction of sequences that need to be covered (as specified
-        by cover_frac) that are covered by guides in S, where the average
-        is taken over the guides. That is, it is the sum of the fraction of
-        needed sequences covered by each guide in S divided by the size
-        of S. The score is a value in [0, 1].
+        average weighted fraction of sequences that need to be covered (as
+        specified by cover_frac) that are covered by guides in S, where the
+        average is taken over the guides. That is, it is the sum of the
+        weighted fraction of needed sequences covered by each guide in S
+        divided by the size of S. The score is a value in [0, 1].
 
         The score is meant to be compared across sets of guides that
         are the same size (i.e., have the same number of guides). It
@@ -1187,7 +1184,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
         return seqs_bound
 
     def total_frac_bound_by_guides(self, guides):
-        """Calculate the total fraction of sequences in the alignment
+        """Calculate the total weighted fraction of sequences in the alignment
         bound by the guides.
 
         Note that if the sequences are grouped (e.g., by year), this
@@ -1198,7 +1195,7 @@ class GuideSearcherMinimizeGuides(GuideSearcher):
             guides: collection of str representing guide sequences
 
         Returns:
-            total fraction of all sequences bound by a guide
+            total weighted fraction of all sequences bound by a guide
         """
         seqs_bound = self._seqs_bound_by_guides(guides)
         return self.aln.seq_idxs_weighted(seqs_bound)
@@ -1411,7 +1408,7 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
 
     def total_frac_bound_by_guides(self, window_start, window_end, guide_set,
             activities=None):
-        """Calculate the total fraction of sequences in the alignment
+        """Calculate the total weighted fraction of sequences in the alignment
         bound by the guides.
 
         This assumes that a sequence is 'bound' if the activity against
@@ -1428,13 +1425,13 @@ class GuideSearcherMaximizeActivity(GuideSearcher):
                 this calls that function
 
         Returns:
-            total fraction of all sequences detected by a guide
+            total weighted fraction of all sequences detected by a guide
         """
         if activities is None:
             activities = self.guide_set_activities(window_start, window_end,
                     guide_set)
 
-        # Calculate fraction of activity values >0
+        # Calculate weighted fraction of activity values >0
         frac_active = sum(self.aln.seq_norm_weights[i]
                          for i, x in enumerate(activities) if x > 0)
 

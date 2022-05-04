@@ -9,12 +9,18 @@ from adapt.prepare import ncbi_neighbors
 
 __author__ = 'Priya P. Pillai <ppillai@broadinstitute.org>'
 
+logger = logging.getLogger(__name__)
+
 
 def weight_by_log_group(groups):
     """Weight sequences by the log of the number of sequences in the group
 
+    If G is a set of sequences in a group, the unnormalized weight of each
+    sequence in G will be set to log(|G| + 1)/|G|
+
     Args:
-        groups: dictionary {group name: collection of sequence names in group}
+        groups: dictionary {group name: collection of sequence names in group}.
+            Sequence names must be unique across all groups.
 
     Returns:
         dictionary {sequence name: unnormalized weight}
@@ -29,6 +35,9 @@ def weight_by_log_group(groups):
         if num_in_group != 0:
             weight_per_seq = math.log(num_in_group+1) / num_in_group
             for seq_name in groups[group]:
+                if seq_name in weights:
+                    raise ValueError("%s is in multiple weighting groups, and "
+                        "so its weight cannot be determined." %seq_name)
                 weights[seq_name] = weight_per_seq
 
     return weights
@@ -56,23 +65,41 @@ def normalize(sequence_weights, seq_names):
             for seq_name in seq_names}
 
 
-def percentile(activities, q, seq_norm_weights):
+def percentile(activities, q, seq_weights):
     """Take a weighted percentile of activities, using 'lower' interpolation
+
+    The weighted percentile uses total sequence weight, rather than the number
+    of sequences, in order to determine percentile calculations. The 'lower'
+    interpolation means that the percentile value returned is greater than or
+    equal to *at most* that percent of sequence weight.
+
+    For example, if activities were [5, 3, 4] and weights were [0.4, 0.2, 0.4],
+    the 20th percentile would be 3, the 60th percentile would be 4, and the
+    100th percentile would be 5. Percentiles in between would be interpolated
+    to the lower value (so the 80th percentile would be 4), and percentiles
+    less than 20 would return the lowest value (3).
 
     Args:
         activities: list of activities to take the percentile of
         q: list of percentiles, in range [0, 100]
-        seq_norm_weights: list of weights for each activity, in same order as
-            activities
+        seq_weights: list of weights for each activity, in the same order as
+            activities; if unnormalized, it will be normalized
 
     Returns:
-        list of activity percentiles, matching q's ordering
+        list of activity percentile values, matching q's ordering
     """
+    if math.isclose(sum(seq_weights), 1):
+        seq_norm_weights = seq_weights
+    else:
+        logger.warning("Weights have not been normalized for percentile "
+            "calculations; normalizing them here.")
+        seq_norm_weights = normalize(seq_weights, range(len(seq_weights)))
     # Order the activities, but get a list of the indexes of the ordering
     # to be able to match activities to their weights
     sorted_activities_idxs = np.argsort(activities)
     # Keep track of the current percentile we're on
     curr_p = 0
+    # Keep track of the current sequence we're on
     i = 0
     # Change requested percentiles into decimals & keep track of their original
     # ordering
