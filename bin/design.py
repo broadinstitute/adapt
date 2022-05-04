@@ -263,6 +263,7 @@ def prepare_alignments(args):
         args.prep_influenza = False
         args.write_annotation = False
         args.write_input_seqs = False
+        args.write_weights = False
         args.weight_by_log_size_of_subtaxa = False
         for i, unaligned_fasta in enumerate(args.in_fasta):
             sequences_to_use[(0, unaligned_fasta)] = seq_io.read_fasta(unaligned_fasta)
@@ -451,6 +452,21 @@ def prepare_alignments(args):
                     out_name = label + '.' + str(i) + '.fasta'
                     copy_path = os.path.join(args.out_tsv_dir, out_name)
                 shutil.copyfile(fn, copy_path)
+        if args.write_weights:
+            # Write the weights being used
+            for i in range(nc):
+                if label is None:
+                    # args.write_input_seqs gives the path to where to write
+                    # the list
+                    out_file = args.write_weights + '.' + str(i) + 'weights.tsv'
+                else:
+                    # Determine where to write the sequence names based on
+                    # the label and args.out_tsv_dir
+                    out_name = label + '.' + str(i) + 'weights.tsv'
+                    out_file = os.path.join(args.out_tsv_dir, out_name)
+                with open(out_file, 'w') as fw:
+                    for seq_name, seq_weight in sequence_weight[i].items():
+                        fw.write("%s\t%f\n" %(seq_name, seq_weight))
 
     # Combine all years tsv (there is one per fasta file)
     if any(f is not None for f in years_tsv_per_aln):
@@ -1479,14 +1495,20 @@ def argv_to_args(argv):
         help=("If set, write the alignments being used as "
               "input for design to a file in OUT_TSV_DIR; the filename is "
               "determined based on the label for each taxonomy (they are "
-              "'[label].[cluster-number].fasta'"))
+              "'[label].[cluster-number].fasta')"))
     input_autofile_subparser.add_argument('--write-annotation',
         action='store_true',
         help=("If set, write genomic annotations for the alignments "
               "based on the (first) reference sequence to a TSV file in "
               "OUT_TSV_DIR; the filename is determined based on the label for "
               "each taxonomy (they are "
-              "'[label].[cluster-number].annotation.tsv'"))
+              "'[label].[cluster-number].annotation.tsv')"))
+    input_autofile_subparser.add_argument('--write-weights',
+        action='store_true',
+        help=("If set, write the weights being used to a TSV file. Only used "
+              "if --weight-by-log-size-of-subtaxa is set. The filename is "
+              "determined based on the label for each taxonomy (they are"
+              "'[label].[cluster-number].weights.tsv')"))
 
     # Auto prepare from arguments
     input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
@@ -1527,7 +1549,11 @@ def argv_to_args(argv):
         help=("Prefix of path to files to which to write genomic annotations "
               "for the alignments based on the first reference sequence in the "
               "cluster; the filenames are "
-              "'WRITE_ANNOTATION.[cluster-number].tsv'"))
+              "'WRITE_ANNOTATION.[cluster-number].annotation.tsv'"))
+    input_autoargs_subparser.add_argument('--write-weights',
+        help=("Prefix of path to files to which to write the weights being "
+              "used. Only used if --weight-by-log-size-of-subtaxa is set. "
+              "Filenames are 'WRITE_WEIGHTS.[cluster-number].weights.tsv'."))
 
     # Add parsers for subcommands
     for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:

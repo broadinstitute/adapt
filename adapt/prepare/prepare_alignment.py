@@ -424,7 +424,7 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
             reference accession from this list that is also in the aligned
             sequences will be used for annotations; positions will be modified
             to match the alignment
-        annotation_tsv: if set, a prefix to a TSV file to which this will write
+        annotation_tsv: if set, a path to a TSV file to which this will write
             genomic annotations on a per cluster basis, if there is a reference
             sequence in that cluster
 
