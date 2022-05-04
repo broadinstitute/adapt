@@ -81,51 +81,59 @@ def percentile(activities, q, seq_weights):
 
     Args:
         activities: list of activities to take the percentile of
-        q: list of percentiles, in range [0, 100]
+        q: list of percentiles, in range [0, 100]. Should all be unique.
         seq_weights: list of weights for each activity, in the same order as
             activities; if unnormalized, it will be normalized
 
     Returns:
         list of activity percentile values, matching q's ordering
     """
+    if len(q) == 0:
+        return []
+
     if math.isclose(sum(seq_weights), 1):
         seq_norm_weights = seq_weights
     else:
-        logger.warning("Weights have not been normalized for percentile "
+        logger.info("Weights have not been normalized for percentile "
             "calculations; normalizing them here.")
         seq_norm_weights = normalize(seq_weights, range(len(seq_weights)))
     # Order the activities, but get a list of the indexes of the ordering
     # to be able to match activities to their weights
     sorted_activities_idxs = np.argsort(activities)
-    # Keep track of the current percentile we're on
-    curr_p = 0
-    # Keep track of the current sequence we're on
-    i = 0
     # Change requested percentiles into decimals & keep track of their original
-    # ordering
-    q_pos = {q_i/100: pos for pos, q_i in enumerate(q)}
-    # Order the requested percentiles to iterate through them
-    ordered_qs = sorted(q_pos.keys())
-    curr_q = ordered_qs.pop(0)
-    # Keep track of the index of the item in the original percentile list that
-    # matches the requested percentile (in the same order as the original qs)
-    p_idxs = [-1 for _ in q]
-    while len(ordered_qs) > 0 and i < len(sorted_activities_idxs):
+    # ordering.
+    q_idxs = {q_i/100: idx for idx, q_i in enumerate(q)}
+    # Order the requested percentiles to reduce the number of times q must be
+    # checked
+    q_queue = sorted(q_idxs.keys())
+    curr_q = q_queue[0]
+
+    # Keep track of percentile values in the same order as the original qs
+    p = [None for _ in q]
+
+    # Iterate through activities in order (sorted_activities_idxs[i]), while
+    # keeping track of the current percentile value (curr_p)
+    curr_p = 0
+    i = 0
+    while len(q_queue) > 0 and i < len(sorted_activities_idxs):
         # Since sequence weights are normalized, the sum of weights of
         # sequences up to a given sequence is the current percentile
         curr_p = curr_p + seq_norm_weights[sorted_activities_idxs[i]]
+        # Set every requested percentile that falls within (prev_p, curr_p]
         while curr_p > curr_q or math.isclose(curr_p, curr_q):
             if math.isclose(curr_p, curr_q):
                 # Requested percentile equals current percentile
-                p_idxs[q_pos[curr_q]] = i
+                p[q_idxs[curr_q]] = activities[sorted_activities_idxs[i]]
             else:
                 # Using 'lower' interpolation, so use the one prior
                 # (unless it is the first one)
-                p_idxs[q_pos[curr_q]] = max(i-1, 0)
-            if len(ordered_qs) > 0:
-                curr_q = ordered_qs.pop(0)
+                p[q_idxs[curr_q]] = activities[sorted_activities_idxs[max(i-1, 0)]]
+            # q has been set, so remove from queue and move to next q
+            q_queue.pop(0)
+            if len(q_queue) > 0:
+                curr_q = q_queue[0]
             else:
                 break
         i += 1
 
-    return [activities[sorted_activities_idxs[p_idx]] for p_idx in p_idxs]
+    return p
