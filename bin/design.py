@@ -458,11 +458,11 @@ def prepare_alignments(args):
                 if label is None:
                     # args.write_input_seqs gives the path to where to write
                     # the list
-                    out_file = args.write_weights + '.' + str(i) + 'weights.tsv'
+                    out_file = args.write_weights + '.' + str(i) + '.weights.tsv'
                 else:
                     # Determine where to write the sequence names based on
                     # the label and args.out_tsv_dir
-                    out_name = label + '.' + str(i) + 'weights.tsv'
+                    out_name = label + '.' + str(i) + '.weights.tsv'
                     out_file = os.path.join(args.out_tsv_dir, out_name)
                 with open(out_file, 'w') as fw:
                     for seq_name, seq_weight in sequence_weight[i].items():
