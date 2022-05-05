@@ -1383,8 +1383,8 @@ def argv_to_args(argv):
         help=("If set, file path to TSV giving a weight to each input "
               "sequence (col 1 is sequence name matching that in the "
               "respective input FASTA, col 2 is weight). If more than one "
-              "input FASTA is given, the same number of output TSVs must be "
-              "given; each output TSV corresponds to an input FASTA. The "
+              "input FASTA is given, the same number of input TSVs must be "
+              "given; each input TSV corresponds to an input FASTA. The "
               "weights will be normalized and used when calculating objective "
               "scores and summary statistics. Any sequence not listed will be "
               "given a default weight of 1."))
