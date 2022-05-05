@@ -537,14 +537,14 @@ def construct_references(taxid, segment):
             continue
         ref_accs.append(ls)
 
-        if segment != 'None':
-            xml_tf = fetch_xml(ref_accs)
-            source_features = parse_genbank_xml_for_source_features(xml_tf.name)
-            ref_accs_seg = []
-            for ref_acc in ref_accs:
-                if source_features[ref_acc]['segment'] == segment:
-                    ref_accs_seg.append(ref_acc)
-            ref_accs = ref_accs_seg
+    if segment != 'None':
+        xml_tf = fetch_xml(ref_accs)
+        source_features = parse_genbank_xml_for_source_features(xml_tf.name)
+        ref_accs_seg = []
+        for ref_acc in ref_accs:
+            if source_features[ref_acc]['segment'] == segment:
+                ref_accs_seg.append(ref_acc)
+        ref_accs = ref_accs_seg
 
     if len(ref_accs) == 0:
         raise ValueError("Taxonomic ID %d segment %s does not have any "
