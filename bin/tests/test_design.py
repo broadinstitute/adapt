@@ -93,7 +93,10 @@ class TestDesign(object):
                             is_correct = False
                         if is_correct:
                             an_option_is_ok = True
-                    self.assertTrue(an_option_is_ok)
+                    self.assertTrue(an_option_is_ok,
+                            msg=(f"The design with guides {guides} does "
+                                f"not match any expected solution "
+                                f"({ei})"))
                 self.assertEqual(i, len(expected))
 
         def baseArgv(self, search_type='sliding-window', input_type='fasta',
