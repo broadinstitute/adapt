@@ -396,27 +396,28 @@ The distance is average nucleotide dissimilarity (1-ANI); higher values result i
 
 ## Weighting sequences
 
-By default, ADAPT bases how much coverage it has of a virus on the percent of genomic sequences in the database that are covered.
-While this works well if the sequences represent a random sample of the population, this is not always the case due to sampling biases.
-We include sequence weighting in ADAPT to allow the relative importance of sequences to be set.
+By default, ADAPT bases the "coverage" across a virus's variation on the percent of genome sequences predicted to be detected.
+Likewise, when maximizing expected (or average) activity across variation, it treats the different genome sequences uniformly.
+While this works well if the genome sequences represent a random sample of the targeted viral population, that is often not the case owing to sampling biases.
+We include sequence weighting in ADAPT, allowing the relative importance of sequences to be set.
 
 To manually set sequence weights when INPUT-TYPE is `fasta`, use `--weight-sequences WEIGHT_SEQUENCES`.
-`WEIGHT_SEQUENCES` should be a file path to a TSV with two columns: (1) A sequence name that matches to one in the input FASTA; (2) The weight of that sequence.
-If more than one input FASTA is given, the same number of output TSVs must be given.
-Each output TSV corresponds to an input FASTA.
-The weights will be normalized to sum to 1 and used when calculating objective scores and summary statistics.
-Note, any sequence not listed will be given a pre-normalized default weight of 1.
+`WEIGHT_SEQUENCES` should be a file path to a TSV with two columns: (1) a sequence name that matches to one in the input FASTA; (2) the weight of that sequence.
+If more than one input FASTA is given, the same number of input TSVs must be given.
+Each input TSV corresponds to an input FASTA.
+The input weights will be normalized to sum to 1 and used when calculating objective scores and summary statistics.
+Any sequence not listed in the input TSV(s) will be assigned, by default, a pre-normalized weight of 1.
 
-For the case when ADAPT is designing an assay across a taxon with multiple subtaxa, each with different levels of sampling, ADAPT can create assays that only cover a highly overrepresented subtaxon and no other subtaxa.
-While having more sequences in the database is representative of a subtaxon's relative importance, it should not cause other subtaxa to be treated as unimportant.
+When ADAPT designs an assay across multiple subtaxa, each with very different levels of sampling, ADAPT may design deficient assays that only detect a highly overrepresented subtaxon and no other subtaxa.
+While the number of sequences in the database often indicates a subtaxon's relative importance, it should typically not cause other subtaxa to be ignored in practice.
 
-We include the argument `--weight-by-log-size-of-subtaxa SUBTAXA` for when the INPUT-TYPE is `auto-from-args` or `auto-from-file` as a simple method to help account for this problem, where `SUBTAXA` is a taxonomic rank ('genus', 'subgenus', 'species', or 'subspecies') lower than the rank of the taxon being designed for.
+As a simple correction for this problem, ADAPT includes the argument `--weight-by-log-size-of-subtaxa SUBTAXA` for when the INPUT-TYPE is `auto-from-args` or `auto-from-file`. `SUBTAXA` is a taxonomic rank ('genus', 'subgenus', 'species', or 'subspecies') lower than the rank of the taxon being designed for.
 It works as follows:
 
-1. Each sequence within the alignment is assigned a label based on what `SUBTAXA` group it is in.
+1. Each input sequence is associated with one `SUBTAXA` group.
 2. Each `SUBTAXA` group is assigned a weight equal to the log of the number of sequences in that group plus 1.
 3. Each sequence is assigned a weight equal to the weight of its `SUBTAXA` group divided by the number of sequences in its `SUBTAXA` group.
-4. Weights are normalized across all sequences in the alignment to sum to 1.
+4. Weights are normalized across all sequences to sum to 1.
 
 ## Miscellaneous key arguments
 
