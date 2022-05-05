@@ -724,7 +724,7 @@ class Alignment(SequenceList):
                 "a gap and/or do not contain required flanking sequences"))
 
         representatives = set()
-        def consider_guide(gd):
+        def consider_and_add_guide(gd):
             if 'N' in gd:
                 # Skip this guide; all sequences at a position in the cluster
                 # under consideration are 'N'
@@ -742,7 +742,7 @@ class Alignment(SequenceList):
             # sequences
             gd = aln_for_guide.determine_consensus_sequence(
                     all_seqs_to_consider)
-            consider_guide(gd)
+            consider_and_add_guide(gd)
 
         # Cluster the sequences
         seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
@@ -753,7 +753,7 @@ class Alignment(SequenceList):
         for cluster_idxs in clusters:
             gd = aln_for_guide.determine_consensus_sequence(
                 cluster_idxs)
-            consider_guide(gd)
+            consider_and_add_guide(gd)
 
         return representatives
 
