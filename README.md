@@ -396,13 +396,22 @@ The distance is average nucleotide dissimilarity (1-ANI); higher values result i
 
 ## Weighting sequences
 
-By default, ADAPT bases how much coverage it has of a virus on the percent of genomic sequences in the database that are covered. While this works well if the sequences represent a random sample of the population, this is not always the case due to sampling biases. We include sequence weighting in ADAPT to allow the relative importance of sequences to be set.
+By default, ADAPT bases how much coverage it has of a virus on the percent of genomic sequences in the database that are covered.
+While this works well if the sequences represent a random sample of the population, this is not always the case due to sampling biases.
+We include sequence weighting in ADAPT to allow the relative importance of sequences to be set.
 
-To manually set sequence weights when INPUT-TYPE is `fasta`, use `--weight-sequences WEIGHT_SEQUENCES`. `WEIGHT_SEQUENCES` should be a file path to a TSV with two columns: (1) A sequence name that matches to one in the input FASTA; (2) The weight of that sequence. If more than one input FASTA is given, the same number of output TSVs must be given. Each output TSV corresponds to an input FASTA. The weights will be normalized to sum to 1 and used when calculating objective scores and summary statistics. Note, any sequence not listed will be given a pre-normalized default weight of 1.
+To manually set sequence weights when INPUT-TYPE is `fasta`, use `--weight-sequences WEIGHT_SEQUENCES`.
+`WEIGHT_SEQUENCES` should be a file path to a TSV with two columns: (1) A sequence name that matches to one in the input FASTA; (2) The weight of that sequence.
+If more than one input FASTA is given, the same number of output TSVs must be given.
+Each output TSV corresponds to an input FASTA.
+The weights will be normalized to sum to 1 and used when calculating objective scores and summary statistics.
+Note, any sequence not listed will be given a pre-normalized default weight of 1.
 
-For the case when ADAPT is designing an assay across a taxon with multiple subtaxa, each with different levels of sampling, ADAPT can create assays that only cover a highly overrepresented subtaxon and no other subtaxa. While having more sequences in the database is representative of a subtaxon's relative importance, it should not cause other subtaxa to be treated as unimportant.
+For the case when ADAPT is designing an assay across a taxon with multiple subtaxa, each with different levels of sampling, ADAPT can create assays that only cover a highly overrepresented subtaxon and no other subtaxa.
+While having more sequences in the database is representative of a subtaxon's relative importance, it should not cause other subtaxa to be treated as unimportant.
 
-We include the argument `--weight-by-log-size-of-subtaxa SUBTAXA` for when the INPUT-TYPE is `auto-from-args` or `auto-from-file` as a simple method to help account for this problem, where `SUBTAXA` is a taxonomic rank ('genus', 'subgenus', 'species', or 'subspecies') lower than the rank of the taxon being designed for. It works as follows:
+We include the argument `--weight-by-log-size-of-subtaxa SUBTAXA` for when the INPUT-TYPE is `auto-from-args` or `auto-from-file` as a simple method to help account for this problem, where `SUBTAXA` is a taxonomic rank ('genus', 'subgenus', 'species', or 'subspecies') lower than the rank of the taxon being designed for.
+It works as follows:
 
 1. Each sequence within the alignment is assigned a label based on what `SUBTAXA` group it is in.
 2. Each `SUBTAXA` group is assigned a weight equal to the log of the number of sequences in that group plus 1.
