@@ -176,18 +176,18 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
                          ('ATCG', {0}))
 
     def test_construct_guide_memoized_a_with_needed(self):
-        # Use the num_needed argument
+        # Use the percent_needed argument
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 5}),
+                            {0: 1}),
                          ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}),
+                            {0: .6}),
                          ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 5}),
+                            {0: 1}),
                          ('ATCG', {0,1,2,3}))
         self.assertEqual(self.a._construct_guide_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}),
+                            {0: .6}),
                          ('ATCG', {0,1,2,3}))
 
         self.a._cleanup_memoized_guides(0)
@@ -221,20 +221,24 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
             self.assertNotIn(0, self.a._memoized_guides[key])
 
     def test_find_optimal_guide_in_window(self):
-        self.assertEqual(self.c._find_optimal_guide_in_window(
+        gd, gd_covered, gd_start, gd_score = \
+            self.c._find_optimal_guide_in_window(
                             1, 1 + self.c_window_size,
-                            {0: set([0,1,2,3,4,5])}, {0: 6}),
-                         ('ATCGG', set([0,1,2,4,5]), 5, 5))
+                            {0: set([0,1,2,3,4,5])}, {0: 6})
+        self.assertEqual(gd, 'ATCGG')
+        self.assertEqual(gd_covered, set([0,1,2,4,5]))
+        self.assertEqual(gd_start, 5)
+        self.assertAlmostEqual(gd_score, 5/6)
 
     def test_find_optimal_guide_in_window_at_end_boundary(self):
         self.assertEqual(self.d._find_optimal_guide_in_window(
                             0, 0 + self.d_window_size,
                             {0: set([0,1,2])}, {0: 3}),
-                         ('TACGG', set([0,1,2]), 3, 3))
+                         ('TACGG', set([0,1,2]), 3, 1))
         self.assertEqual(self.e._find_optimal_guide_in_window(
                             0, 0 + self.e_window_size,
                             {0: set([0,1,2])}, {0: 3}),
-                         ('TACGG', set([0,1,2]), 3, 3))
+                         ('TACGG', set([0,1,2]), 3, 1))
 
     def test_find_optimal_guide_in_window_none(self):
         self.assertEqual(self.f._find_optimal_guide_in_window(
@@ -251,9 +255,9 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # check that at least one of these is covered
         self.assertTrue(1 in gd_covered or 3 in gd_covered)
 
-        # Since we only need to cover 1 sequence in total, the score
-        # should only be 1
-        self.assertEqual(gd_score, 1)
+        # Since we only need to cover 1 of 4 sequence in total, the score
+        # should only be 0.25
+        self.assertEqual(gd_score, 0.25)
 
     def test_find_guides_in_window(self):
         self.assertEqual(self.c._find_guides_in_window(
@@ -374,13 +378,16 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         gs._selected_guide_positions = {'TCGAT': {6}, 'GGTAC': {18}}
 
         guides = ['TCGAT', 'GGTAC']
-        # 3 sequences are needed in total (1 from 2010 and 2 from 2018)
-        # TCGAT covers 1 needed sequence from 2010 and 0 needed sequences
-        # from 2018: so it covers 1/3 needed sequences
-        # GGTAC covers 0 needed sequences from 2010 and 1 needed sequence
-        # from 2018: so it covers 1/3 needed sequences
-        # The average of these fractions (the score) is 1/3
-        self.assertEqual(gs._score_collection_of_guides(guides), 1/3.0)
+        # 10% coverage of 2010 (66.7% of sequences) and 100% coverage of 2018
+        # is needed (33.3% of sequences) (40% coverage is needed in total)
+        # TCGAT covers the 10% needed of the 2010 sequences and 0% of the 2018
+        # sequences, so it covers (10% * 66.7%) + (0% * 33.3%) = 6.67%; of the
+        # total needed coverage, this is 6.67% / 40% = 16.67%
+        # GGTAC covers 0% of the 2010 sequences and 50% of the 2018 sequences,
+        # so it covers (0% * 66.7%) + (50% * 33.3%) = 16.67%; of the total
+        # needed coverage, this is 16.67% / 40% = 41.67%
+        # The average of these fractions (the score) is 29.167% (or 7/24)
+        self.assertAlmostEqual(gs._score_collection_of_guides(guides), 7/24)
 
     def test_find_optimal_guide_with_gu_pairing(self):
         seqs = ['GTATTAACACTTCGGCTACCCCCTCTAC',

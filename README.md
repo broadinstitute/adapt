@@ -41,6 +41,7 @@ For more information, see our [publication](https://www.nature.com/articles/s415
   * [Searching for complete targets](#searching-for-complete-targets)
   * [Automatically downloading and curating data](#automatically-downloading-and-curating-data)
   * [Using custom sequences as input](#using-custom-sequences-as-input)
+  * [Weighting sequences](#weighting-sequences)
   * [Miscellaneous key arguments](#miscellaneous-key-arguments)
   * [Output](#output)
 * [Examples](#examples)
@@ -393,11 +394,36 @@ Below are key arguments to [`design.py`](./bin/design.py) when INPUT-TYPE is `fa
 The distance is average nucleotide dissimilarity (1-ANI); higher values result in fewer clusters.
 (Default: 0.2.)
 
+## Weighting sequences
+
+By default, ADAPT bases the "coverage" across a virus's variation on the percent of genome sequences predicted to be detected.
+Likewise, when maximizing expected (or average) activity across variation, it treats the different genome sequences uniformly.
+While this works well if the genome sequences represent a random sample of the targeted viral population, that is often not the case owing to sampling biases.
+We include sequence weighting in ADAPT, allowing the relative importance of sequences to be set.
+
+To manually set sequence weights when INPUT-TYPE is `fasta`, use `--weight-sequences WEIGHT_SEQUENCES`.
+`WEIGHT_SEQUENCES` should be a file path to a TSV with two columns: (1) a sequence name that matches to one in the input FASTA; (2) the weight of that sequence.
+If more than one input FASTA is given, the same number of input TSVs must be given.
+Each input TSV corresponds to an input FASTA.
+The input weights will be normalized to sum to 1 and used when calculating objective scores and summary statistics.
+Any sequence not listed in the input TSV(s) will be assigned, by default, a pre-normalized weight of 1.
+
+When ADAPT designs an assay across multiple subtaxa, each with very different levels of sampling, ADAPT may design deficient assays that only detect a highly overrepresented subtaxon and no other subtaxa.
+While the number of sequences in the database often indicates a subtaxon's relative importance, it should typically not cause other subtaxa to be ignored in practice.
+
+As a simple correction for this problem, ADAPT includes the argument `--weight-by-log-size-of-subtaxa SUBTAXA` for when the INPUT-TYPE is `auto-from-args` or `auto-from-file`. `SUBTAXA` is a taxonomic rank ('genus', 'subgenus', 'species', or 'subspecies') lower than the rank of the taxon being designed for.
+It works as follows:
+
+1. Each input sequence is associated with one `SUBTAXA` group.
+2. Each `SUBTAXA` group is assigned a weight equal to the log of the number of sequences in that group plus 1.
+3. Each sequence is assigned a weight equal to the weight of its `SUBTAXA` group divided by the number of sequences in its `SUBTAXA` group.
+4. Weights are normalized across all sequences to sum to 1.
+
 ## Miscellaneous key arguments
 
 In addition to the arguments above, there are others that are often important when running [`design.py`](./bin/design.py):
 
-* `--predict-cas13a-activity-model`: If set, use ADAPT's pre-trained Cas13 model to predict activity of guide-target pairs.
+* `--predict-cas13a-activity-model`: Use ADAPT's pre-trained Cas13 model to predict activity of guide-target pairs.
 Classification and regression model files can be viewed in [`models/`](./models).
 (Default: not set, which does not use predicted activity during design.)
 * `--predict-activity-model-path MODEL_C MODEL_R`: Models that predict activity of guide-target pairs.
