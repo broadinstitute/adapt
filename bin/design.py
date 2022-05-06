@@ -245,8 +245,8 @@ def prepare_alignments(args):
     if args.input_type == 'auto-from-args':
         s = None if args.segment == 'None' else args.segment
         args.tax_id = ncbi_neighbors.determine_current_taxid(args.tax_id)
-        ref_accs = ncbi_neighbors.construct_references(args.tax_id) \
-            if not args.ref_accs else args.ref_accs
+        ref_accs = ncbi_neighbors.construct_references(
+            args.tax_id, args.segment) if not args.ref_accs else args.ref_accs
         meta_filt = None
         meta_filt_against = None
         if args.metadata_filter:
