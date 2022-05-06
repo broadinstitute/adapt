@@ -306,7 +306,7 @@ def set_mafft_exec(mafft_path):
     _mafft_exec = mafft_path
 
 
-def align(seqs, am=None):
+def align(seqs, am=None, warn_if_reverse=True):
     """Align sequences using mafft.
 
     Args:
@@ -378,11 +378,21 @@ def align(seqs, am=None):
             "it is possible that mafft failed, e.g., due to running out "
             "of memory"))
 
+    seqs_aligned_fix_rev = OrderedDict()
+    for seq_name in seqs_aligned:
+        if seq_name.startswith("_R_"):
+            if warn_if_reverse:
+                logger.warning(("The sequence '%s' was reversed during the "
+                    "alignment process." %seq_name[3:]))
+            seqs_aligned_fix_rev[seq_name[3:]] = seqs_aligned[seq_name]
+        else:
+            seqs_aligned_fix_rev[seq_name] = seqs_aligned[seq_name]
+
     if am is not None:
         # Memoize the alignment
-        am.save(seqs_aligned)
+        am.save(seqs_aligned_fix_rev)
 
-    return seqs_aligned
+    return seqs_aligned_fix_rev
 
 
 def _aln_identity(a, b):
@@ -578,7 +588,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             else:
                 # Align ref_acc_key with accver
                 to_align = {ref_acc_key: seqs[ref_acc_key], accver: seq}
-                aligned = align(to_align)
+                aligned = align(to_align, warn_if_reverse=False)
                 ref_acc_aln = aligned[ref_acc_key]
                 accver_aln = aligned[accver]
                 assert len(ref_acc_aln) == len(accver_aln)
