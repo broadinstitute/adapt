@@ -18,7 +18,8 @@ from bin import design
 __author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
 
 # Default args: window size 3, guide size 2, allow GU pairing
-# GU pairing allows AA to match GG in 1st window
+# GU pairing allows AA to match GG in 1st window, and AC to
+# match GC in the 2nd window
 SEQS = OrderedDict()
 # 1 Dengue accession
 SEQS["OK605599.1"] = "AACTA"
@@ -64,7 +65,9 @@ class TestDesign(object):
             Args:
                 file: string, path name of the file
                 expected: list of lists of strings, all the expected guide
-                    target sequences in each line of the output
+                    target sequences in each line of the output; if an inner
+                    list is instead a set of lists, any of the lists in the
+                    set can be a correct output
                 header: the header of the CSV that contains the guide target
                     sequences
             """
@@ -77,11 +80,25 @@ class TestDesign(object):
                         col_loc = headers.index(header)
                         continue
                     self.assertLess(i, len(expected) + 1)
+                    ei = expected[i-1]
+                    if not isinstance(ei, set):
+                        ei = {tuple(ei)}
                     guide_line = line[:-1].split('\t')[col_loc]
                     guides = guide_line.split(' ')
-                    for guide in guides:
-                        self.assertIn(guide, expected[i-1])
-                    self.assertEqual(len(guides), len(expected[i-1]))
+                    an_option_is_ok = False
+                    for eij in ei:
+                        is_correct = True
+                        for guide in guides:
+                            if guide not in eij:
+                                is_correct = False
+                        if len(guides) != len(eij):
+                            is_correct = False
+                        if is_correct:
+                            an_option_is_ok = True
+                    self.assertTrue(an_option_is_ok,
+                            msg=(f"The design with guides {guides} does "
+                                f"not match any expected solution "
+                                f"({ei})"))
                 self.assertEqual(i, len(expected))
 
         def baseArgv(self, search_type='sliding-window', input_type='fasta',
@@ -193,7 +210,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def test_max_activity(self):
@@ -202,7 +219,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         design.run(args)
         # Doesn't use model, just greedy binary prediction with 0 mismatches
         # (so same outputs as min-guides)
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def test_complete_targets(self):
@@ -211,7 +228,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         design.run(args)
         # Since sequences are short and need 1 base for primer on each side,
         # only finds 1 target in middle
-        expected = [["CT"]]
+        expected = [{("CT",), ("AC",)}]
         self.check_results(self.real_output_file, expected,
                            header='guide-target-sequences')
 
@@ -231,7 +248,7 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         design.run(args)
         # AA isn't allowed in 1st window by specificity fasta,
         # so 1st window changes
-        expected = [["AC", "GG"], ["CT"], ["CT"]]
+        expected = [{("AC", "GG"), ("AC",)}, {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
 
@@ -271,7 +288,7 @@ class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def tearDown(self):
@@ -449,7 +466,7 @@ class TestDesignAutosFull(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Same output as test_specificity_fasta, as sequences are the same
-        expected = [["AC", "GG"], ["CT"], ["CT"]]
+        expected = [{("AC", "GG"), ("AC",)}, {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def test_weighted(self):
