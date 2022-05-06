@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+title: ADAPT
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Metsky"
+  given-names: "Hayden C."
+- family-names: "Pillai"
+  given-names: "Priya P."
+url: "https://github.com/broadinstitute/adapt"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Metsky"
+    given-names: "Hayden C."
+  - family-names: "Welch"
+    given-names: "Nicole L."
+  - family-names: "Pillai"
+    given-names: "Priya P."
+  - family-names: "Haradhvala"
+    given-names: "Nicholas J."
+  - family-names: "Rumker"
+    given-names: "Laurie"
+  - family-names: "Mantena"
+    given-names: "Sreekar"
+  - family-names: "Zhang"
+    given-names: "Yibin B."
+  - family-names: "Yang"
+    given-names: "David K."
+  - family-names: "Ackerman"
+    given-names: "Cheri M."
+  - family-names: "Weller"
+    given-names: "Juliane"
+  - family-names: "Blainey"
+    given-names: "Paul C."
+  - family-names: "Myhrvold"
+    given-names: "Cameron"
+  - family-names: "Mitzenmacher"
+    given-names: "Michael"
+  - family-names: "Sabeti"
+    given-names: "Pardis C."
+  doi: "10.1038/s41587-022-01213-5"
+  journal: "Nature Biotechnology"
+  month: 3
+  title: "Designing sensitive viral diagnostics with machine learning"
+  year: 2022

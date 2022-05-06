@@ -6,7 +6,7 @@ import logging
 import statistics
 
 import numpy as np
-from math import log2
+from math import log2, isclose
 
 from adapt.utils import guide
 from adapt.utils import lsh
@@ -72,12 +72,16 @@ class Alignment(SequenceList):
     consensus sequences.
     """
 
-    def __init__(self, seqs):
+    def __init__(self, seqs, seq_norm_weights=None):
         """
         Args:
             seqs: list of str representing an alignment in column-major order
                 (i.e., seqs[i] is a string giving the bases in the sequences
-                at the i'th position of the alignment; it is not the i'th sequence)
+                at the i'th position of the alignment; it is not the i'th
+                sequence)
+            seq_norm_weights: list of normalized weights, where
+                seq_norm_weights[j] is the weight for the j'th sequence, Should
+                sum to 1
         """
         self.seq_length = len(seqs)
         self.num_sequences = len(seqs[0])
@@ -85,6 +89,11 @@ class Alignment(SequenceList):
             assert len(s) == self.num_sequences
 
         self.seqs = seqs
+        if seq_norm_weights == None:
+            self.seq_norm_weights = [1/self.num_sequences for _ in seqs[0]]
+        else:
+            assert isclose(sum(seq_norm_weights), 1)
+            self.seq_norm_weights = seq_norm_weights
 
         # Memoize information missing data at each position
         self._frac_missing = None
@@ -100,7 +109,8 @@ class Alignment(SequenceList):
         Returns:
             object of type Alignment including only the specified range
         """
-        return Alignment(self.seqs[pos_start:pos_end])
+        return Alignment(self.seqs[pos_start:pos_end],
+                         seq_norm_weights=self.seq_norm_weights)
 
     def _compute_frac_missing(self):
         """Compute fraction of sequences with missing data at each position.
@@ -110,6 +120,18 @@ class Alignment(SequenceList):
             num_n = sum(1 for i in range(self.num_sequences)
                         if self.seqs[j][i] == 'N')
             self._frac_missing[j] = float(num_n) / self.num_sequences
+
+    def seq_idxs_weighted(self, seq_idxs):
+        """Find the total weight of a subset of sequences in the alignment
+
+        Args:
+            seq_idxs: indexes of the sequences to get the weight of
+
+        Returns:
+            sum of the weights of the sequences specified by seq_idxs
+        """
+        return sum(self.seq_norm_weights[seq_idx]
+                   for seq_idx in seq_idxs)
 
     def median_sequences_with_missing_data(self):
         """Compute the median fraction of sequences with missing data, across
@@ -212,7 +234,7 @@ class Alignment(SequenceList):
         return seqs_with_required_flanking
 
     def construct_guide(self, start, guide_length, seqs_to_consider, mismatches,
-            allow_gu_pairs, guide_clusterer, num_needed=None,
+            allow_gu_pairs, guide_clusterer, percent_needed=None,
             missing_threshold=1, guide_is_suitable_fn=None,
             required_flanking_seqs=(None, None),
             predictor=None, stop_early=True):
@@ -236,9 +258,9 @@ class Alignment(SequenceList):
                 a family suitable for guides of length guide_length; if None,
                 then don't cluster, and instead draw a consensus from all
                 the sequences
-            num_needed: dict mapping universe group ID to the number of sequences
-                from the group that are left to cover in order to achieve
-                a desired coverage; these are used to help construct a
+            percent_needed: dict mapping universe group ID to the percent
+                coverage of the group that is left to cover in order to
+                achieve a desired coverage; these are used to help construct a
                 guide
             missing_threshold: do not construct a guide if the fraction of
                 sequences with missing data, at any position in the target
@@ -383,11 +405,11 @@ class Alignment(SequenceList):
 
         # Define a score function (higher is better) for a collection of
         # sequences covered by a guide
-        if num_needed is not None:
-            # This is the number of sequences it contains that are needed to
+        if percent_needed is not None:
+            # This is the percent coverage it contains that are needed to
             # achieve the partial cover; we can compute this by summing over
-            # the number of needed sequences it contains, taken across the
-            # groups in the universe
+            # the normalized weight of needed sequences it contains, taken
+            # across the groups in the universe
             # Memoize the scores because this computation might be expensive
             seq_idxs_scores = {}
             def seq_idxs_score(seq_idxs):
@@ -396,15 +418,16 @@ class Alignment(SequenceList):
                 if tc in seq_idxs_scores:
                     return seq_idxs_scores[tc]
                 score = 0
-                for group_id, needed in num_needed.items():
+                for group_id, needed in percent_needed.items():
                     contained_in_seq_idxs = seq_idxs & seqs_to_consider[group_id]
-                    score += min(needed, len(contained_in_seq_idxs))
+                    score += min(needed,
+                                 self.seq_idxs_weighted(contained_in_seq_idxs))
                 seq_idxs_scores[tc] = score
                 return score
         else:
             # Score by the number of sequences it contains
             def seq_idxs_score(seq_idxs):
-                return len(seq_idxs)
+                return self.seq_idxs_weighted(seq_idxs)
 
         # First construct the optimal guide to cover the sequences. This would be
         # a string x that maximizes the number of sequences s_i such that x and
@@ -422,6 +445,12 @@ class Alignment(SequenceList):
         else:
             # Cluster the sequences
             clusters = guide_clusterer.cluster(seq_rows)
+
+            # Include, as a "cluster", all sequences to consider -- in case
+            # the consensus of all the sequences happens to do a better job
+            # detecting the sequences than the consensus of any individual
+            # cluster
+            clusters = [all_seqs_to_consider] + list(clusters)
 
             # Sort the clusters by score, from highest to lowest
             # Here, the score is determined by the sequences in the cluster
@@ -460,6 +489,8 @@ class Alignment(SequenceList):
 
             # Impose an early stopping criterion if predictor is
             # used, because using it is slow
+            # Do not use weighting here, as weighting is irrelevant to
+            # how many calls are needed to the predictor
             if predictor is not None and stop_early:
                 if (num_bound >= 0.5*len(cluster_idxs) and
                         num_passed_predict_active < 0.1*len(cluster_idxs)):
@@ -564,15 +595,17 @@ class Alignment(SequenceList):
         consensus = ''
         for i in range(self.seq_length):
             counts = {'A': 0, 'T': 0, 'C': 0, 'G': 0}
-            for b in [self.seqs[i][j] for j in seqs_to_consider]:
+            for j in seqs_to_consider:
+                b = self.seqs[i][j]
                 if b in counts:
-                    counts[b] += 1
+                    counts[b] += self.seq_norm_weights[j]
                 elif b == 'N':
                     # skip N
                     continue
                 elif b in guide.FASTA_CODES:
                     for c in guide.FASTA_CODES[b]:
-                        counts[c] += 1.0 / len(guide.FASTA_CODES[b])
+                        counts[c] += (self.seq_norm_weights[j] /
+                                      len(guide.FASTA_CODES[b]))
                 else:
                     raise ValueError("Unknown base call %s" % b)
             counts_sorted = sorted(list(counts.items()))
@@ -614,8 +647,8 @@ class Alignment(SequenceList):
 
         # Convert all sequences into strings, and count the number of each
         seqs_str = self.make_list_of_seqs(seqs_to_consider=seqs_to_consider)
-        seq_count = defaultdict(int)
-        for seq_str in seqs_str:
+        seq_count = defaultdict(lambda: 0)
+        for j, seq_str in enumerate(seqs_str):
             if skip_ambiguity:
                 # Skip over this sequence if it contains any base that is
                 # ambiguous
@@ -627,7 +660,7 @@ class Alignment(SequenceList):
                 if skip:
                     continue
 
-            seq_count[seq_str] += 1
+            seq_count[seq_str] += self.seq_norm_weights[j]
 
         if len(seq_count) == 0:
             # There are no suitable strings (e.g., all contain ambiguity)
@@ -642,7 +675,8 @@ class Alignment(SequenceList):
     def determine_representative_guides(self, start, guide_length,
             seqs_to_consider, guide_clusterer, missing_threshold=1,
             guide_is_suitable_fn=None,
-            required_flanking_seqs=(None, None)):
+            required_flanking_seqs=(None, None),
+            include_overall_consensus=True):
         """Construct a set of guides representative of the target sequences.
 
         This is similar to construct_guide(), except returns a set of
@@ -668,6 +702,10 @@ class Alignment(SequenceList):
                 the guide (in the target, not the guide) that must be
                 present for a guide to bind; if either is None, no
                 flanking sequence is required for that end
+            include_overall_consensus: includes, as a representative
+                sequence, the consensus across all sequences; this is
+                optional because it may not be "representative" of any
+                sequences as well as the cluster consensuses
 
         Returns:
             set of representative sequences
@@ -712,27 +750,38 @@ class Alignment(SequenceList):
             raise CannotConstructGuideError(("All sequences in region have "
                 "a gap and/or do not contain required flanking sequences"))
 
-        seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
-            include_idx=True)
+        representatives = set()
+        def consider_and_add_guide(gd):
+            if 'N' in gd:
+                # Skip this guide; all sequences at a position in the cluster
+                # under consideration are 'N'
+                return False
+            if guide_is_suitable_fn is not None:
+                if guide_is_suitable_fn(gd) is False:
+                    # Skip this guide; it is not suitable (e.g., may
+                    # not be specific)
+                    return False
+            representatives.add(gd)
+            return True
+
+        if include_overall_consensus:
+            # Make a representative guide be the consensus of all
+            # sequences
+            gd = aln_for_guide.determine_consensus_sequence(
+                    all_seqs_to_consider)
+            consider_and_add_guide(gd)
 
         # Cluster the sequences
+        seq_rows = aln_for_guide.make_list_of_seqs(all_seqs_to_consider,
+            include_idx=True)
         clusters = guide_clusterer.cluster(seq_rows)
 
         # Take the consensus of each cluster to be the representative
-        representatives = set()
         for cluster_idxs in clusters:
             gd = aln_for_guide.determine_consensus_sequence(
                 cluster_idxs)
-            if 'N' in gd:
-                # Skip this; all sequences at a position in this cluster
-                # are 'N'
-                continue
-            if guide_is_suitable_fn is not None:
-                if guide_is_suitable_fn(gd) is False:
-                    # Skip this cluster; it is not suitable (e.g., may
-                    # not be specific)
-                    continue
-            representatives.add(gd)
+            consider_and_add_guide(gd)
+
         return representatives
 
     def compute_activity(self, start, gd_sequence, predictor, mutator=None):
@@ -780,9 +829,7 @@ class Alignment(SequenceList):
                 activities = np.zeros(self.num_sequences)
                 for i, seq_with_context in enumerate(seq_rows_with_context):
                     activity = mutator.compute_mutated_activity(predictor,
-                                                                seq_with_context,
-                                                                gd_sequence,
-                                                                start=start)
+                        seq_with_context, gd_sequence, start=start)
                     activities[i] = activity
                 return activities
             # Do not use a model; just predict binary activity (1 or 0)
@@ -822,10 +869,8 @@ class Alignment(SequenceList):
 
         if mutator:
             for seq_with_context, seq_idx in seq_rows_with_context:
-                activity = mutator.compute_mutated_activity(predictor,
-                                                            seq_with_context,
-                                                            gd_sequence,
-                                                            start=start)
+                activity = mutator.compute_mutated_activity(
+                    predictor, seq_with_context, gd_sequence, start=start)
                 evals.append(activity)
                 pairs_to_eval_seq_idx.append(seq_idx)
         else:
@@ -888,17 +933,19 @@ class Alignment(SequenceList):
         position_entropy = []
         for i in range(self.seq_length):
             counts = {'A': 0, 'T': 0, 'C': 0, 'G': 0, '-': 0}
-            for b in [self.seqs[i][j] for j in range(self.num_sequences)]:
+            for j in range(self.num_sequences):
+                b = self.seqs[i][j]
                 if b in counts:
-                    counts[b] += 1
+                    counts[b] += self.seq_norm_weights[j]
                 elif b in guide.FASTA_CODES:
                     for c in guide.FASTA_CODES[b]:
-                        counts[c] += 1.0 / len(guide.FASTA_CODES[b])
+                        counts[c] += (self.seq_norm_weights[j] /
+                                      len(guide.FASTA_CODES[b]))
                 else:
                     raise ValueError("Unknown base call %s" % b)
 
             # Calculate entropy
-            probabilities = [counts[base]/self.num_sequences for base in counts]
+            probabilities = [counts[base] for base in counts]
             this_position_entropy = sum([-p*log2(p) for p in probabilities if p > 0])
 
             position_entropy.append(this_position_entropy)
@@ -913,21 +960,26 @@ class Alignment(SequenceList):
         """
         counts = {'A': 0, 'T': 0, 'C': 0, 'G': 0}
         for i in range(self.seq_length):
-            for b in [self.seqs[i][j] for j in range(self.num_sequences)]:
+            for j in range(self.num_sequences):
+                b = self.seqs[i][j]
                 if b in counts:
-                    counts[b] += 1
+                    counts[b] += self.seq_norm_weights[j]
                 elif b in guide.FASTA_CODES:
                     for c in guide.FASTA_CODES[b]:
-                        counts[c] += 1.0 / len(guide.FASTA_CODES[b])
+                        counts[c] += (self.seq_norm_weights[j] /
+                                      len(guide.FASTA_CODES[b]))
                 elif b != '-':
                     raise ValueError("Unknown base call %s" % b)
+
+        # Needs to be normalized because this is across all locations in the
+        # alignment and gaps are not counted
         total = sum(counts.values())
         for base in counts:
             counts[base] /= total
         return counts
 
     @staticmethod
-    def from_list_of_seqs(seqs):
+    def from_list_of_seqs(seqs, seq_norm_weights=None):
         """Construct a Alignment from aligned list of sequences.
 
         If seqs is stored in row-major order, this converts to column-major order
@@ -955,7 +1007,7 @@ class Alignment(SequenceList):
         for j in range(seq_length):
             seqs_col[j] = ''.join(seqs[i][j] for i in range(num_sequences))
 
-        return Alignment(seqs_col)
+        return Alignment(seqs_col, seq_norm_weights=seq_norm_weights)
 
 
 class CannotConstructGuideError(Exception):

@@ -5,6 +5,7 @@ This includes downloading, curating, and aligning sequences.
 
 from collections import Counter
 from collections import OrderedDict
+from collections import defaultdict
 import logging
 import os
 import random
@@ -13,6 +14,7 @@ from adapt.prepare import align
 from adapt.prepare import cluster
 from adapt.prepare import ncbi_neighbors
 from adapt.utils import seq_io
+from adapt.utils import weight
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
@@ -24,7 +26,8 @@ def prepare_for(taxid, segment, ref_accs, out,
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
         min_cluster_size=2, prep_influenza=False, years_tsv=None,
         annotation_tsv=None, cluster_threshold=0.1, accessions_to_use=None,
-        sequences_to_use=None, meta_filt=None, meta_filt_against=None):
+        sequences_to_use=None, meta_filt=None, meta_filt_against=None,
+        subtaxa_weight=None):
     """Prepare an alignment for a taxonomy.
 
     This does the following:
@@ -35,10 +38,11 @@ def prepare_for(taxid, segment, ref_accs, out,
         5) Aligns the sequences, with one alignment per cluster.
 
     Args:
-        taxid: taxonomic ID from NCBI, for which to download
-            sequences
+        taxid: taxonomic ID from NCBI, for which to download sequences; 0 is
+            for an input FASTA and requires sequences_to_use to be set
         segment: only use sequences of this segment (ignored if set
-            to '' or None, e.g., if taxid is unsegmented)
+            to '' or None, e.g., if taxid is unsegmented). If the input is a
+            FASTA, this is the filename of that FASTA
         ref_accs: list of accessions of reference sequences to use for curation
         out: path to directory in which write FASTA files of aligned
             sequences (one per cluster)
@@ -79,20 +83,32 @@ def prepare_for(taxid, segment, ref_accs, out,
         sequences_to_use: if set, a dict of sequences to use instead of
             fetching them for taxid; note that this does not perform
             curation on these sequences
-        meta_filt: tuple of 2 dictionaries where the keys are any of 'country', 'year',
-            'entry_create_year', 'taxid' and values for the first are a collection 
-            of what to include or True to indicate that the metadata must exist and
-            the second are what to exclude.
-        meta_filt_against: tuple of 2 dictionaries where the keys are any of 'country', 
-            'year', 'entry_create_year', 'taxid' and values for the first are a 
-            collection of what to include in accessions to be specific against and
-            the second are what to exclude.
+        meta_filt: tuple of 2 dictionaries where the keys are any of 'country',
+            'year', 'entry_create_year', 'taxid' and values for the first are a
+            collection of what to include or True to indicate that the metadata
+            must exist and the second are what to exclude. Only usable if input
+            type is not a FASTA.
+        meta_filt_against: tuple of 2 dictionaries where the keys are any of
+            'country', 'year', 'entry_create_year', 'taxid' and values for the
+            first are a collection of what to include in accessions to be
+            specific against and the second are what to exclude. Only usable if
+            input type is not a FASTA.
+        subtaxa_weight: string of the sub-taxonomy level at
+            which to use to determine weights (either 'subspecies', 'species',
+            'subgenus', or 'genus'). Only usable if input type is not a FASTA.
 
     Returns:
         number of clusters, set of accessions filtered out by meta_filt_against
     """
-    logger.info(("Preparing an alignment for tax %d (segment: %s) with "
-        "references %s") % (taxid, segment, ref_accs))
+    # If the taxid is 0, it's an input FASTA & the segment is the FASTA filename
+    if taxid != 0:
+        logger.info(("Preparing an alignment for tax %d (segment: %s) with "
+            "references %s") % (taxid, segment, ref_accs))
+    else:
+        if sequences_to_use is None:
+            raise ValueError("If the taxonomic ID is 0, sequences_to_use must "
+                "be set.")
+        logger.info(("Preparing an alignment for %s" %segment))
 
     specific_against_metadata_acc = set()
 
@@ -118,9 +134,9 @@ def prepare_for(taxid, segment, ref_accs, out,
             if segment != None and segment != '':
                 neighbors = [n for n in neighbors if n.segment == segment]
 
-        num_unique_acc = len(set(n.acc for n in neighbors))
+        accs = list(set(n.acc for n in neighbors))
         logger.info(("There are %d neighbors (%d with unique accessions)"),
-                len(neighbors), num_unique_acc)
+                len(neighbors), len(accs))
 
         # Filter out anything that does not have a year if years_tsv is defined
         if years_tsv is not None:
@@ -154,7 +170,7 @@ def prepare_for(taxid, segment, ref_accs, out,
             # Sample accessions, rather than neighbors, because an accession can
             # show up multiple times in neighbors due to having multiple RefSeq
             # entries
-            acc_to_sample = list(set([n.acc for n in neighbors]))
+            acc_to_sample = accs
             acc_to_sample.sort()
             acc_to_fetch = random.choices(acc_to_sample, k=sample_seqs)
             neighbors = [n for n in neighbors if n.acc in acc_to_fetch]
@@ -170,7 +186,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 sample_seqs, len(set(acc_to_fetch)), sample_seqs)
         else:
             # Only fetch each accession once
-            acc_to_fetch = list(set([n.acc for n in neighbors]))
+            acc_to_fetch = accs
             acc_count = Counter(acc_to_fetch)   # 1 for each accession
 
         # Fetch FASTAs for the neighbors; also do so for ref_accs if ones
@@ -277,8 +293,9 @@ def prepare_for(taxid, segment, ref_accs, out,
             str(sorted(list(seqs_from_small_clusters))))
         clusters = clusters[:cluster_to_remove]
 
-    # Store annotations by cluster
+    # Store annotations & weights by cluster
     annotations = []
+    sequence_weights = []
     # Align the curated sequences, with one alignment per cluster
     for cluster_idx, seqs_in_cluster in enumerate(clusters):
         logger.info(("Aligning sequences in cluster %d (of %d), with %d "
@@ -301,7 +318,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                     annotation_tsv=cluster_annotation_tsv)
 
             if len(cluster_annotations) == 0:
-                logger.warning("No reference sequence were in cluster %d, "
+                logger.warning("No reference sequences were in cluster %d, "
                                "so no genomic annotations could be determined."
                                % cluster_idx)
             annotations.append(cluster_annotations)
@@ -314,6 +331,13 @@ def prepare_for(taxid, segment, ref_accs, out,
                         break
         else:
             annotations.append([])
+
+        if subtaxa_weight:
+            subtaxa_groups = ncbi_neighbors.get_subtaxa_groups(
+                seqs_aligned.keys(), subtaxa_weight)
+            sequence_weights.append(weight.weight_by_log_group(subtaxa_groups))
+        else:
+            sequence_weights.append(defaultdict(lambda: 1))
 
         # Write a fasta file of aligned sequences
         fasta_file = os.path.join(out, str(cluster_idx) + '.fasta')
@@ -331,7 +355,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 acc = name.split('.')[0]
                 fw.write('\t'.join([name, str(year_for_acc[acc])]) + '\n')
 
-    return len(clusters), specific_against_metadata_acc, annotations
+    return len(clusters), specific_against_metadata_acc, annotations, sequence_weights
 
 
 def fetch_sequences_for_taxonomy(taxid, segment):
@@ -400,7 +424,7 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
             reference accession from this list that is also in the aligned
             sequences will be used for annotations; positions will be modified
             to match the alignment
-        annotation_tsv: if set, a prefix to a TSV file to which this will write
+        annotation_tsv: if set, a path to a TSV file to which this will write
             genomic annotations on a per cluster basis, if there is a reference
             sequence in that cluster
 

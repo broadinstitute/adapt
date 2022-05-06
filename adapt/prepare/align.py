@@ -564,13 +564,13 @@ def curate_against_ref(seqs, ref_accs, asm=None,
 
     seqs_filtered = OrderedDict()
     for accver, seq in seqs.items():
+        if accver in ref_acc_to_key.values():
+            # accver is a reference accession, so include it
+            # automatically
+            seqs_filtered[accver] = seq
+            continue
         for ref_acc in ref_accs:
             ref_acc_key = ref_acc_to_key[ref_acc]
-            if accver == ref_acc_key:
-                # ref_acc_key will align well with ref_acc_key, so include it
-                # automatically
-                seqs_filtered[accver] = seq
-                break
 
             stats = asm.get((ref_acc_key, accver)) if asm is not None else None
             if stats is not None:

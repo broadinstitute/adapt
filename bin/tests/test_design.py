@@ -18,16 +18,19 @@ from bin import design
 __author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
 
 # Default args: window size 3, guide size 2, allow GU pairing
-# GU pairing allows AA to match GG in 1st window
+# GU pairing allows AA to match GG in 1st window, and AC to
+# match GC in the 2nd window
 SEQS = OrderedDict()
-SEQS["genome_1"] = "AACTA"
-SEQS["genome_2"] = "AAACT"
-SEQS["genome_3"] = "GGCTA"
-SEQS["genome_4"] = "GGCTT"
+# 1 Dengue accession
+SEQS["OK605599.1"] = "AACTA"
+# 3 Zika accessions
+SEQS["OK571913.1"] = "AAACT"
+SEQS["OK054351.1"] = "GGCTA"
+SEQS["MZ008356.1"] = "GGCTT"
 
 # Specificity seq stops AA from being the best guide in the 1st window
 SP_SEQS = OrderedDict()
-SP_SEQS["genome_5"] = "AA---"
+SP_SEQS["genome_X"] = "AA---"
 
 
 class TestDesign(object):
@@ -62,7 +65,9 @@ class TestDesign(object):
             Args:
                 file: string, path name of the file
                 expected: list of lists of strings, all the expected guide
-                    target sequences in each line of the output
+                    target sequences in each line of the output; if an inner
+                    list is instead a set of lists, any of the lists in the
+                    set can be a correct output
                 header: the header of the CSV that contains the guide target
                     sequences
             """
@@ -75,16 +80,31 @@ class TestDesign(object):
                         col_loc = headers.index(header)
                         continue
                     self.assertLess(i, len(expected) + 1)
+                    ei = expected[i-1]
+                    if not isinstance(ei, set):
+                        ei = {tuple(ei)}
                     guide_line = line[:-1].split('\t')[col_loc]
                     guides = guide_line.split(' ')
-                    for guide in guides:
-                        self.assertIn(guide, expected[i-1])
-                    self.assertEqual(len(guides), len(expected[i-1]))
+                    an_option_is_ok = False
+                    for eij in ei:
+                        is_correct = True
+                        for guide in guides:
+                            if guide not in eij:
+                                is_correct = False
+                        if len(guides) != len(eij):
+                            is_correct = False
+                        if is_correct:
+                            an_option_is_ok = True
+                    self.assertTrue(an_option_is_ok,
+                            msg=(f"The design with guides {guides} does "
+                                f"not match any expected solution "
+                                f"({ei})"))
                 self.assertEqual(i, len(expected))
 
         def baseArgv(self, search_type='sliding-window', input_type='fasta',
                      objective='minimize-guides', model=False, specific=None,
-                     specificity_file=None, output_loc=None, unaligned=False):
+                     specificity_file=None, output_loc=None, unaligned=False,
+                     gp=0.75, weighted=False, allow_gu_pairing=True):
             """Get arguments for tests
 
             Produces the correct arguments for a test case given details of
@@ -103,6 +123,11 @@ class TestDesign(object):
                     self.output_file.name if None
                 unaligned: boolean, if input type is FASTA, true to align seqs
                     before designing, False otherwise
+                weighted: if input type is FASTA, true to use manual weights
+                    for sequences (self.weight_file must be defined);
+                    if input type is 'auto-from-args', true to weight by the
+                    log of the subtaxa
+                allow_gu_pairing: True to allow GU pairing; False otherwise
 
             Returns:
                 List of strings that are the arguments of the test
@@ -116,10 +141,19 @@ class TestDesign(object):
                 argv.extend([input_file, '-o', output_loc])
                 if unaligned:
                     argv.extend(['--unaligned'])
+                if weighted:
+                    argv.extend(['--weight-sequences', self.weight_file.name])
             elif input_type == 'auto-from-args':
-                argv.extend(['64320', 'None', output_loc])
+                if weighted:
+                    argv.extend(['11051', 'None', output_loc,
+                        '--weight-by-log-size-of-subtaxa', 'species'])
+                else:
+                    argv.extend(['64320', 'None', output_loc])
             elif input_type == 'auto-from-file':
                 argv.extend([input_file, output_loc])
+
+            if not allow_gu_pairing:
+                argv.append('--do-not-allow-gu-pairing')
 
             if input_type in ['auto-from-args', 'auto-from-file']:
                 argv.extend(['--sample-seqs', '1', '--mafft-path', 'fake_path'])
@@ -131,7 +165,7 @@ class TestDesign(object):
                              '--max-primers-at-site', '2'])
 
             if objective == 'minimize-guides':
-                argv.extend(['-gm', '0', '-gp', '.75'])
+                argv.extend(['-gm', '0', '-gp', str(gp)])
             elif objective =='maximize-activity':
                 argv.extend(['--maximization-algorithm', 'greedy'])
 
@@ -159,7 +193,7 @@ class TestDesign(object):
             logging.disable(logging.NOTSET)
 
 
-class TestDesignFastaAligned(TestDesign.TestDesignCase):
+class TestDesignFasta(TestDesign.TestDesignCase):
     """Test design.py given an input FASTA
     """
 
@@ -176,7 +210,7 @@ class TestDesignFastaAligned(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def test_max_activity(self):
@@ -185,7 +219,7 @@ class TestDesignFastaAligned(TestDesign.TestDesignCase):
         design.run(args)
         # Doesn't use model, just greedy binary prediction with 0 mismatches
         # (so same outputs as min-guides)
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def test_complete_targets(self):
@@ -194,7 +228,7 @@ class TestDesignFastaAligned(TestDesign.TestDesignCase):
         design.run(args)
         # Since sequences are short and need 1 base for primer on each side,
         # only finds 1 target in middle
-        expected = [["CT"]]
+        expected = [{("CT",), ("AC",)}]
         self.check_results(self.real_output_file, expected,
                            header='guide-target-sequences')
 
@@ -214,7 +248,7 @@ class TestDesignFastaAligned(TestDesign.TestDesignCase):
         design.run(args)
         # AA isn't allowed in 1st window by specificity fasta,
         # so 1st window changes
-        expected = [["AC", "GG"], ["CT"], ["CT"]]
+        expected = [{("AC", "GG"), ("AC",)}, {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
 
@@ -228,7 +262,8 @@ class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
         self.files_to_delete.append(self.real_output_file)
 
         unaligned_seqs = {key: value for key, value in SEQS.items()}
-        unaligned_seqs["genome_5"] = "GGCT"
+        unaligned_seqs["genome_X"] = "GGCT"
+        # unaligned_seqs["genome_5"] = "GGCT"
 
         # Write to temporary input fasta
         seq_io.write_fasta(unaligned_seqs, self.input_file.name)
@@ -253,7 +288,7 @@ class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Base args set the percentage of sequences to match at 75%
-        expected = [["AA"], ["CT"], ["CT"]]
+        expected = [["AA"], {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def tearDown(self):
@@ -262,6 +297,54 @@ class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
         cluster.cluster_with_minhash_signatures = self.cluster
         align.align = self.align
         super().tearDown()
+
+
+class TestDesignFastaWeighted(TestDesign.TestDesignCase):
+    """Test design.py given an input FASTA
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.real_output_file = self.output_file.name + '.tsv'
+        self.files_to_delete.append(self.real_output_file)
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            self.weight_file = f
+            f.write("OK605599.1\t70\nOK571913.1\t5\n"
+                    "OK054351.1\t15\nMZ008356.1\t5\n")
+
+        self.files_to_delete.extend([self.real_output_file,
+                                     self.weight_file.name])
+
+        # Write to temporary input fasta
+        seq_io.write_fasta(SEQS, self.input_file.name)
+
+    def test_min_guides_weighted(self):
+        argv = super().baseArgv(weighted=True)
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Base args set the percentage of sequences to match at 75%
+        expected = [["AA"], ["AC"], ["CT"]]
+        self.check_results(self.real_output_file, expected)
+
+    def test_max_activity_weighted(self):
+        argv = super().baseArgv(weighted=True, objective='maximize-activity')
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Doesn't use model, just greedy binary prediction with 0 mismatches
+        # (so same outputs as min-guides)
+        expected = [["AA"], ["AC"], ["CT"]]
+        self.check_results(self.real_output_file, expected)
+
+    def test_complete_targets_weighted(self):
+        argv = super().baseArgv(weighted=True, search_type='complete-targets')
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Since sequences are short and need 1 base for primer on each side,
+        # only finds 1 target in middle
+        expected = [["AC"]]
+        self.check_results(self.real_output_file, expected,
+                           header='guide-target-sequences')
 
 
 class TestDesignAutosPartial(TestDesign.TestDesignCase):
@@ -300,6 +383,14 @@ class TestDesignAutosPartial(TestDesign.TestDesignCase):
     def test_specificity_taxa(self):
         argv = super().baseArgv(input_type='auto-from-args',
                         specific='taxa', specificity_file='')
+        args = design.argv_to_args(argv)
+        try:
+            design.run(args)
+        except FileNotFoundError:
+            pass
+
+    def test_weighted(self):
+        argv = super().baseArgv(input_type='auto-from-args', weighted=True)
         args = design.argv_to_args(argv)
         try:
             design.run(args)
@@ -375,7 +466,19 @@ class TestDesignAutosFull(TestDesign.TestDesignCase):
         args = design.argv_to_args(argv)
         design.run(args)
         # Same output as test_specificity_fasta, as sequences are the same
-        expected = [["AC", "GG"], ["CT"], ["CT"]]
+        expected = [{("AC", "GG"), ("AC",)}, {("CT",), ("AC",)}, ["CT"]]
+        self.check_results(self.real_output_file, expected)
+
+    def test_weighted(self):
+        # GP of 0.54 means covering Dengue sequence (weight: 1/3) + 1 sequence
+        # from Zika (weight: 2/9) is sufficient (total: 5/9 ~= .556)
+        argv = super().baseArgv(input_type='auto-from-args', weighted=True,
+            allow_gu_pairing=False, gp=0.54)
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Since GU pairs aren't allowed, GG won't work, but AA covers Dengue
+        # + 1 Zika, so AA is sufficient
+        expected = [["AA"], ["CT"], ["CT"]]
         self.check_results(self.real_output_file, expected)
 
     def tearDown(self):
