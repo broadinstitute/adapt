@@ -454,6 +454,23 @@ def _collapse_consecutive_gaps(a, b):
     return (a_ccg, b_ccg)
 
 
+def _collapse_gaps(seq):
+    """Collapse all gaps in a sequence from an alignment
+
+    For example, the sequence
+        ATC----GA
+    would become
+        ATCGA
+
+    Args:
+        seq: sequence to remove gaps from
+
+    Returns:
+        string of sequence without gaps
+    """
+    return seq.replace('-', '')
+
+
 def convert_to_index_with_gaps(seq, indexes):
     """Change indexes of a sequence without gaps to indexes with gaps
 
@@ -585,7 +602,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             else:
                 # Align ref_acc_key with accver
                 to_align = {ref_acc_key: seqs[ref_acc_key], accver: seq}
-                aligned = align(to_align, warn_if_reverse=False)
+                aligned = align(to_align)
                 ref_acc_aln = aligned[ref_acc_key]
                 accver_aln = aligned[accver]
                 assert len(ref_acc_aln) == len(accver_aln)
@@ -612,7 +629,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             if (aln_identity >= aln_identity_thres and
                     aln_identity_ccg >= aln_identity_ccg_thres):
                 # Include accver in the filtered output
-                seqs_filtered[accver] = seq
+                seqs_filtered[accver] = _collapse_gaps(aligned[accver])
                 break
 
     logger.info(("After curation, %d of %d sequences (with unique accession) "
