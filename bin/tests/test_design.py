@@ -11,7 +11,7 @@ import logging
 from collections import OrderedDict
 from argparse import Namespace
 from adapt import alignment
-from adapt.prepare import align, ncbi_neighbors, prepare_alignment
+from adapt.prepare import align, ncbi_neighbors, prepare_alignment, cluster
 from adapt.utils import seq_io
 from bin import design
 
@@ -84,7 +84,7 @@ class TestDesign(object):
 
         def baseArgv(self, search_type='sliding-window', input_type='fasta',
                      objective='minimize-guides', model=False, specific=None,
-                     specificity_file=None, output_loc=None):
+                     specificity_file=None, output_loc=None, unaligned=False):
             """Get arguments for tests
 
             Produces the correct arguments for a test case given details of
@@ -101,6 +101,8 @@ class TestDesign(object):
                     to be specific against
                 output_loc: path to the output file/directory; set to
                     self.output_file.name if None
+                unaligned: boolean, if input type is FASTA, true to align seqs
+                    before designing, False otherwise
 
             Returns:
                 List of strings that are the arguments of the test
@@ -112,6 +114,8 @@ class TestDesign(object):
 
             if input_type == 'fasta':
                 argv.extend([input_file, '-o', output_loc])
+                if unaligned:
+                    argv.extend(['--unaligned'])
             elif input_type == 'auto-from-args':
                 argv.extend(['64320', 'None', output_loc])
             elif input_type == 'auto-from-file':
@@ -155,7 +159,7 @@ class TestDesign(object):
             logging.disable(logging.NOTSET)
 
 
-class TestDesignFasta(TestDesign.TestDesignCase):
+class TestDesignFastaAligned(TestDesign.TestDesignCase):
     """Test design.py given an input FASTA
     """
 
@@ -214,7 +218,53 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         self.check_results(self.real_output_file, expected)
 
 
-class TestDesignAutos(TestDesign.TestDesignCase):
+class TestDesignFastaUnaligned(TestDesign.TestDesignCase):
+    """Test design.py given an input FASTA
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.real_output_file = self.output_file.name + '.0.tsv'
+        self.files_to_delete.append(self.real_output_file)
+
+        unaligned_seqs = {key: value for key, value in SEQS.items()}
+        unaligned_seqs["genome_5"] = "GGCT"
+
+        # Write to temporary input fasta
+        seq_io.write_fasta(unaligned_seqs, self.input_file.name)
+
+        # We cannot access MAFFT, so override this function; store original so
+        # it can be fixed for future tests
+        self.set_mafft_exec = align.set_mafft_exec
+        align.set_mafft_exec = lambda mafft_path: None
+
+        # Aligning requires MAFFT, so override this function and output simple
+        # test sequences; store original so it can be fixed for future tests
+        self.align = align.align
+        align.align = lambda seqs, am=None: SEQS
+
+        # Clustering will not work on short sequences in FASTA, so override;
+        # store original so it can be fixed for future tests
+        self.cluster = cluster.cluster_with_minhash_signatures
+        cluster.cluster_with_minhash_signatures = lambda seqs, threshold=0.1: [seqs]
+
+    def test_min_guides(self):
+        argv = super().baseArgv(unaligned=True)
+        args = design.argv_to_args(argv)
+        design.run(args)
+        # Base args set the percentage of sequences to match at 75%
+        expected = [["AA"], ["CT"], ["CT"]]
+        self.check_results(self.real_output_file, expected)
+
+    def tearDown(self):
+        # Fix all overridden functions
+        align.set_mafft_exec = self.set_mafft_exec
+        cluster.cluster_with_minhash_signatures = self.cluster
+        align.align = self.align
+        super().tearDown()
+
+
+class TestDesignAutosPartial(TestDesign.TestDesignCase):
     """Test design.py given arguments to automatically download FASTAs
 
     Does not run the entire design.py; prematurely stops by giving a fake path
@@ -261,7 +311,7 @@ class TestDesignAutos(TestDesign.TestDesignCase):
         self.output_dir.cleanup()
 
 
-class TestDesignFull(TestDesign.TestDesignCase):
+class TestDesignAutosFull(TestDesign.TestDesignCase):
     """Test design.py fully through
     """
     def setUp(self):
@@ -273,7 +323,7 @@ class TestDesignFull(TestDesign.TestDesignCase):
 
         # Create a temporary specificity file
         self.sp_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
-        self.sp_file.write("123\tNone\n")
+        self.sp_file.write("64286\tNone\n")
         # Closes the file so that it can be reopened on Windows
         self.sp_file.close()
 
@@ -308,14 +358,11 @@ class TestDesignFull(TestDesign.TestDesignCase):
         self.fetch_sequences_for_taxonomy = prepare_alignment.fetch_sequences_for_taxonomy
 
         def small_fetch(taxid, segment):
-            # 123 is the taxonomic ID used in our specificity file
-            if taxid == 123:
-                return SP_SEQS
-            # If it's not the specificity taxonomic ID, test fetching the real
-            # sequences, but don't return them as they won't be used
-            else:
-                self.fetch_sequences_for_taxonomy(taxid, segment)
-                return SEQS
+            # Test fetching the real sequences, but don't return them as they
+            # won't be used
+            # Note, this function is only used for specificity
+            self.fetch_sequences_for_taxonomy(taxid, segment)
+            return SP_SEQS
 
         prepare_alignment.fetch_sequences_for_taxonomy = small_fetch
 
