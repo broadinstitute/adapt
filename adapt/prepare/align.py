@@ -526,7 +526,9 @@ def curate_against_ref(seqs, ref_accs, asm=None,
     This compares each sequence against a list of reference accessions,
     and keeps any that satisfies the criteria against any reference
     sequence. In other words, it filters out any sequences that fail to
-    meet the criteria against all reference sequences.
+    meet the criteria against all reference sequences. It also checks if each
+    sequence is in the reverse complement direction compared to a reference,
+    and will store the reverse complement for that sequence if so.
 
     Args:
         seqs: dict mapping sequence accession to sequences
