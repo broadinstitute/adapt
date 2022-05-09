@@ -500,8 +500,7 @@ def convert_to_index_with_gaps(seq, indexes):
 
 def curate_against_ref(seqs, ref_accs, asm=None,
         aln_identity_thres=0.5, aln_identity_ccg_thres=0.6,
-        aln_identity_long_thres=(100000, 0.9, 0.9),
-        remove_ref_accs=[]):
+        aln_identity_long_thres=(100000, 0.9, 0.9)):
     """Curate sequences by aligning pairwise with reference sequences.
 
     This can make use of an object of AlignmentStatMemoizer to
@@ -534,8 +533,6 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             is useful to be stronger in curating long genomes (ideally,
             removing sequences with large structural changes), which will
             take long to align in a multiple sequence alignment
-        remove_ref_accs: a list of ref_acc, specifying to not include each
-            ref_acc in the output
 
     Returns:
         dict mapping sequence accession.version to sequences, filtered by
@@ -619,13 +616,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 break
 
     logger.info(("After curation, %d of %d sequences (with unique accession) "
-        "were kept; %d of these are references that will be removed"),
-        len(seqs_filtered), len(seqs), len(remove_ref_accs))
-
-    for remove_ref_acc in remove_ref_accs:
-        # Do not include the ref_acc_key corresponding to remove_ref_acc
-        # in the output
-        ref_acc_key = ref_acc_to_key[remove_ref_acc]
-        del seqs_filtered[ref_acc_key]
+        "were kept"),
+        len(seqs_filtered), len(seqs))
 
     return seqs_filtered

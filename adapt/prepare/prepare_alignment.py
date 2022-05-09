@@ -119,6 +119,7 @@ def prepare_for(taxid, segment, ref_accs, out,
     if sequences_to_use is not None:
         seqs_unaligned = sequences_to_use
         seqs_unaligned_curated = seqs_unaligned
+        added_ref_accs_to_fetch = []
     else:
         if accessions_to_use is not None:
             neighbors = [ncbi_neighbors.Neighbor(acc, None, None, None, None,
@@ -281,7 +282,13 @@ def prepare_for(taxid, segment, ref_accs, out,
     seqs_from_small_clusters = set()
     cluster_to_remove = None
     for cluster_idx, seqs_in_cluster in enumerate(clusters):
-        if len(seqs_in_cluster) < min_cluster_size:
+        len_seqs_in_cluster = len(seqs_in_cluster)
+        for ref_acc in added_ref_accs_to_fetch:
+            for accver in seqs_in_cluster:
+                if ref_acc in accver:
+                    len_seqs_in_cluster -= 1
+                    break
+        if len_seqs_in_cluster < min_cluster_size:
             seqs_from_small_clusters.update(seqs_in_cluster)
             if cluster_to_remove is None:
                 cluster_to_remove = cluster_idx
@@ -320,15 +327,21 @@ def prepare_for(taxid, segment, ref_accs, out,
             if len(cluster_annotations) == 0:
                 logger.warning("No reference sequences were in cluster %d, "
                                "so no genomic annotations could be determined."
-                               % cluster_idx)
+                               % (cluster_idx + 1))
             annotations.append(cluster_annotations)
 
             # Remove reference sequences that were only added for curation
             for ref_acc in added_ref_accs_to_fetch:
                 for accver in seqs_aligned:
                     if ref_acc in accver:
+                        logger.info("Removing reference %s from cluster %i"
+                            %(ref_acc, cluster_idx + 1))
                         del seqs_aligned[accver]
                         break
+
+            if len(seqs_aligned) == 0:
+                logger.warning("After removing references, there are no "
+                               "sequences in cluster %i" % (cluster_idx + 1))
         else:
             annotations.append([])
 
@@ -432,8 +445,6 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
         list of dictionaries representing annotations with keys "type",
             "start", "end", "gene", "product", "note"
     """
-
-    annotation_written = False
     for accver in seqs_aligned:
         for ref_acc in ref_accs:
             if ref_acc in accver:
