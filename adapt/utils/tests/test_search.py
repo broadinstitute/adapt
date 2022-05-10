@@ -27,6 +27,7 @@ class TestOligoSearcher(unittest.TestCase):
                      'GGGAGGGGGG',
                      'CCCCCCCCCC',
                      'AACGAATTCG']
+        self.oligos = {'AATT', 'AGGG'}
         self.aln = alignment.Alignment.from_list_of_seqs(self.seqs)
 
         self.s = search.OligoSearcher(self.aln, 3, 5, (1, 1, 100),
@@ -101,24 +102,54 @@ class TestOligoSearcher(unittest.TestCase):
             self.assertEqual(s._overlaps_ignored_range(i, olg_len=5),
                              (does_overlap_5[i] == '1'))
 
-    def test_oligo_set_activities(self):
-        oligos = {'AATT', 'AGGG'}
+    def test_oligo_set_activities_per_oligo(self):
         self.s._selected_positions = {'AATT': [4], 'AGGG': [3]}
 
-        activities = self.s.oligo_set_activities(2, 8, oligos)
+        per_olg_activities, activities = self.s.oligo_set_activities_per_oligo(
+            2, 8, self.oligos)
+        np.testing.assert_equal(activities, np.array([2, 2, 0, 2],))
+        self.assertIn('AATT', per_olg_activities)
+        self.assertIn('AGGG', per_olg_activities)
+        np.testing.assert_equal(per_olg_activities['AATT'], np.array([2, 0, 0, 2]))
+        np.testing.assert_equal(per_olg_activities['AGGG'], np.array([0, 2, 0, 0]))
+
+    def test_oligo_set_activities(self):
+        self.s._selected_positions = {'AATT': [4], 'AGGG': [3]}
+
+        activities = self.s.oligo_set_activities(2, 8, self.oligos)
         np.testing.assert_equal(activities, np.array([2, 2, 0, 2]))
 
         activities_percentile = self.s.oligo_set_activities_percentile(2, 8,
-                oligos, [5, 50])
+                self.oligos, [5, 50])
         self.assertEqual(activities_percentile, [0, 2])
 
         activities_expected = self.s.oligo_set_activities_expected_value(2, 8,
-                oligos)
+                self.oligos)
         self.assertEqual(activities_expected, 1.5)
 
         activities_expected = self.s.oligo_set_activities_expected_value(2, 8,
-                oligos, activities=[0, 2, 0, 2])
+                self.oligos, activities=[0, 2, 0, 2])
         self.assertEqual(activities_expected, 1)
+
+    def test_oligo_activities_expected_value(self):
+        self.s._selected_positions = {'AATT': [4], 'AGGG': [3]}
+
+        aatt = self.s.oligo_activities_expected_value(2, 8, 'AATT')
+        self.assertEqual(aatt, 1.0)
+
+        aggg = self.s.oligo_activities_expected_value(2, 8, 'AGGG')
+        self.assertEqual(aggg, 0.5)
+
+    def test_oligo_set_activities_expected_value_per_oligo(self):
+        self.s._selected_positions = {'AATT': [4], 'AGGG': [3]}
+
+        per_olg_expected = self.s.oligo_set_activities_expected_value_per_oligo(
+            2, 8, self.oligos)
+
+        self.assertIn('AATT', per_olg_expected)
+        self.assertIn('AGGG', per_olg_expected)
+        self.assertEqual(per_olg_expected['AATT'], 4/3)
+        self.assertEqual(per_olg_expected['AGGG'], 1)
 
     def test_find_oligos_for_each_window(self):
         s = OligoSearcherTest(self.aln, 3, 5, (1, 1, 100),

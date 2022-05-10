@@ -368,10 +368,95 @@ class OligoSearcher:
         p = np.percentile(activities, q, interpolation='lower')
         return list(p)
 
+    def oligo_set_activities_per_oligo(self, window_start,
+            window_end, oligo_set):
+        """Compute activity across target sequences for an oligo set in a
+        window.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            oligo_set: set of strings representing oligo sequences that
+                have been selected to be in an oligo set
+
+        Returns:
+            ({oligo sequence: list of activities per sequence}, max_activity)
+                where max_activity is a list of activities across the target
+                sequences (self.aln) yielded by the best of oligo_set on each
+                seq
+        """
+        if self.predictor is None:
+            raise NoPredictorError(("Cannot compute activities when "
+                "predictor is not set"))
+
+        activities = np.zeros(self.aln.num_sequences)
+        per_olg_activities = {}
+        for olg_seq in oligo_set:
+            if olg_seq not in self._selected_positions:
+                raise Exception(("Oligo must be selected and its position "
+                    "saved"))
+
+            per_olg_activities[olg_seq] = np.zeros(self.aln.num_sequences)
+            # The guide could hit multiple places
+            for start in self._selected_positions[olg_seq]:
+                if start < window_start or start > window_end - len(olg_seq):
+                    # Guide is outside window
+                    continue
+                try:
+                    olg_activities = self.aln.compute_activity(start, olg_seq,
+                            self.predictor)
+                except alignment.CannotConstructGuideError:
+                    # Most likely this site is too close to an endpoint and
+                    # does not have enough context_nt; skip it
+                    continue
+
+                # Update per_olg_activities with this start's activities
+                per_olg_activities[olg_seq] = np.maximum(
+                    per_olg_activities[olg_seq], olg_activities)
+
+            # Update activities with this guide's activities
+            activities = np.maximum(activities, per_olg_activities[olg_seq])
+
+        return per_olg_activities, activities
+
+    def oligo_set_activities_expected_value_per_oligo(self, window_start,
+            window_end, oligo_set):
+        """Compute expected activity across target sequences for each oligo in
+        an oligo set in a window.
+
+        This assumes the distribution across target sequences is uniform,
+        so it is equivalent to the mean.
+
+        Args:
+            window_start/window_end: start (inclusive) and end (exclusive)
+                positions of the window
+            oligo_set: set of strings representing oligo sequences that
+                have been selected to be in a oligo set
+
+        Returns:
+            {oligo sequence: expected (here, mean) activity}
+        """
+        per_olg_activities, activities = self.oligo_set_activities_per_oligo(
+            window_start, window_end, oligo_set)
+
+        per_olg_expected_activities = {}
+        for olg_seq in oligo_set:
+            # best_oligo serves as a mask to only take the mean of the
+            # sequences for which this guide has the maximum activity
+            best_oligo = per_olg_activities[olg_seq] == activities
+            per_olg_expected_activities[olg_seq] = np.mean(
+                per_olg_activities[olg_seq][best_oligo])
+            if np.isnan(per_olg_expected_activities[olg_seq]):
+                logger.warning("%s is not the best oligo for any sequence; it "
+                    "may not be necessary in the assay." %olg_seq)
+                per_olg_expected_activities[olg_seq] = 0
+
+        return per_olg_expected_activities
+
     def oligo_set_activities_expected_value(self, window_start, window_end,
             oligo_set, activities=None):
         """Compute expected activity across target sequences for
-        a oligo set in a window.
+        an oligo set in a window.
 
         This assumes the distribution across target sequences is uniform,
         so it is equivalent to the mean.

@@ -19,6 +19,7 @@ __author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppill
 
 logger = logging.getLogger(__name__)
 
+
 class GuideSearcher(search.OligoSearcher):
     """Methods to search for guides to use for a diagnostic.
 
@@ -281,9 +282,12 @@ class GuideSearcherMaximizeActivity(search.OligoSearcherMaximizeActivity,
                 positions = [self._selected_positions[gd_seq]
                              for gd_seq in guide_seqs_sorted]
                 positions_str = ' '.join(str(p) for p in positions)
+                expected_activities_per_guide_dict = \
+                        self.oligo_set_activities_expected_value_per_oligo(
+                            start, end, guide_seqs)
                 expected_activities_per_guide = \
-                        [self.oligo_activities_expected_value(start, end,
-                            gd_seq) for gd_seq in guide_seqs_sorted]
+                        [expected_activities_per_guide_dict[gd_seq]
+                         for gd_seq in guide_seqs_sorted]
                 expected_activities_per_guide_str = ' '.join(
                         str(a) for a in expected_activities_per_guide)
                 line = [start, end, count, obj, frac_bound,
