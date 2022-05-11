@@ -616,7 +616,8 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 (accver, ref_acc_key, aln_identity, aln_identity_ccg))
 
             # Since mafft uses --adjustdirection, aln_identity and
-            # aln_identity_ccg
+            # aln_identity_ccg reflect the statistics of the sequence in the
+            # correct orientation compared to the reference sequence
             if (aln_identity >= aln_identity_thres and
                     aln_identity_ccg >= aln_identity_ccg_thres):
                 # Include accver in the filtered output
