@@ -289,7 +289,7 @@ class TestCurateAgainstRef(unittest.TestCase):
         # Override align.align() to provide expected alignments, but
         # keep the real function
         self.align_real = align.align
-        def a(s):
+        def a(s, am=None, warn_if_reverse=False):
             for aln in alns:
                 if s.keys() == aln.keys():
                     return aln

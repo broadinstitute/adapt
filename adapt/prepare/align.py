@@ -313,6 +313,8 @@ def align(seqs, am=None, warn_if_reverse=True):
         seqs: dict mapping sequence header to sequences
         am: AlignmentMemoizer object to use for memoizing alignments;
             or None to not memoize
+        warn_if_reverse: if True, output warning to log for every sequence
+            mafft reverses
 
     Returns:
         dict mapping sequence header to sequences, where all the sequences
@@ -346,6 +348,8 @@ def align(seqs, am=None, warn_if_reverse=True):
     out_fasta = tempfile.NamedTemporaryFile(delete=False)
 
     # Setup arguments to mafft
+    # --adjustdirection ensures a sequence will be kept even if it is a reverse
+    # complement of the first sequence
     params = ['--preservecase', '--thread', '-1', '--adjustdirection']
     max_seq_len = max(len(seq) for seq in seqs.values())
     if len(seqs) < 10 and max_seq_len < 10000:
@@ -452,23 +456,6 @@ def _collapse_consecutive_gaps(a, b):
             a_ccg += a[i]
             b_ccg += b[i]
     return (a_ccg, b_ccg)
-
-
-def _collapse_gaps(seq):
-    """Collapse all gaps in a sequence from an alignment
-
-    For example, the sequence
-        ATC----GA
-    would become
-        ATCGA
-
-    Args:
-        seq: sequence to remove gaps from
-
-    Returns:
-        string of sequence without gaps
-    """
-    return seq.replace('-', '')
 
 
 def convert_to_index_with_gaps(seq, indexes):
@@ -604,7 +591,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             else:
                 # Align ref_acc_key with accver
                 to_align = {ref_acc_key: seqs[ref_acc_key], accver: seq}
-                aligned = align(to_align)
+                aligned = align(to_align, warn_if_reverse=False)
                 ref_acc_aln = aligned[ref_acc_key]
                 accver_aln = aligned[accver]
                 assert len(ref_acc_aln) == len(accver_aln)
@@ -628,10 +615,12 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 "%f and identity (after collapsing consecutive gaps) %f") %
                 (accver, ref_acc_key, aln_identity, aln_identity_ccg))
 
+            # Since mafft uses --adjustdirection, aln_identity and
+            # aln_identity_ccg
             if (aln_identity >= aln_identity_thres and
                     aln_identity_ccg >= aln_identity_ccg_thres):
                 # Include accver in the filtered output
-                seqs_filtered[accver] = _collapse_gaps(aligned[accver])
+                seqs_filtered[accver] = seq
                 break
 
     logger.info(("After curation, %d of %d sequences (with unique accession) "
