@@ -432,9 +432,8 @@ class TestDesignAutosFull(TestDesign.TestDesignCase):
         # it can be fixed for future tests
         self.curate_against_ref = align.curate_against_ref
 
-        def small_curate(seqs, ref_accs, asm=None, remove_ref_accs=[]):
-            return {seq: seqs[seq] for seq in seqs \
-                if seq.split('.')[0] not in remove_ref_accs}
+        def small_curate(seqs, ref_accs, asm=None):
+            return {seq: seqs[seq] for seq in seqs}
 
         align.curate_against_ref = small_curate
 
