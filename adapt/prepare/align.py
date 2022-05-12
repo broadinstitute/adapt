@@ -306,13 +306,15 @@ def set_mafft_exec(mafft_path):
     _mafft_exec = mafft_path
 
 
-def align(seqs, am=None):
+def align(seqs, am=None, warn_if_reverse=True):
     """Align sequences using mafft.
 
     Args:
         seqs: dict mapping sequence header to sequences
         am: AlignmentMemoizer object to use for memoizing alignments;
             or None to not memoize
+        warn_if_reverse: if True, output warning to log for every sequence
+            mafft reverses
 
     Returns:
         dict mapping sequence header to sequences, where all the sequences
@@ -346,7 +348,9 @@ def align(seqs, am=None):
     out_fasta = tempfile.NamedTemporaryFile(delete=False)
 
     # Setup arguments to mafft
-    params = ['--preservecase', '--thread', '-1']
+    # --adjustdirection ensures a sequence will be kept even if it is a reverse
+    # complement of the first sequence
+    params = ['--preservecase', '--thread', '-1', '--adjustdirection']
     max_seq_len = max(len(seq) for seq in seqs.values())
     if len(seqs) < 10 and max_seq_len < 10000:
         # Accuracy oriented
@@ -378,11 +382,21 @@ def align(seqs, am=None):
             "it is possible that mafft failed, e.g., due to running out "
             "of memory"))
 
+    seqs_aligned_fix_rev = OrderedDict()
+    for seq_name in seqs_aligned:
+        if seq_name.startswith("_R_"):
+            if warn_if_reverse:
+                logger.warning(("The sequence '%s' was reversed during the "
+                    "alignment process." %seq_name[3:]))
+            seqs_aligned_fix_rev[seq_name[3:]] = seqs_aligned[seq_name]
+        else:
+            seqs_aligned_fix_rev[seq_name] = seqs_aligned[seq_name]
+
     if am is not None:
         # Memoize the alignment
-        am.save(seqs_aligned)
+        am.save(seqs_aligned_fix_rev)
 
-    return seqs_aligned
+    return seqs_aligned_fix_rev
 
 
 def _aln_identity(a, b):
@@ -490,8 +504,7 @@ def convert_to_index_with_gaps(seq, indexes):
 
 def curate_against_ref(seqs, ref_accs, asm=None,
         aln_identity_thres=0.5, aln_identity_ccg_thres=0.6,
-        aln_identity_long_thres=(100000, 0.9, 0.9),
-        remove_ref_accs=[]):
+        aln_identity_long_thres=(100000, 0.9, 0.9)):
     """Curate sequences by aligning pairwise with reference sequences.
 
     This can make use of an object of AlignmentStatMemoizer to
@@ -500,7 +513,9 @@ def curate_against_ref(seqs, ref_accs, asm=None,
     This compares each sequence against a list of reference accessions,
     and keeps any that satisfies the criteria against any reference
     sequence. In other words, it filters out any sequences that fail to
-    meet the criteria against all reference sequences.
+    meet the criteria against all reference sequences. It also checks if each
+    sequence is in the reverse complement direction compared to a reference,
+    and will store the reverse complement for that sequence if so.
 
     Args:
         seqs: dict mapping sequence accession to sequences
@@ -524,8 +539,6 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             is useful to be stronger in curating long genomes (ideally,
             removing sequences with large structural changes), which will
             take long to align in a multiple sequence alignment
-        remove_ref_accs: a list of ref_acc, specifying to not include each
-            ref_acc in the output
 
     Returns:
         dict mapping sequence accession.version to sequences, filtered by
@@ -578,7 +591,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
             else:
                 # Align ref_acc_key with accver
                 to_align = {ref_acc_key: seqs[ref_acc_key], accver: seq}
-                aligned = align(to_align)
+                aligned = align(to_align, warn_if_reverse=False)
                 ref_acc_aln = aligned[ref_acc_key]
                 accver_aln = aligned[accver]
                 assert len(ref_acc_aln) == len(accver_aln)
@@ -602,6 +615,9 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 "%f and identity (after collapsing consecutive gaps) %f") %
                 (accver, ref_acc_key, aln_identity, aln_identity_ccg))
 
+            # Since mafft uses --adjustdirection, aln_identity and
+            # aln_identity_ccg reflect the statistics of the sequence in the
+            # correct orientation compared to the reference sequence
             if (aln_identity >= aln_identity_thres and
                     aln_identity_ccg >= aln_identity_ccg_thres):
                 # Include accver in the filtered output
@@ -609,13 +625,7 @@ def curate_against_ref(seqs, ref_accs, asm=None,
                 break
 
     logger.info(("After curation, %d of %d sequences (with unique accession) "
-        "were kept; %d of these are references that will be removed"),
-        len(seqs_filtered), len(seqs), len(remove_ref_accs))
-
-    for remove_ref_acc in remove_ref_accs:
-        # Do not include the ref_acc_key corresponding to remove_ref_acc
-        # in the output
-        ref_acc_key = ref_acc_to_key[remove_ref_acc]
-        del seqs_filtered[ref_acc_key]
+        "were kept"),
+        len(seqs_filtered), len(seqs))
 
     return seqs_filtered

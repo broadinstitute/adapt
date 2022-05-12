@@ -289,7 +289,7 @@ class TestCurateAgainstRef(unittest.TestCase):
         # Override align.align() to provide expected alignments, but
         # keep the real function
         self.align_real = align.align
-        def a(s):
+        def a(s, am=None, warn_if_reverse=False):
             for aln in alns:
                 if s.keys() == aln.keys():
                     return aln
@@ -298,22 +298,19 @@ class TestCurateAgainstRef(unittest.TestCase):
     def test_ref_acc_with_ver(self):
         ref_acc = 'AB123.1'
         self.assertEqual(
-            align.curate_against_ref(self.seqs, [ref_acc],
-                remove_ref_accs=[]),
+            align.curate_against_ref(self.seqs, [ref_acc]),
             self.expected_curated_seqs1)
 
     def test_ref_acc_without_ver(self):
         ref_acc = 'AB123'
         self.assertEqual(
-            align.curate_against_ref(self.seqs, [ref_acc],
-                remove_ref_accs=[]),
+            align.curate_against_ref(self.seqs, [ref_acc]),
             self.expected_curated_seqs1)
 
     def test_multiple_ref_accs(self):
         ref_accs = ['KZ123', 'AB123']
         self.assertEqual(
-            align.curate_against_ref(self.seqs, ref_accs,
-                remove_ref_accs=[]),
+            align.curate_against_ref(self.seqs, ref_accs),
             self.expected_curated_seqs2)
 
     def tearDown(self):

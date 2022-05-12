@@ -119,6 +119,7 @@ def prepare_for(taxid, segment, ref_accs, out,
     if sequences_to_use is not None:
         seqs_unaligned = sequences_to_use
         seqs_unaligned_curated = seqs_unaligned
+        added_ref_accs_to_fetch = []
     else:
         if accessions_to_use is not None:
             neighbors = [ncbi_neighbors.Neighbor(acc, None, None, None, None,
@@ -281,7 +282,13 @@ def prepare_for(taxid, segment, ref_accs, out,
     seqs_from_small_clusters = set()
     cluster_to_remove = None
     for cluster_idx, seqs_in_cluster in enumerate(clusters):
-        if len(seqs_in_cluster) < min_cluster_size:
+        len_seqs_in_cluster = len(seqs_in_cluster)
+        for ref_acc in added_ref_accs_to_fetch:
+            for accver in seqs_in_cluster:
+                if ref_acc in accver:
+                    len_seqs_in_cluster -= 1
+                    break
+        if len_seqs_in_cluster < min_cluster_size:
             seqs_from_small_clusters.update(seqs_in_cluster)
             if cluster_to_remove is None:
                 cluster_to_remove = cluster_idx
@@ -296,13 +303,27 @@ def prepare_for(taxid, segment, ref_accs, out,
     # Store annotations & weights by cluster
     annotations = []
     sequence_weights = []
+    logger.info(("There are %d clusters to align"), len(clusters))
     # Align the curated sequences, with one alignment per cluster
     for cluster_idx, seqs_in_cluster in enumerate(clusters):
-        logger.info(("Aligning sequences in cluster %d (of %d), with %d "
-            "sequences"), cluster_idx + 1, len(clusters), len(seqs_in_cluster))
+        logger.info(("Aligning sequences in cluster %d, with %d sequences"),
+            cluster_idx, len(seqs_in_cluster))
 
         # Produce a dict of the sequences in cluster_idx
         seqs_unaligned_curated_in_cluster = OrderedDict()
+        # Make sure a reference sequence is first, if one is in the cluster
+        ref_in_cluster = False
+        for name in seqs_in_cluster:
+            for ref_acc in ref_accs:
+                if ref_acc in name:
+                    seqs_unaligned_curated_in_cluster[name] = \
+                        seqs_unaligned_curated[name]
+                    ref_in_cluster = True
+                    break
+            if ref_in_cluster:
+                break
+        # Add rest of sequences
+        # Does not matter if ref seq is repeated-it was still put in first
         for name, seq in seqs_unaligned_curated.items():
             if name in seqs_in_cluster:
                 seqs_unaligned_curated_in_cluster[name] = seq
@@ -320,15 +341,21 @@ def prepare_for(taxid, segment, ref_accs, out,
             if len(cluster_annotations) == 0:
                 logger.warning("No reference sequences were in cluster %d, "
                                "so no genomic annotations could be determined."
-                               % cluster_idx)
+                               % (cluster_idx))
             annotations.append(cluster_annotations)
 
             # Remove reference sequences that were only added for curation
             for ref_acc in added_ref_accs_to_fetch:
                 for accver in seqs_aligned:
                     if ref_acc in accver:
+                        logger.debug("Removing reference %s from cluster %i"
+                            %(ref_acc, cluster_idx))
                         del seqs_aligned[accver]
                         break
+
+            if len(seqs_aligned) == 0:
+                logger.warning("After removing references, there are no "
+                               "sequences in cluster %i" % (cluster_idx))
         else:
             annotations.append([])
 
@@ -432,8 +459,6 @@ def fetch_annotations(seqs_aligned, ref_accs, annotation_tsv=None):
         list of dictionaries representing annotations with keys "type",
             "start", "end", "gene", "product", "note"
     """
-
-    annotation_written = False
     for accver in seqs_aligned:
         for ref_acc in ref_accs:
             if ref_acc in accver:
