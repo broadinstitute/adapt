@@ -372,7 +372,8 @@ class Alignment(SequenceList):
 
     def determine_representative_oligos(self, start, oligo_length,
         seqs_to_consider, clusterer, missing_threshold=1,
-        is_suitable_fns=[], required_flanking_seqs=(None, None)):
+        is_suitable_fns=[], required_flanking_seqs=(None, None),
+        include_overall_consensus=True):
         """Construct a set of oligos representative of the target sequences.
 
         This is similar to construct_oligo(), except returns a set of
@@ -399,6 +400,10 @@ class Alignment(SequenceList):
                 the oligo (in the target, not the oligo) that must be
                 present for a oligo to bind; if either is None, no
                 flanking sequence is required for that end
+            include_overall_consensus: includes, as a representative
+                sequence, the consensus across all sequences; this is
+                optional because it may not be "representative" of any
+                sequences as well as the cluster consensuses
 
         Returns:
             set of representative sequences
@@ -443,29 +448,37 @@ class Alignment(SequenceList):
             raise search.CannotConstructOligoError(("All sequences in region have "
                 "a gap and/or do not contain required flanking sequences"))
 
-        seq_rows = aln_for_oligo.make_list_of_seqs(all_seqs_to_consider,
-            include_idx=True)
-
-        # Cluster the sequences
-        clusters = clusterer.cluster(seq_rows)
-
-        # Take the consensus of each cluster to be the representative
         representatives = set()
-        for cluster_idxs in clusters:
-            olg = aln_for_oligo.determine_consensus_sequence(
-                cluster_idxs)
+        def consider_and_add_oligo(olg):
             if 'N' in olg:
-                # Skip this; all sequences at a position in this cluster
-                # are 'N'
-                continue
-            use_olg = True
+                # Skip this guide; all sequences at a position in the cluster
+                # under consideration are 'N'
+                return False
             for is_suitable_fn in is_suitable_fns:
                 if is_suitable_fn(olg) is False:
                     # Skip this oligo/cluster
-                    use_olg = False
-                    break
-            if use_olg:
-                representatives.add(olg)
+                    return False
+            representatives.add(olg)
+            return True
+
+        if include_overall_consensus:
+            # Make a representative guide be the consensus of all
+            # sequences
+            olg = aln_for_oligo.determine_consensus_sequence(
+                    all_seqs_to_consider)
+            consider_and_add_oligo(olg)
+
+        # Cluster the sequences
+        seq_rows = aln_for_oligo.make_list_of_seqs(all_seqs_to_consider,
+            include_idx=True)
+        clusters = clusterer.cluster(seq_rows)
+
+        # Take the consensus of each cluster to be the representative
+        for cluster_idxs in clusters:
+            olg = aln_for_oligo.determine_consensus_sequence(
+                cluster_idxs)
+            consider_and_add_oligo(olg)
+
         return representatives
 
     def compute_activity(self, start, olg_sequence, predictor, mutator=None):

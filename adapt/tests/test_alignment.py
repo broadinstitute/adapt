@@ -226,7 +226,37 @@ class TestAlignment(unittest.TestCase):
                 'TCAAAT',
                 'TCAAAT',
                 'TCAAAA',
-                'T-GGAA']
+                'T-GGTA']
+        aln = alignment.Alignment.from_list_of_seqs(seqs)
+        guide_length = 6
+        guide_clusterer = alignment.SequenceClusterer(
+            lsh.HammingDistanceFamily(guide_length),
+            k=3)
+        seqs_to_consider = {0: set(range(len(seqs)))}
+
+        # Note that, along with being a cluster consensus, 'CATTTT' is also the
+        # overall consensus (according to how the consensus function is
+        # defined, which takes the most common allele)
+        representatives = aln.determine_representative_oligos(0,
+                guide_length, seqs_to_consider, guide_clusterer)
+        self.assertSetEqual(representatives,
+                {'TCAAAT', 'CCAAAA', 'GGGGGG', 'CATTTT'})
+
+    def test_determine_representative_oligos_with_distinct_consensus(self):
+        # Here, unlike above, the overall consensus is not a cluster consensus
+        seqs = ['TCAAAT',
+                'CCAAAA',
+                'CATTTT',
+                'CATTTT',
+                'CATTTA',
+                'GGGGGG',
+                'CATTTA',
+                'CATTTA',
+                'CATTTA',
+                'TCAAAT',
+                'TCAAAT',
+                'TCAAAT',
+                'T-GGAT']
         aln = alignment.Alignment.from_list_of_seqs(seqs)
         guide_length = 6
         guide_clusterer = alignment.SequenceClusterer(
@@ -237,7 +267,7 @@ class TestAlignment(unittest.TestCase):
         representatives = aln.determine_representative_oligos(0,
                 guide_length, seqs_to_consider, guide_clusterer)
         self.assertSetEqual(representatives,
-                {'TCAAAT', 'CCAAAA', 'GGGGGG', 'CATTTT'})
+                {'TCAAAT', 'CCAAAA', 'GGGGGG', 'CATTTA', 'CATTTT'})
 
     def test_compute_activity(self):
         # Predict guides matching target to have activity 1, and

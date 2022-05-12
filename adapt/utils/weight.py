@@ -48,13 +48,16 @@ def normalize(sequence_weights, seq_names):
     Make total of weights of all sequences specified sum to 1
 
     Args:
-        sequence_weights: dictionary of unnormalized sequence weights. Sum
-            must be greater than zero
+        sequence_weights: dictionary of unnormalized sequence weights. Sum of
+            seq_names values must be greater than zero
         seq_names: sequences to include in normalization
 
     Returns:
         dictionary {sequence name: normalized weight}
     """
+    if len(seq_names) == 0:
+        return {}
+
     normalization_factor = sum(sequence_weights[seq_name]
                                for seq_name in seq_names)
     if normalization_factor <= 0:

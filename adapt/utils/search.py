@@ -1405,6 +1405,12 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             # Cluster the sequences
             clusters = self.clusterer.cluster(seq_rows)
 
+            # Include, as a "cluster", all sequences to consider -- in case
+            # the consensus of all the sequences happens to do a better job
+            # detecting the sequences than the consensus of any individual
+            # cluster
+            clusters = [all_seqs_to_consider] + list(clusters)
+
             # Sort the clusters by score, from highest to lowest
             # Here, the score is determined by the sequences in the cluster
             clusters_ordered = sorted(clusters, key=seq_idxs_score, reverse=True)
