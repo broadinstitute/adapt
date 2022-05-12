@@ -441,6 +441,37 @@ def read_taxonomy_specificity_ignore(fn):
     return tax_ignore
 
 
+def read_sequence_weights(fn):
+    """Read unnormalized weights for each sequence.
+
+    The columns must be, in order:
+        1) a name of the sequence in the input FASTA
+        2) a weight as a floating point number
+
+    Args:
+        fn: path to TSV file, where each row corresponds to sequence
+
+    Returns:
+        dictionary of {sequence name: unnormalized weight}
+    """
+    weights = defaultdict(lambda: 1)
+    with open(fn) as f:
+        for line in f:
+            ls = line.rstrip().split('\t')
+            if len(ls) != 2:
+                raise Exception(("Weight sequences TSV must have 2 columns"))
+
+            seq_name = ls[0]
+            try:
+                weight = float(ls[1])
+            except ValueError:
+                raise Exception("Weight '%s' for %s must be a float" %
+                    (ls[1], ls[0]))
+            weights[seq_name] = weight
+
+    return weights
+
+
 def read_metadata_filters(meta_filts):
     """Create dictionaries of metadata filters from a list.
 

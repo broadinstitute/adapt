@@ -118,16 +118,30 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.gc = alignment.SequenceClusterer(lsh.HammingDistanceFamily(4), k=2)
 
     def test_construct_memoized_a(self):
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertIn(self.a._construct_memoized(0, {0: {2,3,4}}),
-                      [('ATCG', {2,3}, 2), ('ACCG', {2,3}, 2), ('AGCG', {4}, 1)])
-        self.assertEqual(self.a._construct_memoized(0, {0: {4}}),
-                         ('AGCG', {4}, 1))
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {2,3,4}})
+        self.assertIn(gd, ['ATCG','ACCG','AGCG'])
+        if gd in ['ATCG','ACCG']:
+            self.assertEqual(gd_seqs, {2,3})
+            self.assertAlmostEqual(score, .4)
+        else:
+            self.assertEqual(gd_seqs, {4})
+            self.assertAlmostEqual(score, .2)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {4}})
+        self.assertEqual(gd, 'AGCG')
+        self.assertEqual(gd_seqs, {4})
+        self.assertAlmostEqual(score, .2)
 
         def ic(idx):
             return index_compress.compress_mostly_contiguous(idx)
@@ -144,10 +158,14 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.assertIn(key, self.a._memo)
         self.assertIn(0, self.a._memo[key])
 
-        self.assertEqual(self.a._construct_memoized(2, {0: {0,1,2,3,4}}),
-                         ('CGAA', {0,2,4}, 3))
-        self.assertEqual(self.a._construct_memoized(2, {0: {3}}),
-                         ('CGAT', {3}, 1))
+        gd, gd_seqs, score = self.a._construct_memoized(2, {0: {0,1,2,3,4}})
+        self.assertEqual(gd, 'CGAA')
+        self.assertEqual(gd_seqs, {0,2,4})
+        self.assertAlmostEqual(score, .6)
+        gd, gd_seqs, score = self.a._construct_memoized(2, {0: {3}})
+        self.assertEqual(gd, 'CGAT')
+        self.assertEqual(gd_seqs, {3})
+        self.assertAlmostEqual(score, .2)
 
         key = (frozenset({(0, frozenset(ic({0,1,2,3,4})))}), None)
         self.assertIn(key, self.a._memo)
@@ -157,16 +175,30 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         self.assertIn(key, self.a._memo)
         self.assertIn(2, self.a._memo[key])
 
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertIn(self.a._construct_memoized(0, {0: {2,3,4}}),
-                      [('ATCG', {2,3}, 2), ('ACCG', {2,3}, 2), ('AGCG', {4}, 1)])
-        self.assertEqual(self.a._construct_memoized(0, {0: {4}}),
-                         ('AGCG', {4}, 1))
-        self.assertEqual(self.a._construct_memoized(2, {0: {0,1,2,3,4}}),
-                         ('CGAA', {0,2,4}, 3))
-        self.assertEqual(self.a._construct_memoized(2, {0: {3}}),
-                         ('CGAT', {3}, 1))
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {2,3,4}})
+        self.assertIn(gd, ['ATCG','ACCG','AGCG'])
+        if gd in ['ATCG','ACCG']:
+            self.assertEqual(gd_seqs, {2,3})
+            self.assertAlmostEqual(score, .4)
+        else:
+            self.assertEqual(gd_seqs, {4})
+            self.assertAlmostEqual(score, .2)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {4}})
+        self.assertEqual(gd, 'AGCG')
+        self.assertEqual(gd_seqs, {4})
+        self.assertAlmostEqual(score, .2)
+        gd, gd_seqs, score = self.a._construct_memoized(2, {0: {0,1,2,3,4}})
+        self.assertEqual(gd, 'CGAA')
+        self.assertEqual(gd_seqs, {0,2,4})
+        self.assertAlmostEqual(score, .6)
+        gd, gd_seqs, score = self.a._construct_memoized(2, {0: {3}})
+        self.assertEqual(gd, 'CGAT')
+        self.assertEqual(gd_seqs, {3})
+        self.assertAlmostEqual(score, .2)
 
         self.a._cleanup_memo(2)
         for key in self.a._memo.keys():
@@ -178,27 +210,40 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
 
     def test_construct_memoized_b(self):
         self.assertIsNone(self.b._construct_memoized(0, {0: {1}}))
-        self.assertEqual(self.b._construct_memoized(0, {0: {0,1}}),
-                         ('ATCG', {0}, 1))
+        gd, gd_seqs, score = self.b._construct_memoized(0, {0: {0,1}})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0})
+        self.assertAlmostEqual(score, .5)
 
         self.assertIsNone(self.b._construct_memoized(0, {0: {1}}))
-        self.assertEqual(self.b._construct_memoized(0, {0: {0,1}}),
-                         ('ATCG', {0}, 1))
+        gd, gd_seqs, score = self.b._construct_memoized(0, {0: {0,1}})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0})
+        self.assertAlmostEqual(score, .5)
+
 
     def test_construct_memoized_a_with_needed(self):
-        # Use the num_needed argument
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 5}),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}),
-                         ('ATCG', {0,1,2,3}, 3))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 5}),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}),
-                         ('ATCG', {0,1,2,3}, 3))
+        # Use the percent_needed argument
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 1})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: .6})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .6)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 1})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: .6})
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .6)
 
         self.a._cleanup_memo(0)
         for key in self.a._memo.keys():
@@ -210,46 +255,66 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
 
     def test_construct_memoized_a_use_last(self):
         # Use the use_last argument
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 5}, use_last=False),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}, use_last=False),
-                         ('ATCG', {0,1,2,3}, 3))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}, use_last=True),
-                         ('ATCG', {0,1,2,3}, 3))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}, use_last=False),
-                         ('ATCG', {0,1,2,3}, 3))
-        self.assertEqual(self.a._construct_memoized(0, {0: {0,1,2,3,4}},
-                            {0: 3}, use_last=True),
-                         ('ATCG', {0,1,2,3}, 3))
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: 1}, use_last=False)
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: .6}, use_last=False)
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .6)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: .6}, use_last=True)
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .6)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: .6}, use_last=False)
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .6)
+        gd, gd_seqs, score = self.a._construct_memoized(0, {0: {0,1,2,3,4}},
+                            {0: .6}, use_last=True)
+        self.assertEqual(gd, 'ATCG')
+        self.assertEqual(gd_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .6)
 
         self.a._cleanup_memo(0)
         for key in self.a._memo.keys():
             self.assertNotIn(0, self.a._memo[key])
 
     def test_find_optimal_oligo_in_window(self):
-        self.assertEqual(self.c._find_optimal_oligo_in_window(
-                            1, 1 + self.c_window_size,
-                            {0: set([0,1,2,3,4,5])}, {0: 6}),
-                         ('ATCGG', set([0,1,2,4,5]), 5, 5))
+        gd, gd_covered, gd_start, gd_score = \
+            self.c._find_optimal_oligo_in_window(1, 1 + self.c_window_size,
+                                                 {0: set([0,1,2,3,4,5])},
+                                                 {0: 1})
+        self.assertEqual(gd, 'ATCGG')
+        self.assertEqual(gd_covered, set([0,1,2,4,5]))
+        self.assertEqual(gd_start, 5)
+        self.assertAlmostEqual(gd_score, 5/6)
 
     def test_find_optimal_oligo_in_window_at_end_boundary(self):
-        self.assertEqual(self.d._find_optimal_oligo_in_window(
-                            0, 0 + self.d_window_size,
-                            {0: set([0,1,2])}, {0: 3}),
-                         ('TACGG', set([0,1,2]), 3, 3))
-        self.assertEqual(self.e._find_optimal_oligo_in_window(
-                            0, 0 + self.e_window_size,
-                            {0: set([0,1,2])}, {0: 3}),
-                         ('TACGG', set([0,1,2]), 3, 3))
+        gd, gd_covered, gd_start, gd_score = \
+            self.d._find_optimal_oligo_in_window(0, 0 + self.d_window_size,
+                                                 {0: set([0,1,2])}, {0: 1})
+        self.assertEqual(gd, 'TACGG')
+        self.assertEqual(gd_covered, set([0,1,2]))
+        self.assertEqual(gd_start, 3)
+        self.assertAlmostEqual(gd_score, 1)
+        gd, gd_covered, gd_start, gd_score = \
+            self.e._find_optimal_oligo_in_window(0, 0 + self.e_window_size,
+                                                 {0: set([0,1,2])}, {0: 1})
+        self.assertEqual(gd, 'TACGG')
+        self.assertEqual(gd_covered, set([0,1,2]))
+        self.assertEqual(gd_start, 3)
+        self.assertAlmostEqual(gd_score, 1)
 
     def test_find_optimal_oligo_in_window_none(self):
         self.assertEqual(self.f._find_optimal_oligo_in_window(
                             0, 0 + self.f_window_size,
-                            {0: set([0,1,2])}, {0: 3}),
+                            {0: set([0,1,2])}, {0: 1}),
                          (None, set(), None, 0))
 
     def test_find_optimal_oligo_in_window_with_groups_1(self):
@@ -261,9 +326,9 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # check that at least one of these is covered
         self.assertTrue(1 in gd_covered or 3 in gd_covered)
 
-        # Since we only need to cover 1 sequence in total, the score
-        # should only be 1
-        self.assertEqual(gd_score, 1)
+        # Since we only need to cover 1 of 4 sequence in total, the score
+        # should only be 0.25
+        self.assertEqual(gd_score, 0.25)
 
     def test_find_oligos_in_window(self):
         self.assertEqual(self.c._find_oligos_in_window(
@@ -384,13 +449,16 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         gs._selected_positions = {'TCGAT': {6}, 'GGTAC': {18}}
 
         guides = ['TCGAT', 'GGTAC']
-        # 3 sequences are needed in total (1 from 2010 and 2 from 2018)
-        # TCGAT covers 1 needed sequence from 2010 and 0 needed sequences
-        # from 2018: so it covers 1/3 needed sequences
-        # GGTAC covers 0 needed sequences from 2010 and 1 needed sequence
-        # from 2018: so it covers 1/3 needed sequences
-        # The average of these fractions (the score) is 1/3
-        self.assertEqual(gs._score_collection(guides), 1/3.0)
+        # 10% coverage of 2010 (66.7% of sequences) and 100% coverage of 2018
+        # is needed (33.3% of sequences) (40% coverage is needed in total)
+        # TCGAT covers the 10% needed of the 2010 sequences and 0% of the 2018
+        # sequences, so it covers (10% * 66.7%) + (0% * 33.3%) = 6.67%; of the
+        # total needed coverage, this is 6.67% / 40% = 16.67%
+        # GGTAC covers 0% of the 2010 sequences and 50% of the 2018 sequences,
+        # so it covers (0% * 66.7%) + (50% * 33.3%) = 16.67%; of the total
+        # needed coverage, this is 16.67% / 40% = 41.67%
+        # The average of these fractions (the score) is 29.167% (or 7/24)
+        self.assertAlmostEqual(gs._score_collection(guides), 7/24)
 
     def test_find_optimal_oligo_with_gu_pairing(self):
         seqs = ['GTATTAACACTTCGGCTACCCCCTCTAC',

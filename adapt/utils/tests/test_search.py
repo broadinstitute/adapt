@@ -171,28 +171,51 @@ class TestOligoSearcher(unittest.TestCase):
     def test_construct_oligo_a(self):
         seqs = ['ATCGAA', 'ATCGAT', 'AYCGAA', 'AYCGAT', 'AGCGAA']
         self.gen_s.aln = alignment.Alignment.from_list_of_seqs(seqs)
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,1,2,3}, 4))
-        self.assertIn(self.gen_s.construct_oligo(0, 4, {0: {2,3}}),
-                      [('ATCG', {2,3}, 2), ('ACCG', {2,3}, 2)])
-        self.assertEqual(self.gen_s.construct_oligo(1, 4, {0: {0,1,2,3,4}}),
-                         ('TCGA', {0,1,2,3}, 4))
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
-                         ('CGAA', {0,2,4}, 3))
-        self.assertIn(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3}}),
-                      [('CGAA', {0,2}, 2), ('CGAT', {1,3}, 2)])
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'ATCG')
+        self.assertEqual(olg_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, 4, {0: {2,3}})
+        self.assertIn(olg, ['ATCG','ACCG'])
+        self.assertEqual(olg_seqs, {2,3})
+        self.assertAlmostEqual(score, .4)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(1, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'TCGA')
+        self.assertEqual(olg_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'CGAA')
+        self.assertEqual(olg_seqs, {0,2,4})
+        self.assertAlmostEqual(score, .6)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3}})
+        self.assertIn(olg, ['CGAA','CGAT'])
+        if olg == 'CGAA':
+            self.assertEqual(olg_seqs, {0,2})
+        else:
+            self.assertEqual(olg_seqs, {1,3})
+        self.assertAlmostEqual(score, .4)
         self.gen_s.mismatches = 1
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,1,2,3,4}, 5))
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, {0: {4}}),
-                         ('AGCG', {4}, 1))
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
-                         ('CGAA', {0,1,2,3,4}, 5))
-        self.assertIn(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3}}),
-                      [('CGAA', {0,1,2,3}, 4), ('CGAT', {0,1,2,3}, 4)])
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'ATCG')
+        self.assertEqual(olg_seqs, {0,1,2,3,4})
+        self.assertAlmostEqual(score, 1)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, 4, {0: {4}})
+        self.assertEqual(olg, 'AGCG')
+        self.assertEqual(olg_seqs, {4})
+        self.assertAlmostEqual(score, .2)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'CGAA')
+        self.assertEqual(olg_seqs, {0,1,2,3,4})
+        self.assertAlmostEqual(score, 1)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3}})
+        self.assertIn(olg, ['CGAA','CGAT'])
+        self.assertEqual(olg_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
         self.gen_s.mismatches = 2
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
-                         ('CGAA', {0,1,2,3,4}, 5))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'CGAA')
+        self.assertEqual(olg_seqs, {0,1,2,3,4})
+        self.assertAlmostEqual(score, 1)
 
     def test_construct_oligo_b(self):
         seqs = ['ATCGAA', 'ATC-AA']
@@ -209,34 +232,55 @@ class TestOligoSearcher(unittest.TestCase):
         self.gen_s.clusterer = None
         seqs = ['ATCGAA', 'ATNNAT', 'ATCGNN', 'ATNNAT', 'ATNNAC']
         self.gen_s.aln = alignment.Alignment.from_list_of_seqs(seqs)
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,2}, 2))
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
-                         ('CGAA', {0}, 1))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'ATCG')
+        self.assertEqual(olg_seqs, {0,2})
+        self.assertAlmostEqual(score, .4)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'CGAA')
+        self.assertEqual(olg_seqs, {0})
+        self.assertAlmostEqual(score, .2)
         with self.assertRaises(search.CannotConstructOligoError):
             # Should fail when 'N' is all that exists at a position
             self.gen_s.construct_oligo(0, 4, {0: {1,3,4}})
         self.gen_s.mismatches = 1
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,2}, 2))
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
-                         ('CGAT', {0}, 1))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'ATCG')
+        self.assertEqual(olg_seqs, {0,2})
+        self.assertAlmostEqual(score, .4)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'CGAT')
+        self.assertEqual(olg_seqs, {0})
+        self.assertAlmostEqual(score, .2)
         with self.assertRaises(search.CannotConstructOligoError):
             # Should fail when a potential oligo (here, 'CGAC') cannot
             # bind to any sequence because they all have 'N' somewhere
             self.gen_s.construct_oligo(2, 4, {0: {2,4}})
         self.gen_s.mismatches = 2
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}}),
-                         ('ATCG', {0,1,2,3,4}, 5))
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
-                         ('CGAT', {0,1,2,3}, 4))
-        self.assertIn(self.gen_s.construct_oligo(2, 4, {0: {2,3,4}}),
-                      [('CGAC', {2,4}, 2), ('CGAT', {2,3}, 2)])
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {2,4}}),
-                         ('CGAC', {2,4}, 2))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'ATCG')
+        self.assertEqual(olg_seqs, {0,1,2,3,4})
+        self.assertAlmostEqual(score, 1)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'CGAT')
+        self.assertEqual(olg_seqs, {0,1,2,3})
+        self.assertAlmostEqual(score, .8)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {2,3,4}})
+        self.assertIn(olg, ['CGAC','CGAT'])
+        if olg == 'CGAC':
+            self.assertEqual(olg_seqs, {2,4})
+        else:
+            self.assertEqual(olg_seqs, {2,3})
+        self.assertAlmostEqual(score, .4)
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {2,4}})
+        self.assertEqual(olg, 'CGAC')
+        self.assertEqual(olg_seqs, {2,4})
+        self.assertAlmostEqual(score, .4)
         self.gen_s.mismatches = 3
-        self.assertEqual(self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}}),
-                         ('CGAT', {0,1,2,3,4}, 5))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, 4, {0: {0,1,2,3,4}})
+        self.assertEqual(olg, 'CGAT')
+        self.assertEqual(olg_seqs, {0,1,2,3,4})
+        self.assertAlmostEqual(score, 1)
 
     def test_construct_oligo_with_large_group_needed(self):
         seqs = ['ATCGAA',
@@ -249,12 +293,14 @@ class TestOligoSearcher(unittest.TestCase):
         self.gen_s.aln = alignment.Alignment.from_list_of_seqs(seqs)
 
         seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
-        num_needed = {0: 3, 1: 1}
+        percent_needed = {0: 3/7, 1: 1/7}
         # 'ATCGAA' is most sequences, and let's construct a oligo by
         # needing more from the group consisting of these sequences
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, seqs_to_consider,
-                                                     num_needed=num_needed),
-                         ('ATCG', {0, 1, 3, 4, 5}, 3))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(
+            0, 4, seqs_to_consider, percent_needed=percent_needed)
+        self.assertEqual(olg, 'ATCG')
+        self.assertEqual(olg_seqs, {0,1,3,4,5})
+        self.assertAlmostEqual(score, 3/7)
 
     def test_construct_oligo_with_small_group_needed(self):
         seqs = ['ATCGAA',
@@ -267,12 +313,14 @@ class TestOligoSearcher(unittest.TestCase):
         self.gen_s.aln = alignment.Alignment.from_list_of_seqs(seqs)
 
         seqs_to_consider = {0: {0, 1, 3, 4, 5}, 1: {2, 6}}
-        num_needed = {0: 1, 1: 2}
+        percent_needed = {0: 1/7, 1: 2/7}
         # 'ATCGAA' is most sequences, but let's construct a oligo by
         # needing more from a group consisting of the 'GGGCCC' sequences
-        self.assertEqual(self.gen_s.construct_oligo(0, 4, seqs_to_consider,
-                                                     num_needed=num_needed),
-                         ('GGGC', {2, 6}, 2))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(
+            0, 4, seqs_to_consider, percent_needed=percent_needed)
+        self.assertEqual(olg, 'GGGC')
+        self.assertEqual(olg_seqs, {2,6})
+        self.assertAlmostEqual(score, 2/7)
 
     def test_construct_oligo_with_suitable_fn(self):
         seqs = ['GTATCAAAT',
@@ -289,9 +337,11 @@ class TestOligoSearcher(unittest.TestCase):
         self.gen_s.mismatches = 1
 
         # The best oligo is 'GTATCA'
-        self.assertEqual(self.gen_s.construct_oligo(0, oligo_length,
-                                                     seqs_to_consider),
-                         ('GTATCA', {0, 2, 3}, 3))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, oligo_length,
+                                                          seqs_to_consider)
+        self.assertEqual(olg, 'GTATCA')
+        self.assertEqual(olg_seqs, {0,2,3})
+        self.assertAlmostEqual(score, .75)
 
         # Do not allow oligos with 'TAT' in them
         def f(oligo):
@@ -303,9 +353,11 @@ class TestOligoSearcher(unittest.TestCase):
         self.gen_s.is_suitable_fns = prev_suitable_fns + [f]
 
         # Now the best oligo is 'CTACCA'
-        self.assertEqual(self.gen_s.construct_oligo(0, oligo_length,
-                                                     seqs_to_consider),
-                         ('CTACCA', {1}, 1))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, oligo_length,
+                                                          seqs_to_consider)
+        self.assertEqual(olg, 'CTACCA')
+        self.assertEqual(olg_seqs, {1})
+        self.assertAlmostEqual(score, .25)
 
         # Do not allow oligos with 'A' in them
         def f(oligo):
@@ -333,8 +385,11 @@ class TestOligoSearcher(unittest.TestCase):
             lsh.HammingDistanceFamily(oligo_length), k=3)
         self.gen_s.mismatches = 1
 
-        self.assertEqual(self.gen_s.construct_oligo(0, oligo_length, seqs_to_consider),
-                         ('GTATCA', {0, 2, 3}, 3))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, oligo_length,
+                                                          seqs_to_consider)
+        self.assertEqual(olg, 'GTATCA')
+        self.assertEqual(olg_seqs, {0,2,3})
+        self.assertAlmostEqual(score, .75)
 
         # Only predict oligos starting with 'A' to be active
         class PredictorTest:
@@ -347,10 +402,12 @@ class TestOligoSearcher(unittest.TestCase):
                 return y
         self.gen_s.predictor = PredictorTest()
         # Now the best oligo is 'ATACCA'
-        self.assertEqual(self.gen_s.construct_oligo(0, oligo_length,
-                                                     seqs_to_consider,
-                                                     stop_early=False),
-                         ('ATACCA', {1}, 1))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(0, oligo_length,
+                                                          seqs_to_consider,
+                                                          stop_early=False)
+        self.assertEqual(olg, 'ATACCA')
+        self.assertEqual(olg_seqs, {1})
+        self.assertAlmostEqual(score, .25)
 
         # Only predict oligos starting with 'A' to be active, and impose an
         # early stopping criterion
@@ -406,19 +463,22 @@ class TestOligoSearcher(unittest.TestCase):
         # The best oligo at start=2 is 'TT', but if we require
         # 'C' to flank on the 5' end, the best is 'AA'
         self.gen_s.required_flanking_seqs = ('C', None)
-        self.assertEqual(self.gen_s.construct_oligo(2, oligo_length,
-                                                     seqs_to_consider),
-                         ('AA', {0,1,9,10}, 4))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, oligo_length,
+                                                          seqs_to_consider)
+        self.assertEqual(olg, 'AA')
+        self.assertEqual(olg_seqs, {0,1,9,10})
+        self.assertAlmostEqual(score, 4/11)
 
         # The best oligo at start=2 is 'TT', but if we require
         # 'C' to flank on the 5' end, the best is 'AA'
         # Now if we require 'M' on the 5' end, 'TT' will be the best oligo
         self.gen_s.required_flanking_seqs = ('M', None)
-        self.assertEqual(self.gen_s.construct_oligo(2, oligo_length,
-                                                     seqs_to_consider),
-                         ('TT', {2,3,4,5,6,7,8}, 7))
+        olg, olg_seqs, score = self.gen_s.construct_oligo(2, oligo_length,
+                                                          seqs_to_consider)
 
-
+        self.assertEqual(olg, 'TT')
+        self.assertEqual(olg_seqs, {2,3,4,5,6,7,8})
+        self.assertAlmostEqual(score, 7/11)
 
 
 class PredictorTest:

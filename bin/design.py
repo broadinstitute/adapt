@@ -26,6 +26,7 @@ from adapt.utils import predict_activity
 from adapt.utils import seq_io
 from adapt.utils import year_cover
 from adapt.utils import mutate
+from adapt.utils import weight
 from adapt.utils.version import get_project_path, get_latest_model_version
 
 try:
@@ -107,7 +108,7 @@ def check_obj_args(args):
                 vars(args)[arg] = OBJ_PARAM_DEFAULTS['maximize-activity'][arg]
 
 
-def seqs_grouped_by_year(seqs, args):
+def seqs_grouped_by_year(seqs, args, sequence_weights=None):
     """Group sequences according to their year and assigned partial covers.
 
     Args:
@@ -127,14 +128,18 @@ def seqs_grouped_by_year(seqs, args):
         args.primer_cover_frac)
     """
     years_fn, year_highest_cover, year_cover_decay = args.cover_by_year_decay
+    norm_weights = weight.normalize(sequence_weights, seqs.keys())
 
     # Map sequence names to index in alignment, and construct alignment
     seq_list = []
+    seq_norm_weights = []
     seq_idx = {}
     for i, (name, seq) in enumerate(seqs.items()):
         seq_idx[name] = i
-        seq_list += [seq]
-    aln = alignment.Alignment.from_list_of_seqs(seq_list)
+        seq_list.append(seq)
+        seq_norm_weights.append(norm_weights[name])
+    aln = alignment.Alignment.from_list_of_seqs(
+        seq_list, seq_norm_weights=seq_norm_weights)
 
     # Read sequences for each year, and check that every sequence has
     # a year
@@ -258,9 +263,11 @@ def prepare_alignments(args):
         args.prep_influenza = False
         args.write_annotation = False
         args.write_input_seqs = False
+        args.write_weights = False
+        args.weight_by_log_size_of_subtaxa = False
         for i, unaligned_fasta in enumerate(args.in_fasta):
-            sequences_to_use[(i, None)] = seq_io.read_fasta(unaligned_fasta)
-            taxs.append((None, i, None, [], None, None))
+            sequences_to_use[(0, unaligned_fasta)] = seq_io.read_fasta(unaligned_fasta)
+            taxs.append((None, 0, unaligned_fasta, [], None, None))
     else:
         raise Exception(("Unknown input type '%s'") % args.input_type)
 
@@ -333,6 +340,7 @@ def prepare_alignments(args):
     design_for = []
     specific_against_metadata_accs = []
     annotations = []
+    sequence_weights = []
     for label, tax_id, segment, ref_accs, meta_filt, meta_filt_against in taxs:
         aln_file_dir = tempfile.TemporaryDirectory()
         if args.cover_by_year_decay:
@@ -366,7 +374,7 @@ def prepare_alignments(args):
         annotation_tsv = os.path.join(args.out_tsv_dir, label) if label \
             else args.write_annotation
 
-        nc, specific_against_metadata_acc, annotation = \
+        nc, specific_against_metadata_acc, annotation, sequence_weight = \
             prepare_alignment.prepare_for(
                 tax_id, segment, ref_accs,
                 aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
@@ -378,13 +386,15 @@ def prepare_alignments(args):
                 accessions_to_use=accessions_to_use_for_tax,
                 sequences_to_use=sequences_to_use_for_tax,
                 meta_filt=meta_filt,
-                meta_filt_against=meta_filt_against)
+                meta_filt_against=meta_filt_against,
+                subtaxa_weight=args.weight_by_log_size_of_subtaxa)
 
         for i in range(nc):
             in_fasta += [os.path.join(aln_file_dir.name, str(i) + '.fasta')]
             taxid_for_fasta += [tax_id]
             specific_against_metadata_accs.append(specific_against_metadata_acc)
             annotations.append(annotation[i])
+            sequence_weights.append(sequence_weight[i])
             if taxs_to_design_for is None:
                 design_for += [True]
             else:
@@ -442,6 +452,21 @@ def prepare_alignments(args):
                     out_name = label + '.' + str(i) + '.fasta'
                     copy_path = os.path.join(args.out_tsv_dir, out_name)
                 shutil.copyfile(fn, copy_path)
+        if args.write_weights:
+            # Write the weights being used
+            for i in range(nc):
+                if label is None:
+                    # args.write_input_seqs gives the path to where to write
+                    # the list
+                    out_file = args.write_weights + '.' + str(i) + '.weights.tsv'
+                else:
+                    # Determine where to write the sequence names based on
+                    # the label and args.out_tsv_dir
+                    out_name = label + '.' + str(i) + '.weights.tsv'
+                    out_file = os.path.join(args.out_tsv_dir, out_name)
+                with open(out_file, 'w') as fw:
+                    for seq_name, seq_weight in sequence_weight[i].items():
+                        fw.write("%s\t%f\n" %(seq_name, seq_weight))
 
     # Combine all years tsv (there is one per fasta file)
     if any(f is not None for f in years_tsv_per_aln):
@@ -457,7 +482,8 @@ def prepare_alignments(args):
         years_tsv = None
 
     return (in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv,
-            design_for, specific_against_metadata_accs, annotations)
+            design_for, specific_against_metadata_accs, annotations,
+            sequence_weights)
 
 
 def design_for_id(args):
@@ -473,17 +499,30 @@ def design_for_id(args):
     seq_groups_per_input = []
     guide_cover_frac_per_input = []
     primer_cover_frac_per_input = []
-    for in_fasta in args.in_fasta:
+    for i, in_fasta in enumerate(args.in_fasta):
         seqs = seq_io.read_fasta(in_fasta)
+        # Warn if some, but not all, sequences have weights set
+        if len(args.sequence_weights[i]) > 0 and len(args.sequence_weights[i]) < len(seqs):
+            logger.warning(("Only %i sequences of %i have weights set for "
+                "alignment %i; the rest will be given a default weight of 1 "
+                "pre-normalization."
+                %(len(args.sequence_weights[i]), len(seqs), i)))
         if args.cover_by_year_decay:
-            aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args)
+            aln, seq_groups, cover_frac = seqs_grouped_by_year(seqs, args,
+                sequence_weights=args.sequence_weights[i])
             if args.search_cmd == 'complete-targets':
                 guide_cover_frac, primer_cover_frac = cover_frac
             else:
                 guide_cover_frac = cover_frac
                 primer_cover_frac = None
         else:
-            aln = alignment.Alignment.from_list_of_seqs(list(seqs.values()))
+            seq_names = list(seqs.keys())
+            seq_list = [seqs[seq_name] for seq_name in seq_names]
+            norm_weights = weight.normalize(args.sequence_weights[i], seq_names)
+            seq_norm_weights = [norm_weights[seq_name]
+                                for seq_name in seq_names]
+            aln = alignment.Alignment.from_list_of_seqs(
+                seq_list, seq_norm_weights=seq_norm_weights)
             seq_groups = None
             guide_cover_frac = args.guide_cover_frac
             if args.search_cmd == 'complete-targets':
@@ -817,12 +856,9 @@ def run(args):
 
     logger.info("Running design.py with arguments: %s", args)
 
-    # Set NCBI API key
     if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.ncbi_api_key:
             ncbi_neighbors.ncbi_api_key = args.ncbi_api_key
-
-    if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.input_type == 'auto-from-file':
             if not os.path.isdir(args.out_tsv_dir):
                 raise Exception(("Output directory '%s' does not exist") %
@@ -830,8 +866,8 @@ def run(args):
 
         # Prepare input alignments, stored in temp fasta files
         in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, \
-            design_for, specific_against_metadata_accs, annotations = \
-            prepare_alignments(args)
+            design_for, specific_against_metadata_accs, annotations, \
+            sequence_weights = prepare_alignments(args)
 
         args.in_fasta = in_fasta
         args.taxid_for_fasta = taxid_for_fasta
@@ -839,6 +875,7 @@ def run(args):
         args.design_for = design_for
         args.specific_against_metadata_accs = specific_against_metadata_accs
         args.annotations = annotations
+        args.sequence_weights = sequence_weights
 
         if args.cover_by_year_decay:
             # args.cover_by_year_decay contains two parameters: the year
@@ -852,9 +889,18 @@ def run(args):
             raise Exception(("Number output TSVs must match number of input "
                 "FASTAs"))
         if args.write_input_aln:
-            if len(args.write_input_aln) != len(args.out_tsv):
+            if len(args.in_fasta) != len(args.write_input_aln):
                 raise Exception(("Number input alignment filenames must match "
                     "number of input FASTAs"))
+        if args.weight_sequences:
+            if len(args.in_fasta) != len(args.weight_sequences):
+                raise Exception(("Number of sequence weight TSVs must match "
+                    "number of input FASTAs"))
+            args.sequence_weights = [seq_io.read_sequence_weights(fn) for
+                                     fn in args.weight_sequences]
+        else:
+            args.sequence_weights = [defaultdict(lambda: 1) for _ in
+                                     args.in_fasta]
         args.design_for = None
         args.taxid_for_fasta = list(range(len(args.in_fasta)))
         args.specific_against_metadata_accs = [[] for _ in range(len(args.in_fasta))]
@@ -862,8 +908,8 @@ def run(args):
         aln_tmp_dirs = []
         if args.unaligned:
             in_fasta, taxid_for_fasta, years_tsv, aln_tmp_dirs, out_tsv, \
-            design_for, specific_against_metadata_accs, annotations = \
-            prepare_alignments(args)
+                design_for, specific_against_metadata_accs, annotations, \
+                sequence_weights = prepare_alignments(args)
 
             args.in_fasta = in_fasta
             args.taxid_for_fasta = taxid_for_fasta
@@ -1337,6 +1383,15 @@ def argv_to_args(argv):
               "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
               "year receives a desired cover fraction that decays by B -- "
               "i.e., year n is given B*(desired cover fraction of year n+1)."))
+    input_fasta_subparser.add_argument('--weight-sequences', nargs='+',
+        help=("If set, file path to TSV giving a weight to each input "
+              "sequence (col 1 is sequence name matching that in the "
+              "respective input FASTA, col 2 is weight). If more than one "
+              "input FASTA is given, the same number of input TSVs must be "
+              "given; each input TSV corresponds to an input FASTA. The "
+              "weights will be normalized and used when calculating objective "
+              "scores and summary statistics. Any sequence not listed will be "
+              "given a default weight of 1."))
     input_fasta_subparser.add_argument('--unaligned', action='store_true',
         help=("If set, treats inputs as unaligned fastas and uses MAFFT to "
               "align them, and --mafft-path is required"))
@@ -1376,6 +1431,13 @@ def argv_to_args(argv):
               "for guides (and PRIMER_COVER_FRAC for primers). Each preceding "
               "year receives a desired cover fraction that decays by B -- "
               "i.e., year n is given B*(desired cover fraction of year n+1)."))
+    input_auto_common_subparser.add_argument('--weight-by-log-size-of-subtaxa',
+        help=("If set, weight sequences by the log of the number of sequences "
+              "that are in the same subtaxa of rank specified here (one of "
+              "'subspecies', 'species', 'subgenus', or 'genus'). Must be a "
+              "smaller rank than the taxon being designed for. The weights "
+              "will be normalized and used when calculating expected activity "
+              "and percent coverage."))
     input_auto_common_subparser.add_argument('--use-accessions',
         help=("If set, use specified accessions instead of fetching neighbors "
               "for the given taxonomic ID(s). This provides a path to a TSV "
@@ -1437,14 +1499,20 @@ def argv_to_args(argv):
         help=("If set, write the alignments being used as "
               "input for design to a file in OUT_TSV_DIR; the filename is "
               "determined based on the label for each taxonomy (they are "
-              "'[label].[cluster-number].fasta'"))
+              "'[label].[cluster-number].fasta')"))
     input_autofile_subparser.add_argument('--write-annotation',
         action='store_true',
         help=("If set, write genomic annotations for the alignments "
               "based on the (first) reference sequence to a TSV file in "
               "OUT_TSV_DIR; the filename is determined based on the label for "
               "each taxonomy (they are "
-              "'[label].[cluster-number].annotation.tsv'"))
+              "'[label].[cluster-number].annotation.tsv')"))
+    input_autofile_subparser.add_argument('--write-weights',
+        action='store_true',
+        help=("If set, write the weights being used to a TSV file. Only used "
+              "if --weight-by-log-size-of-subtaxa is set. The filename is "
+              "determined based on the label for each taxonomy (they are"
+              "'[label].[cluster-number].weights.tsv')"))
 
     # Auto prepare from arguments
     input_autoargs_subparser = argparse.ArgumentParser(add_help=False)
@@ -1485,7 +1553,11 @@ def argv_to_args(argv):
         help=("Prefix of path to files to which to write genomic annotations "
               "for the alignments based on the first reference sequence in the "
               "cluster; the filenames are "
-              "'WRITE_ANNOTATION.[cluster-number].tsv'"))
+              "'WRITE_ANNOTATION.[cluster-number].annotation.tsv'"))
+    input_autoargs_subparser.add_argument('--write-weights',
+        help=("Prefix of path to files to which to write the weights being "
+              "used. Only used if --weight-by-log-size-of-subtaxa is set. "
+              "Filenames are 'WRITE_WEIGHTS.[cluster-number].weights.tsv'."))
 
     # Add parsers for subcommands
     for search_cmd_parser, search_cmd_parser_args in search_cmd_parsers:

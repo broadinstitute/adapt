@@ -665,14 +665,16 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
     def __init__(self, cover_frac, mismatches, seq_groups=None, **kwargs):
         """
         Args:
-            cover_frac: fraction in (0, 1] of sequences that must be 'captured'
-                by an oligo; see seq_groups
+            cover_frac: minimum weighted fraction in (0, 1] of sequences that
+                must be 'captured' by a guide set; see seq_groups. The
+                weighted fraction is the sum of the normalized weights of the
+                sequences that are 'captured'.
             mismatches: threshold on number of mismatches for determining
                 whether an oligo would hybridize to a target sequence
             seq_groups: dict that maps group ID to collection of sequences in
                 that group. If set, cover_frac must also be a dict that maps
-                group ID to the fraction of sequences in that group that
-                must be 'captured' by a oligo. If None, then do not divide
+                group ID to the weighted fraction of sequences in that group
+                that must be 'captured' by a guide. If None, then do not divide
                 the sequences into groups.
             kwargs: see OligoSearcher.__init__()
         """
@@ -706,25 +708,25 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             self.cover_frac = cover_frac
         else:
             # Setup a single dummy group containing all sequences, and make
-            # cover_frac be the fraction of sequences that must be covered in
-            # this group
+            # cover_frac be the weight fraction of sequences that must be
+            # covered in this group
             self.seq_groups = {0: set(range(self.aln.num_sequences))}
             self.cover_frac = {0: cover_frac}
 
     def _construct_memoized(self, start, seqs_to_consider,
-            num_needed=None, use_last=False, memoize_threshold=0.1):
+            percent_needed=None, use_last=False, memoize_threshold=0.1):
         """Make a memoized call to get the next oligo to add to an oligo set
 
         Args:
             start: start position in alignment at which to target
             seqs_to_consider: dict mapping universe group ID to collection
                 of indices to use when constructing the oligo
-            num_needed: dict mapping universe group ID to the number of
-                sequences from the group that are left to cover in order to
-                achieve the desired partial cover
+            percent_needed: dict mapping universe group ID to the percent of
+                sequences from the group of the total that are left to cover
+                in order to achieve the desired partial cover
             use_last: if set, check for a memoized result by using the last
                 key constructed (it is assumed that seqs_to_consider and
-                num_needed are identical to the last provided values)
+                percent_needed are identical to the last provided values)
             memoize_threshold: only memoize results when the total fraction
                 of sequences in seqs_to_consider (compared to the whole
                 alignment) exceeds this threshold
@@ -745,7 +747,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                     self.max_oligo_length, self.aln.seq_length)+1):
                 try:
                     p = self.construct_oligo(start, oligo_length, seqs_to_consider,
-                                             num_needed=num_needed)
+                                             percent_needed=percent_needed)
                     # Defaults to smallest oligo to break ties (make a setting?)
                     if p[2] > p_best[2]:
                         p_best = p
@@ -762,6 +764,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         # there is little need to memoize the result) and the call to
         # construct_oligo() should be relatively quick (so it is ok to have
         # to repeat the call if we do re-encounter the same seqs_to_consider)
+        # Do not use weighting here, as weighting is irrelevant to memoization
         num_seqs_to_consider = sum(len(v) for k, v in seqs_to_consider.items())
         frac_seqs_to_consider = float(num_seqs_to_consider) / self.aln.num_sequences
         should_memoize = frac_seqs_to_consider >= memoize_threshold
@@ -782,12 +785,12 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                 v_compressed = index_compress.compress_mostly_contiguous(v)
                 seqs_to_consider_frozen.add((k, frozenset(v_compressed)))
             seqs_to_consider_frozen = frozenset(seqs_to_consider_frozen)
-            if num_needed is None:
-                num_needed_frozen = None
+            if percent_needed is None:
+                percent_needed_frozen = None
             else:
-                num_needed_frozen = frozenset(num_needed.items())
+                percent_needed_frozen = frozenset(percent_needed.items())
 
-            key = (seqs_to_consider_frozen, num_needed_frozen)
+            key = (seqs_to_consider_frozen, percent_needed_frozen)
             return key
 
         p = super()._compute_memoized(start, construct_p, make_key,
@@ -817,7 +820,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         return 1.0
 
     def _find_optimal_oligo_in_window(self, start, end, seqs_to_consider,
-            num_needed):
+            percent_needed):
         """Find the oligo that hybridizes to the most sequences in a given window.
 
         This considers each position within the specified window at which a oligo
@@ -830,9 +833,9 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             start/end: boundaries of the window; the window spans [start, end)
             seqs_to_consider: dict mapping universe group ID to collection of
                 indices of sequences to use when selecting a oligo
-            num_needed: dict mapping universe group ID to the number of
-                sequences from the group that are left to cover in order to
-                achieve the desired (partial) cover
+            percent_needed: dict mapping universe group ID to the percent of
+                sequences from the group of the total that are left to cover
+                in order to achieve the desired (partial) cover
 
         Returns:
             tuple (w, x, y, z) where:
@@ -841,7 +844,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                     sequence IDs in seqs_to_consider) to which oligo w will
                     hybridize
                 y is the starting position of w in the alignment
-                z is a score representing the amount of the remaining
+                z is a score representing the percent of the remaining
                     universe that w covers
         """
         if start < 0:
@@ -865,33 +868,30 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                 p = None
             else:
                 # After the first call to self._construct_memoized in
-                # this window, seqs_to_consider and num_needed will all be
+                # this window, seqs_to_consider and percent_needed will all be
                 # the same as the first call, so tell the function to
                 # take advantage of this (by avoiding hashing these
                 # dicts)
                 use_last = pos > start and called_construct_oligo
 
-                p = self._construct_memoized(pos, seqs_to_consider, num_needed,
-                    use_last=use_last)
+                p = self._construct_memoized(pos, seqs_to_consider,
+                    percent_needed, use_last=use_last)
                 called_construct_oligo = True
 
             if p is not None:
                 # There is a suitable oligo at pos
                 olg, covered_seqs, score = p
 
-                if max_oligo_cover is None:
+                if score > max_oligo_cover[3]:
+                    # olg has the highest score
                     max_oligo_cover = (olg, covered_seqs, pos, score)
-                else:
-                    if score > max_oligo_cover[3]:
-                        # olg has the highest score
-                        max_oligo_cover = (olg, covered_seqs, pos, score)
         return max_oligo_cover
 
     def _find_oligos_in_window(self, start, end, only_consider=None):
         """Find a collection of oligos that cover sequences in a given window.
 
         This attempts to find the smallest number of oligos such that, within
-        the specified window, at least the fraction self.cover_frac of
+        the specified window, at least the weight fraction self.cover_frac of
         sequences have a oligo that hybridizes to it.
 
         The solution is based on approximating the solution to an instance
@@ -994,19 +994,15 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             if only_consider is not None:
                 universe[group_id] = universe[group_id] & only_consider
 
-        num_that_can_be_uncovered = {}
-        num_left_to_cover = {}
+        percent_that_can_be_uncovered = {}
+        percent_left_to_cover = {}
         for group_id, seq_ids in universe.items():
-            num_that_can_be_uncovered[group_id] = int(len(seq_ids) -
-                self.cover_frac[group_id] * len(seq_ids))
-            # Above, use int(..) to take the floor. Also, expand out
-            # len(seq_ids) rather than use
-            # int((1.0-self.cover_frac[.])*len(seq_ids)) due to precision
-            # errors in Python -- e.g., int((1.0-0.8)*5) yields 0
-            # on some machines.
+            percent_that_can_be_uncovered[group_id] = max(0,
+                (self.aln.seq_idxs_weighted(seq_ids) -
+                 self.cover_frac[group_id]))
 
-            num_left_to_cover[group_id] = (len(seq_ids) -
-                num_that_can_be_uncovered[group_id])
+            percent_left_to_cover[group_id] = (1 -
+                percent_that_can_be_uncovered[group_id])
 
         oligos_in_cover = set()
         def add_oligo_to_cover(olg, olg_covered_seqs, olg_pos):
@@ -1015,20 +1011,22 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             # universe
             logger.debug(("Adding oligo '%s' (at %d) to cover; it covers "
                 "%d sequences") % (olg, olg_pos, len(olg_covered_seqs)))
-            logger.debug(("Before adding, there are %s left to cover "
-                "per-group") % ([num_left_to_cover[gid] for gid in universe.keys()]))
+            logger.debug(("Before adding, there are %s percent left to cover "
+                "per-group") % ([percent_left_to_cover[gid]
+                                 for gid in universe.keys()]))
 
             oligos_in_cover.add(olg)
             for group_id in universe.keys():
                 universe[group_id].difference_update(olg_covered_seqs)
-                num_left_to_cover[group_id] = max(0,
-                    len(universe[group_id]) - num_that_can_be_uncovered[group_id])
+                percent_left_to_cover[group_id] = max(0,
+                    (self.aln.seq_idxs_weighted(universe[group_id]) -
+                     percent_that_can_be_uncovered[group_id]))
             # Save the position of this oligo in case the oligo needs to be
             # revisited
             self._selected_positions[olg].add(olg_pos)
 
-            logger.debug(("After adding, there are %s left to cover "
-                "per-group") % ([num_left_to_cover[gid] for gid in universe.keys()]))
+            logger.debug(("After adding, there are %s percent left to cover "
+                "per-group") % ([percent_left_to_cover[gid] for gid in universe.keys()]))
 
         # Place all oligos from self.required_oligos that fall within this
         # window into oligos_in_cover
@@ -1043,14 +1041,13 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             if r in self._memoized_seqs_covered_by_required_oligos:
                 olg_covered_seqs = self._memoized_seqs_covered_by_required_oligos[r]
             else:
-                # Determine which sequences are bound by olg, and memoize
-                # them
+                # Determine which sequences are bound by olg, and memoize them
                 olg_covered_seqs = self.aln.sequences_bound_by_oligo(
                     olg, olg_pos, self.mismatches, self.allow_gu_pairs,
                     required_flanking_seqs=self.required_flanking_seqs)
                 if len(olg_covered_seqs) == 0:
-                    # olg covers no sequences at olg_pos; still initialize with it
-                    # but give a warning
+                    # olg covers no sequences at olg_pos; still initialize with
+                    # it but give a warning
                     logger.warning(("Oligo '%s' at position %d does not cover "
                         "any sequences but is being required in the cover") %
                         (olg, olg_pos))
@@ -1070,13 +1067,13 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         logger.debug(("Iterating to achieve coverage; universe has %s "
             "elements per-group, with %s that can be uncovered per-group") %
             ([len(universe[gid]) for gid in universe.keys()],
-             [num_that_can_be_uncovered for gid in universe.keys()]))
+             [percent_that_can_be_uncovered[gid] for gid in universe.keys()]))
         while [True for group_id in universe.keys()
-               if num_left_to_cover[group_id] > 0]:
-            # Find the oligo that hybridizes to the most sequences, among
+               if percent_left_to_cover[group_id] > 0]:
+            # Find the oligo that hybridizes to the most sequence weight, among
             # those that are not in the cover
             olg, olg_covered_seqs, olg_pos, olg_score = self._find_optimal_oligo_in_window(
-                start, end, universe, num_left_to_cover)
+                start, end, universe, percent_left_to_cover)
 
             if olg is None or len(olg_covered_seqs) == 0:
                 # No suitable oligos could be constructed within the window
@@ -1106,11 +1103,11 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
 
         Because this is loosely defined, we use a crude heuristic to
         calculate this score. For a set of oligos S, the score is the
-        average fraction of sequences that need to be covered (as specified
-        by cover_frac) that are covered by oligos in S, where the average
-        is taken over the oligos. That is, it is the sum of the fraction of
-        needed sequences covered by each oligo in S divided by the size
-        of S. The score is a value in [0, 1].
+        average weighted fraction of sequences that need to be covered (as
+        specified by cover_frac) that are covered by guides in S, where the
+        average is taken over the guides. That is, it is the sum of the
+        weighted fraction of needed sequences covered by each guide in S
+        divided by the size of S. The score is a value in [0, 1].
 
         The score is meant to be compared across sets of oligos that
         are the same size (i.e., have the same number of oligos). It
@@ -1125,12 +1122,18 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         """
         # For each group, calculate the number of sequences in the group
         # that ought to be covered and also store the seq_ids as a set
-        num_needed_to_cover_in_group = {}
-        total_num_needed_to_cover = 0
+        percent_needed_to_cover_in_group = {}
+        total_percent_needed_to_cover = 0
         for group_id, seq_ids in self.seq_groups.items():
-            num_needed = math.ceil(self.cover_frac[group_id] * len(seq_ids))
-            num_needed_to_cover_in_group[group_id] = (num_needed, set(seq_ids))
-            total_num_needed_to_cover += num_needed
+            # The 'percent needed' is the weighted percent of sequences from
+            # the group that need to be covered of all the sequences.
+            # seq_idxs_weighted determines the weight of the group, normalized
+            # so that all groups/sequences sum to 1
+            percent_needed = (self.cover_frac[group_id] *
+                              self.aln.seq_idxs_weighted(seq_ids))
+            percent_needed_to_cover_in_group[group_id] = \
+                (percent_needed, set(seq_ids))
+            total_percent_needed_to_cover += percent_needed
 
         # For each oligo olg_seq, calculate the fraction of sequences that
         # need to be covered that are covered by olg_seq
@@ -1143,20 +1146,23 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                     pos, self.mismatches, self.allow_gu_pairs,
                     required_flanking_seqs=self.required_flanking_seqs))
 
-            # For each group, find the number of sequences that need to
+            # For each group, find the percent of sequences that need to
             # be covered that are covered by olg_seq, and sum these over
             # all the groups
-            total_num_covered = 0
-            for group_id in num_needed_to_cover_in_group.keys():
-                num_needed, seqs_in_group = num_needed_to_cover_in_group[group_id]
+            total_percent_covered = 0
+            for group_id in percent_needed_to_cover_in_group.keys():
+                percent_needed, seqs_in_group = \
+                    percent_needed_to_cover_in_group[group_id]
                 covered_in_group = seqs_bound & seqs_in_group
-                num_covered = min(num_needed, len(covered_in_group))
-                total_num_covered += num_covered
+                percent_covered = min(
+                    percent_needed,
+                    self.aln.seq_idxs_weighted(covered_in_group))
+                total_percent_covered += percent_covered
 
-            # Calculate the fraction of sequences that need to be covered
-            # (total_num_needed_to_cover) that are covered by olg_seq
-            # (total_num_covered)
-            frac_bound = float(total_num_covered) / total_num_needed_to_cover
+            # Calculate the weighted fraction of sequences that need to be
+            # covered (total_percent_needed_to_cover) that are covered by
+            # olg_seq (total_percent_covered)
+            frac_bound = total_percent_covered / total_percent_needed_to_cover
             sum_of_frac_of_seqs_bound += frac_bound
 
         score = sum_of_frac_of_seqs_bound / float(len(oligos))
@@ -1182,7 +1188,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         return seqs_bound
 
     def total_frac_bound(self, oligos):
-        """Calculate the total fraction of sequences in the alignment
+        """Calculate the total weighted fraction of sequences in the alignment
         bound by the oligos.
 
         Note that if the sequences are grouped (e.g., by year), this
@@ -1193,14 +1199,13 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             oligos: collection of str representing oligo sequences
 
         Returns:
-            total fraction of all sequences bound by a oligo
+            total weighted fraction of all sequences bound by a oligo
         """
         seqs_bound = self._seqs_bound(oligos)
-        frac_bound = float(len(seqs_bound)) / self.aln.num_sequences
-        return frac_bound
+        return self.aln.seq_idxs_weighted(seqs_bound)
 
     def construct_oligo(self, start, oligo_length, seqs_to_consider,
-            num_needed=None, stop_early=True):
+            percent_needed=None, stop_early=True):
         """Construct a single oligo to target a set of sequences in the alignment.
 
         This constructs a oligo to target sequence within the range [start,
@@ -1211,11 +1216,10 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
             start: start position in alignment at which to target
             seqs_to_consider: dict mapping universe group ID to collection of
                 indices to use when constructing the oligo
-            num_needed: dict mapping universe group ID to the number of sequences
-                from the group that are left to cover in order to achieve
-                a desired coverage; these are used to help construct a
-                oligo. If None, do not consider groups in determining coverage
-                (base coverage on the number of sequences covered overall).
+            percent_needed: dict mapping universe group ID to the percent
+                coverage of the group that is left to cover in order to
+                achieve a desired coverage; these are used to help construct a
+                guide
             stop_early: if True, impose early stopping criteria while iterating
                 over clusters to improve runtime
 
@@ -1308,8 +1312,8 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         # If every sequence in this region has a gap or does not contain
         # required flanking sequence, then there are none left to consider
         if len(all_seqs_to_consider) == 0:
-            raise CannotConstructOligoError(("All sequences in region "
-                "have a gap and/or do not contain required flanking sequences"))
+            raise CannotConstructOligoError(("All sequences in region have "
+                "a gap and/or do not contain required flanking sequences"))
 
         seq_rows = aln_for_oligo.make_list_of_seqs(all_seqs_to_consider,
             include_idx=True)
@@ -1360,11 +1364,11 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
 
         # Define a score function (higher is better) for a collection of
         # sequences covered by a oligo
-        if num_needed is not None:
-            # This is the number of sequences it contains that are needed to
+        if percent_needed is not None:
+            # This is the percent coverage it contains that are needed to
             # achieve the partial cover; we can compute this by summing over
-            # the number of needed sequences it contains, taken across the
-            # groups in the universe
+            # the normalized weight of needed sequences it contains, taken
+            # across the groups in the universe
             # Memoize the scores because this computation might be expensive
             seq_idxs_scores = {}
             def seq_idxs_score(seq_idxs):
@@ -1373,15 +1377,16 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                 if tc in seq_idxs_scores:
                     return seq_idxs_scores[tc]
                 score = 0
-                for group_id, needed in num_needed.items():
+                for group_id, needed in percent_needed.items():
                     contained_in_seq_idxs = seq_idxs & seqs_to_consider[group_id]
-                    score += min(needed, len(contained_in_seq_idxs))
+                    score += min(needed,
+                                 self.aln.seq_idxs_weighted(contained_in_seq_idxs))
                 seq_idxs_scores[tc] = score
                 return score
         else:
-            # Score by the number of sequences it contains
+            # Score by the weight of sequences it contains
             def seq_idxs_score(seq_idxs):
-                return len(seq_idxs)
+                return self.aln.seq_idxs_weighted(seq_idxs)
 
         # First construct the optimal oligo to cover the sequences. This would be
         # a string x that maximizes the number of sequences s_i such that x and
@@ -1441,6 +1446,8 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
 
             # Impose an early stopping criterion if self.predictor is
             # used, because using it is slow
+            # Do not use weighting here, as weighting is irrelevant to
+            # how many calls are needed to the predictor
             if self.predictor is not None and stop_early:
                 if (num_bound >= 0.5*len(cluster_idxs) and
                         num_passed_predict_active < 0.1*len(cluster_idxs)):
@@ -1592,8 +1599,9 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             activities = self.oligo_set_activities(window_start, window_end,
                     oligo_set)
 
-        # Use the mean (i.e., uniform prior over target sequences)
-        expected_activity = np.mean(activities)
+        # Use the weighted average
+        expected_activity = np.average(activities,
+                                       weights=self.aln.seq_norm_weights)
 
         num_oligos = len(oligo_set)
 
@@ -1674,7 +1682,8 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         # fit completely within the window
         search_end += -self.min_oligo_length + 1
 
-        curr_expected_activity = np.mean(curr_activities)
+        curr_expected_activity = np.average(curr_activities,
+                                            weights=self.aln.seq_norm_weights)
         curr_num_oligos = len(curr_oligo_set)
         curr_obj = self._obj_value_from_params(curr_expected_activity,
                 curr_num_oligos)
@@ -1871,8 +1880,8 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             olg_activities = self.aln.compute_activity(
                     olg_pos, olg, self.predictor)
             logger.info(("Adding required oligo '%s' to the oligo set; it "
-                "has mean activity %f over the targets"), olg,
-                np.mean(olg_activities))
+                "has average activity %f over the targets"), olg,
+                np.average(olg_activities, weights=self.aln.seq_norm_weights))
             add_oligo(olg, olg_pos, olg_activities)
 
         # At each iteration of the greedy algorithm (random or deterministic),
@@ -1930,7 +1939,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
 
     def total_frac_bound(self, window_start, window_end, oligo_set,
             activities=None):
-        """Calculate the total fraction of sequences in the alignment
+        """Calculate the total weighted fraction of sequences in the alignment
         bound by the oligos.
 
         This assumes that a sequence is 'bound' if the activity against
@@ -1953,10 +1962,11 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             activities = self.oligo_set_activities(window_start, window_end,
                     oligo_set)
 
-        # Calculate fraction of activity values >0
-        num_active = sum(1 for x in activities if x > 0)
+        # Calculate weighted fraction of activity values >0
+        frac_active = sum(self.aln.seq_norm_weights[i]
+                         for i, x in enumerate(activities) if x > 0)
 
-        return float(num_active) / len(activities)
+        return frac_active
 
     def _ground_set_with_activities_memoized(self, start):
         """Make a memoized call to determine a ground set of oligos at a site.
@@ -2052,14 +2062,14 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
                     # no ground set at this site -- but skip this oligo and
                     # try others anyway
                     continue
-                expected_activity = np.mean(activities)
+                expected_activity = np.average(activities,
+                    weights=self.aln.seq_norm_weights)
                 if self.algorithm == 'random-greedy':
                     # Restrict the ground set to only contain oligos that
                     # are sufficiently good, as described above
                     # That is, their expected activity has to exceed the
                     # threshold described above
                     # This ensures that the objective is non-negative
-
                     if expected_activity < nonnegativity_threshold:
                         # Oligo does not exceed threshold; ignore it
                         continue
@@ -2134,7 +2144,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
 
         Returns:
             dict {g: a} where g is a oligo in the ground set at start
-            and a is the expected activity, taken across the target
+            and a is the weighted expected activity, taken across the target
             sequences, of (current ground set U {g})
         """
         expected_activities = {}
@@ -2143,7 +2153,8 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         for x, activities_for_x in ground_set_with_activities.items():
             curr_activities_with_x = self._activities_after_adding_oligo(
                     curr_activities, activities_for_x)
-            expected_activities[x] = np.mean(curr_activities_with_x)
+            expected_activities[x] = np.average(curr_activities_with_x,
+                weights=self.aln.seq_norm_weights)
         return expected_activities
 
     def _analyze_oligos_memoized(self, start, curr_activities,

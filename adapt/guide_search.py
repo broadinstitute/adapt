@@ -14,6 +14,7 @@ from adapt.utils import search
 from adapt.utils import index_compress
 from adapt.utils import lsh
 from adapt.utils import predict_activity
+from adapt.utils import weight
 
 __author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
@@ -54,10 +55,12 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
         Args:
             aln: alignment.Alignment representing an alignment of sequences
             guide_length: length of the guide to construct
-            mismatches: threshold on number of mismatches for determining
-                whether a guide would hybridize to a target sequence
-            cover_frac: fraction in (0, 1] of sequences that must be 'captured'
-                by a guide; see seq_groups
+            mismatches: threshold on number of mismatches for determining whether
+                a guide would hybridize to a target sequence
+            cover_frac: minimum weighted fraction in (0, 1] of sequences that
+                must be 'captured' by a guide set; see seq_groups. The
+                weighted fraction is the sum of the normalized weights of the
+                sequences that are 'captured'.
             missing_data_params: tuple (a, b, c) specifying to not attempt to
                 design guides overlapping sites where the fraction of
                 sequences with missing data is > min(a, max(b, c*m), where m is
@@ -65,8 +68,8 @@ class GuideSearcherMinimizeGuides(search.OligoSearcherMinimizeNumber,
                 alignment
             seq_groups: dict that maps group ID to collection of sequences in
                 that group. If set, cover_frac must also be a dict that maps
-                group ID to the fraction of sequences in that group that
-                must be 'captured' by a guide. If None, then do not divide
+                group ID to the weighted fraction of sequences in that group
+                that must be 'captured' by a guide. If None, then do not divide
                 the sequences into groups.
             kwargs: see OligoSearcherMinimizeNumber.init() and
                 GuideSearcher.__init__()
