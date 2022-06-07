@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Functions for working with oligos.
 """
 
@@ -50,6 +51,20 @@ COMPLEMENTS = {
 # Specify the substring length to use for checking whether
 # to terminate early in binds()
 BINDS_EARLY_TERMINATE_SUBSTR_LEN = 5
+
+
+def frac_gc(seq):
+    """
+    Args:
+        seq
+    """
+    total_gc = 0
+    for base in seq:
+        # If there's ambiguity, uses the average GC content across all
+        # possibilities ('S' is the set {'G', 'C'})
+        total_gc += (len(FASTA_CODES['S'] & FASTA_CODES[base]) /
+                     len(FASTA_CODES[base]))
+    return total_gc/len(seq)
 
 
 def seq_mismatches(seq_a, seq_b):

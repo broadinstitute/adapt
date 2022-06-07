@@ -141,7 +141,8 @@ def write_mean_activity_of_guides(designs, mean_activities, out_fn):
             fw.write('\t'.join([str(x) for x in row]) + '\n')
 
 def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
-                  per_seq_primers=None, guide_activity_model=True,
+                  per_seq_primer_mms=None, per_seq_primer_tms=None,
+                  guide_activity_model=True,
                   primer_terminal_mismatches=False):
     """Write table giving the fraction of sequences bound by a target.
 
@@ -152,15 +153,21 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
         seqs: dict {seq_name: target sequence} where seq_name is the name of
             a sequence in the input FASTA file
         out_fn: path to TSV file at which to write table
-        per_seq_guides: output of CoverageAnalyzer.per_seq_guide_mismatches;
+        per_seq_guides: CoverageAnalyzer.per_seq_guide_mismatches output;
             dict mapping design identifier (self.designs.keys()) to a tuple of
             the best guide scores per target sequence of its guide set
             and the best guide per target sequence of its guide set
-        per_seq_primers: output of CoverageAnalyzer.per_seq_primer_mismatches;
+        per_seq_primer_mms: CoverageAnalyzer.per_seq_primer_mismatches output;
             tuple of two dicts (first for the left, second for the right)
             mapping design identifier (self.designs.keys()) to a tuple of
             the best primer mismatches per target sequence of its primer set
             and the best primer per target sequence of its primer set
+        per_seq_primer_tms: CoverageAnalyzer.per_seq_primer_melting_temperatures
+            output; tuple of two dicts (first for the left, second for the
+            right) mapping design identifier (self.designs.keys()) to a tuple
+            of the best primer mismatches per target sequence of its primer set
+            and the best primer per target sequence of its primer set; None if
+            thermodynamic model wasn't run
         guide_activity_model: if True (default), per_seq_guides contains
             activity score; if False, per_seq_guides contains number of
             mismatches against the target
@@ -171,24 +178,19 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
     """
     header = ['design_id', 'seq_name']
 
-    if per_seq_primers:
+    if per_seq_primer_mms:
         header.extend(['target-start', 'target-end', 'target-length'])
+        primer_stats = []
+        if per_seq_primer_tms:
+            primer_stats.append('melting-temperature')
         if primer_terminal_mismatches:
-            header.extend(['left-primer-mismatches',
-                           'left-primer-terminal-mismatches',
-                           'left-primer-ideal-target-sequence',
-                           'left-primer-start',
-                           'right-primer-mismatches',
-                           'right-primer-terminal-mismatches',
-                           'right-primer-ideal-target-sequence',
-                           'right-primer-start'])
+            primer_stats.extend(['mismatches', 'terminal-mismatches',
+                'ideal-target-sequence', 'start'])
         else:
-            header.extend(['left-primer-mismatches',
-                           'left-primer-ideal-target-sequence',
-                           'left-primer-start',
-                           'right-primer-mismatches',
-                           'right-primer-ideal-target-sequence',
-                           'right-primer-start'])
+            primer_stats.extend(['mismatches', 'ideal-target-sequence',
+                'start'])
+        header.extend(['left-primer-%s' %stat for stat in primer_stats])
+        header.extend(['right-primer-%s' %stat for stat in primer_stats])
     if per_seq_guides:
         if guide_activity_model:
             header.append('guide-activity')
@@ -197,18 +199,26 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
             header.append('guide-mismatches')
             guide_none = math.inf
         header.extend(['guide-ideal-target-sequence', 'guide-start'])
-    left_primers = per_seq_primers[0]
-    right_primers = per_seq_primers[1]
+    left_primers_mm = per_seq_primer_mms[0]
+    right_primers_mm = per_seq_primer_mms[1]
+    if per_seq_primer_tms:
+        left_primers_tm = per_seq_primer_tms[0]
+        right_primers_tm = per_seq_primer_tms[1]
     with open(out_fn, 'w') as fw:
         fw.write('\t'.join(header) + '\n')
         for design_id in sorted(list(designs.keys())):
             for seq_name in seqs:
                 row = [design_id, seq_name]
-                if per_seq_primers:
-                    left_scores, left_target, left_start = \
-                        left_primers[design_id][seq_name]
-                    right_scores, right_target, right_start = \
-                        right_primers[design_id][seq_name]
+                if per_seq_primer_mms:
+                    left_mm, left_target, left_start = \
+                        left_primers_mm[design_id][seq_name]
+                    right_mm, right_target, right_start = \
+                        right_primers_mm[design_id][seq_name]
+                    if per_seq_primer_tms:
+                        left_tm, left_target, left_start = \
+                            left_primers_tm[design_id][seq_name]
+                        right_tm, right_target, right_start = \
+                            right_primers_tm[design_id][seq_name]
                     # Get left primer start for target start
                     target_start = left_start
                     target_length = None
@@ -220,18 +230,31 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
                     else:
                         target_end = None
                     row.extend([target_start, target_end, target_length])
-                    if left_scores[0] == math.inf:
+                    if left_mm[0] == math.inf:
                         if primer_terminal_mismatches:
-                            left_scores = (None, None)
+                            left_mm = (None, None)
                         else:
-                            left_scores = (None, )
-                    if right_scores[0] == math.inf:
+                            left_mm = (None, )
+                    if right_mm[0] == math.inf:
                         if primer_terminal_mismatches:
-                            right_scores = (None, None)
+                            right_mm = (None, None)
                         else:
-                            right_scores = (None, )
-                    row.extend([*left_scores, left_target, left_start,
-                                *right_scores, right_target, right_start])
+                            right_mm = (None, )
+
+                    if per_seq_primer_tms:
+                        if left_tm[0] == 0:
+                            left_tm = (None, )
+                        else:
+                            left_tm = (left_tm[0]-273.15, )
+                        if right_tm[0] == 0:
+                            right_tm = (None, )
+                        else:
+                            right_tm = (right_tm[0]-273.15, )
+                    else:
+                        left_tm = []
+                        right_tm = []
+                    row.extend([*left_tm, *left_mm, left_target, left_start,
+                                *right_tm, *right_mm, right_target, right_start])
                 if per_seq_guides:
                     guide_scores, guide_target, guide_start = \
                         per_seq_guides[design_id][seq_name]
@@ -276,7 +299,11 @@ def run(args):
                 fully_sensitive=args.fully_sensitive,
                 primer_terminal_mismatches=args.primer_terminal_mismatches,
                 bases_from_terminal=args.bases_from_terminal,
-                max_target_length=args.max_target_length)
+                max_target_length=args.max_target_length,
+                delta_melting_temperature=args.delta_melting_temperature,
+                sodium=args.sodium_conc, magnesium=args.magnesium_conc,
+                dNTP=args.dntp_conc, oligo_concentration=args.oligo_conc,
+                target_concentration=args.target_conc)
     elif args.predict_activity_model_path or args.predict_cas13a_activity_model is not None:
         if args.predict_activity_model_path:
             cla_path, reg_path = args.predict_activity_model_path
@@ -319,7 +346,11 @@ def run(args):
                 fully_sensitive=args.fully_sensitive,
                 primer_terminal_mismatches=args.primer_terminal_mismatches,
                 bases_from_terminal=args.bases_from_terminal,
-                max_target_length=args.max_target_length)
+                max_target_length=args.max_target_length,
+                delta_melting_temperature=args.delta_melting_temperature,
+                sodium=args.sodium_conc, magnesium=args.magnesium_conc,
+                dNTP=args.dntp_conc, oligo_concentration=args.oligo_conc,
+                target_concentration=args.target_conc)
     else:
         raise Exception(("One of --guide-mismatches, "
             "--predict-cas13a-activity-model, or"
@@ -360,10 +391,14 @@ def run(args):
             logger.warning(("When using --write-per-seq, "
                     "--predict-activity-require-highly-active is not "
                     "used"))
-        per_seq_primers = analyzer.per_seq_primer_mismatches()
+        per_seq_primer_mms = analyzer.per_seq_primer_mismatches()
+        per_seq_primer_tms = None
+        if args.primer_thermo:
+            per_seq_primer_tms = analyzer.per_seq_primer_melting_temperatures()
         write_per_seq(designs, seqs, args.write_per_seq,
                       per_seq_guides=per_seq_guides,
-                      per_seq_primers=per_seq_primers,
+                      per_seq_primer_mms=per_seq_primer_mms,
+                      per_seq_primer_tms=per_seq_primer_tms,
                       guide_activity_model=guide_activity_model,
                       primer_terminal_mismatches=(args.primer_terminal_mismatches is not None))
         performed_analysis = True
@@ -433,7 +468,35 @@ def argv_to_args(argv):
               "the 3' end when determining whether a primer covers a sequence."
               "Default is 5 and is only used if PRIMER_TERMINAL_MISMATCHES set"
               "(ignore this if the targets only consist of guides)"))
-
+    parser.add_argument('-pt', '--primer-thermo',
+        action='store_true',
+        help=("If set, in addition to using mismatches, use a thermodynamic "
+              "model to determine whether primers cover a sequence."))
+    parser.add_argument('-dtm', '--delta-melting-temperature',
+        type=int, default=3,
+        help=("Allow for at most DELTA_MELTING_TEMPERATURE degrees Celsius "
+              "deviation from the perfect match primer's melting temperature "
+              "for a sequence to be considered 'bound' still."
+              "Default is 3 degrees Celsius"))
+    parser.add_argument('-na', '--sodium-conc', type=float, default=5e-2,
+        help=("Concentration of sodium (in mol/L). Can be used for the "
+              "concentration of all monovalent cations. Only used if "
+              "--primer-thermo is set. Defaults to 0.050 mol/L."))
+    parser.add_argument('-mg', '--magnesium-conc', type=float, default=2.5e-3,
+        help=("Concentration of magnesium (in mol/L). Can be used for the "
+              "concentration of all divalent cations. Only used if "
+              "--primer-thermo is set. Defaults to 0.0025 mol/L."))
+    parser.add_argument('--dntp-conc', type=float, default=1.6e-3,
+        help=("Concentration of dNTPs (in mol/L). Only used if "
+              "--primer-thermo is set. Defaults to 0.0016 mol/L."))
+    parser.add_argument('--oligo-conc', type=float, default=3e-7,
+        help=("Oligo concentration (in mol/L). Only used if "
+              "--primer-thermo is set. Defaults to 3e-7 mol/L."))
+    parser.add_argument('--target-conc', type=float, default=0,
+        help=("Target concentration (in mol/L). Only used if "
+              "--primer-thermo is set; only needed if target concentration is "
+              "not significantly less than oligo concentration. "
+              "Defaults to 0."))
     # Parameters determining whether a guide binds to target based on
     # mismatch model
     parser.add_argument('-gm', '--guide-mismatches',
@@ -457,7 +520,7 @@ def argv_to_args(argv):
         nargs='*',
         help=("Use ADAPT's premade Cas13a model to predict guide-target "
               "activity. Optionally, two arguments can be included to indicate "
-              "version number, in the format 'v1_0' or 'latest'. Versions "
+              "version number, each in the format 'v1_0' or 'latest'. Versions "
               "will default to latest. Required if --guide-mismatches or "
               "predict-activity-model-path is not set."))
     parser.add_argument('--predict-activity-model-path',
