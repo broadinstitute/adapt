@@ -4,7 +4,7 @@
 from collections import defaultdict
 import logging
 import math
-
+import primer3
 import numpy as np
 
 from adapt.utils import oligo, thermo
@@ -677,6 +677,53 @@ class CoverageAnalyzer:
             seqs_bound = self.seqs_bound_by_design(design)
             frac_bound[design_id] = float(len(seqs_bound)) / len(self.seqs)
         return frac_bound
+
+    def primer_stats(self, primer_set, left):
+        primer_stats = [[], [], [], [], []]
+        for primer in primer_set:
+            primer_stats[0].append(thermo.calculate_melting_temp(primer,
+                primer, (not left), self.sodium, self.magnesium, self.dNTP,
+                self.oligo_concentration, self.target_concentration) - 273.15)
+            primer_stats[1].append(thermo.gc_frac(primer))
+            if left:
+                primer_stats[2].append(thermo.gc_frac(primer[-min(6, len(primer)):]))
+            else:
+                primer_stats[2].append(thermo.gc_frac(primer[:min(6, len(primer))]))
+            primer_stats[3].append(primer3.calcHairpin(
+                primer, mv_conc=self.sodium*1000,
+                dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
+                dna_conc=self.oligo_concentration*10**9).dg/1000)
+            primer_stats[4].append(primer3.calcHomodimer(
+                primer, mv_conc=self.sodium*1000,
+                dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
+                dna_conc=self.oligo_concentration*10**9).dg/1000)
+        return primer_stats
+
+    def stats_of_primers(self):
+        primer_stats = {}
+        for design_id, design in self.designs.items():
+            logger.info(("Computing primer statistics of design "
+                "'%s'"), str(design_id))
+            left_primer_stats = self.primer_stats(design.primers[0], True)
+            right_primer_stats = self.primer_stats(design.primers[1], False)
+            heterodimer = math.inf
+            for left_primer in design.primers[0]:
+                for right_primer in design.primers[1]:
+                    new_hetero = primer3.calcHeterodimer(
+                        left_primer, right_primer,
+                        mv_conc=self.sodium*1000, dv_conc=self.magnesium*1000,
+                        dntp_conc=self.dNTP*1000,
+                        dna_conc=self.oligo_concentration*10**9)
+                    if heterodimer >= new_hetero.dg/1000:
+                        heterodimer = new_hetero.dg/1000
+            all_primer_stats = [
+                heterodimer,
+                abs(np.mean(left_primer_stats[0]) -
+                    np.mean(right_primer_stats[0]))
+            ]
+            primer_stats[design_id] = (left_primer_stats, right_primer_stats,
+                all_primer_stats)
+        return primer_stats
 
     def per_seq_guide(self):
         """Determine the per sequence score of guides from each design.

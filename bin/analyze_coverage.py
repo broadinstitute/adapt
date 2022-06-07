@@ -6,6 +6,7 @@ import logging
 import os
 import sys
 import math
+import primer3
 
 from adapt import coverage_analysis
 from adapt.prepare import ncbi_neighbors
@@ -82,6 +83,35 @@ def read_accessions(fn):
             line = line.rstrip()
             accs += [line]
     return accs
+
+
+def write_primer_stats(designs, primer_stats, out_fn):
+    header = ['design_id',
+              'left-primer-target-sequences',
+              'left-primer-ideal-melting-temperature',
+              'left-primer-gc',
+              'left-primer-gc-clamp',
+              'left-primer-hairpin',
+              'left-primer-self-dimer',
+              'right-primer-target-sequences',
+              'right-primer-ideal-melting-temperature',
+              'right-primer-gc',
+              'right-primer-gc-clamp',
+              'right-primer-hairpin',
+              'right-primer-self-dimer',
+              'heterodimer',
+              'delta-melting-temperature-primers']
+    with open(out_fn, 'w') as fw:
+        fw.write('\t'.join(header) + '\n')
+        for design_id in sorted(list(designs.keys())):
+            left_primers = designs[design_id].primers[0]
+            left_primers = ' '.join(sorted(left_primers))
+            right_primers = designs[design_id].primers[1]
+            right_primers = ' '.join(sorted(right_primers))
+            row = [design_id, left_primers, *primer_stats[design_id][0],
+                right_primers, *primer_stats[design_id][1],
+                *primer_stats[design_id][2]]
+            fw.write('\t'.join([str(x) for x in row]) + '\n')
 
 
 def write_frac_bound(designs, frac_bound, out_fn):
@@ -358,6 +388,10 @@ def run(args):
 
     # Perform analyses
     performed_analysis = False
+    if args.write_primer_stats:
+        primer_stats = analyzer.stats_of_primers()
+        write_primer_stats(designs, primer_stats, args.write_primer_stats)
+        performed_analysis = True
     if args.write_frac_bound:
         frac_bound = analyzer.frac_of_seqs_bound()
         write_frac_bound(designs, frac_bound, args.write_frac_bound)
@@ -449,6 +483,8 @@ def argv_to_args(argv):
               "design). The provided argument is a path to a TSV file at "
               "which to write the table. If set, a predictive model must be "
               "set without --predict-activity-require-highly-active"))
+    parser.add_argument('--write-primer-stats',
+        help=(""))
 
     # Parameter determining whether a primer binds to target
     parser.add_argument('-pm', '--primer-mismatches',

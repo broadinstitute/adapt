@@ -3,7 +3,7 @@
 import numpy as np
 import math
 import logging
-from adapt.utils.oligo import FASTA_CODES, make_complement, is_complement, is_symmetric, frac_gc
+from adapt.utils.oligo import FASTA_CODES, make_complement, is_complement, is_symmetric, gc_frac
 
 logger = logging.getLogger(__name__)
 
@@ -316,7 +316,7 @@ def calculate_melting_temp(oligo, target, reverse_oligo=False, sodium=5e-2,
         K_a = 3e4
         D = (K_a*dNTP - K_a*magnesium + 1)**2 + 4 * K_a * magnesium
         free_mg = (-(K_a * dNTP - K_a * magnesium + 1) + D**.5)/(2*K_a)
-        fgc = frac_gc(oligo)
+        fgc = gc_frac(oligo)
         lnna = math.log(sodium)
         r = free_mg**.5/sodium
         if r < .22:

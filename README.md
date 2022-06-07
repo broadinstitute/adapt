@@ -64,7 +64,7 @@ ADAPT requires:
 * [Python](https://www.python.org) == 3.8
 * [NumPy](http://www.numpy.org) &gt;= 1.16.0, &lt; 1.19.0
 * [SciPy](https://www.scipy.org) == 1.4.1
-* [TensorFlow](https://www.tensorflow.org) == 2.3.2
+* [TensorFlow](https://www.tensorflow.org) == 2.3.4
 
 Using ADAPT with AWS cloud features additionally requires:
 * [Boto3](https://aws.amazon.com/sdk-for-python/) &gt;= 1.14.54
