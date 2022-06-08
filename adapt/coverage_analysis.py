@@ -4,7 +4,12 @@
 from collections import defaultdict
 import logging
 import math
-import primer3
+try:
+    import primer3
+except ImportError:
+    thermo_props = False
+else:
+    thermo_props = True
 import numpy as np
 
 from adapt.utils import oligo, thermo
@@ -40,7 +45,7 @@ class CoverageAnalyzer:
 
     def __init__(self, seqs, designs, primer_mismatches=None,
             primer_terminal_mismatches=None, bases_from_terminal=5,
-            delta_melting_temperature=None, fully_sensitive=False,
+            primer_melting_temperature_variation=None, fully_sensitive=False,
             max_target_length=None, sodium=5e-2, magnesium=2.5e-3, dNTP=1.6e-3,
             oligo_concentration=3e-7, target_concentration=0):
         """
@@ -58,36 +63,36 @@ class CoverageAnalyzer:
             bases_from_terminal: number of bases from 3' end in which to check
                 for primer_terminal_mismatches (defaults to 5, unused if
                 primer_terminal_mismatches is not set)
-            delta_melting_temperature: largest acceptable difference in melting
-                temperature between the perfectly matched primer binding and
-                the primer binding to a given sequence
+            primer_melting_temperature_variation: largest acceptable difference
+                in melting temperature between the perfectly matched primer
+                binding and the primer binding to a given sequence
             fully_sensitive: if True, use a fully sensitive lookup of
                 primers and guides (slower)
             max_target_length: the maximum length a target can be for it to
                 be amplified; if None, no maximum length (i.e. targets of
                 any length will be considered amplifiable). Does nothing if
                 only a guide is being considered.
-            sodium: molar concentration of sodium ions. Does nothing if delta
-                melting temperature is not set.
+            sodium: molar concentration of sodium ions. Does nothing if a
+                melting temperature variation is not set.
             magnesium: molar concentration of magnesium ions. Only needed if
                 magnesium concentration is greater than dNTP concentration.
-                Does nothing if delta melting temperature is not set.
+                Does nothing if melting temperature variation is not set.
             dNTP: molar concentration of dNTPs. Only needed if
                 magnesium concentration is greater than dNTP concentration.
-                Does nothing if delta melting temperature is not set.
+                Does nothing if melting temperature variation is not set.
             oligo_concentration: molar concentration of oligos in reaction.
-                Does nothing if delta melting temperature is not set.
+                Does nothing if melting temperature variation is not set.
             target_concentration: molar concentration of target in reaction.
                 Only needed if not significantly smaller than oligo
-                concentration. Does nothing if delta melting temperature is
-                not set.
+                concentration. Does nothing if melting temperature variation
+                is not set.
         """
         self.seqs = seqs
         self.designs = designs
         self.primer_mismatches = primer_mismatches
         self.primer_terminal_mismatches = primer_terminal_mismatches
         self.bases_from_terminal = bases_from_terminal
-        self.delta_melting_temperature = delta_melting_temperature
+        self.primer_melting_temperature_variation = primer_melting_temperature_variation
         self.seqs_are_indexed = False
         self.seqs_index_k = None
         self.fully_sensitive = fully_sensitive
@@ -191,8 +196,8 @@ class CoverageAnalyzer:
                         allow_gu_pairs):
                     bind_pos.add(i)
                     if save is not None:
-                        save[i] = (mismatches_fn(seq, target_subseq),
-                                   mismatches_fn(termseq, target_termseq))
+                        save[i] = [mismatches_fn(seq, target_subseq),
+                                   mismatches_fn(termseq, target_termseq)]
         return bind_pos
 
     def evaluate_pos_by_mismatches(self, seq, target_seq, pos,
@@ -226,10 +231,22 @@ class CoverageAnalyzer:
                     allow_gu_pairs):
                 bind_pos.add(i)
                 if save is not None:
-                    save[i] = (mismatches_fn(seq, target_subseq), )
+                    save[i] = [mismatches_fn(seq, target_subseq)]
         return bind_pos
 
     def evaluate_pos_by_thermo(self, seq, target_seq, pos, left, save=None):
+        """Evaluate binding with a mismatch model.
+
+        Args:
+            seq: guide or primer sequence to lookup
+            target_seq: target sequence against which to check
+            pos: list of positions indicating subsequence in target_seq
+                to check for binding of seq
+            save: if set, save computed mismatches in this dictionary
+
+        Returns:
+            set of positions in pos where seq binds to target_seq
+        """
         ideal_tm = thermo.calculate_melting_temp(seq, seq, (not left),
             self.sodium, self.magnesium, self.dNTP, self.oligo_concentration,
             self.target_concentration)
@@ -238,31 +255,43 @@ class CoverageAnalyzer:
         for i in pos:
             target_subseq = target_seq[i:(i + len(seq))]
             if thermo.binds(seq, target_subseq, ideal_tm,
-                    self.delta_melting_temperature, (not left), self.sodium,
-                    self.magnesium, self.dNTP, self.oligo_concentration,
-                    self.target_concentration):
+                    self.primer_melting_temperature_variation, (not left),
+                    self.sodium, self.magnesium, self.dNTP,
+                    self.oligo_concentration, self.target_concentration):
                 bind_pos.add(i)
                 if save is not None:
-                    save[i] = (thermo.calculate_melting_temp(seq, target_subseq,
-                        (not left), self.sodium, self.magnesium, self.dNTP,
-                        self.oligo_concentration, self.target_concentration), )
+                    if i in save:
+                        save[i] = [thermo.calculate_melting_temp(seq,
+                            target_subseq, (not left), self.sodium,
+                            self.magnesium, self.dNTP,
+                            self.oligo_concentration,
+                            self.target_concentration)] + save[i]
+
+                    else:
+                        save[i] = [thermo.calculate_melting_temp(seq,
+                            target_subseq, (not left), self.sodium,
+                            self.magnesium, self.dNTP,
+                            self.oligo_concentration,
+                            self.target_concentration)]
         return bind_pos
 
     def primer_bind_fns(self):
+        """
+        """
         if self.primer_terminal_mismatches is not None:
-            if self.delta_melting_temperature is not None:
+            if self.primer_melting_temperature_variation is not None:
                 def primer_left_bind_fn(seq, target_seq, pos, save=None):
                     pos_mm_filter = self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches, self.bases_from_terminal,
-                        True)
+                        True, save=save)
                     return self.evaluate_pos_by_thermo(seq, target_seq,
                         pos_mm_filter, True, save=save)
                 def primer_right_bind_fn(seq, target_seq, pos, save=None):
                     pos_mm_filter = self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches, self.bases_from_terminal,
-                        False)
+                        False, save=save)
                     return self.evaluate_pos_by_thermo(seq, target_seq,
                         pos_mm_filter, False, save=save)
             else:
@@ -277,15 +306,15 @@ class CoverageAnalyzer:
                         self.primer_terminal_mismatches, self.bases_from_terminal,
                         False, save=save)
         else:
-            if self.delta_melting_temperature is not None:
+            if self.primer_melting_temperature_variation is not None:
                 def primer_left_bind_fn(seq, target_seq, pos, save=None):
                     pos_mm_filter = self.evaluate_pos_by_mismatches(seq,
-                        target_seq, pos, self.primer_mismatches, False)
+                        target_seq, pos, self.primer_mismatches, False, save=save)
                     return self.evaluate_pos_by_thermo(seq, target_seq,
                         pos_mm_filter, True, save=save)
                 def primer_right_bind_fn(seq, target_seq, pos, save=None):
                     pos_mm_filter = self.evaluate_pos_by_mismatches(seq,
-                        target_seq, pos, self.primer_mismatches, False)
+                        target_seq, pos, self.primer_mismatches, False, save=save)
                     return self.evaluate_pos_by_thermo(seq, target_seq,
                         pos_mm_filter, False, save=save)
             else:
@@ -414,10 +443,10 @@ class CoverageAnalyzer:
         target_scores = {}
         if obj_type == 'min':
             compare = lambda a,b: a<b
-            default_oligo = [(math.inf, ), None, None]
+            default_oligo = [[math.inf, ], None, None]
         elif obj_type == 'max':
             compare = lambda a,b: a>b
-            default_oligo = [(0, ), None, None]
+            default_oligo = [[0, ], None, None]
         else:
             raise ValueError("Objective type must be either 'min' or 'max'")
         for seq_name in self.seqs:
@@ -438,6 +467,30 @@ class CoverageAnalyzer:
                                                        oligo_seq,
                                                        start_pos]
         return target_scores
+
+    def scores_where_primers_binds(self, left_primer_seqs, right_primer_seqs):
+        """Determine mismatch scores across the target sequences.
+
+        Args:
+            guide_seqs: guide sequences to lookup (treat as a guide set)
+
+        Returns:
+            dict {target seq name: ((number of mismatches, ),
+                                    best guide sequence,
+                                    start position)}
+        """
+        left_bind_fn, right_bind_fn = self.primer_bind_fns()
+        if self.primer_melting_temperature_variation:
+            left_scores = self.scores_where_oligo_binds(
+                left_primer_seqs, left_bind_fn, 'max')
+            right_scores = self.scores_where_oligo_binds(
+                right_primer_seqs, right_bind_fn, 'max')
+        else:
+            left_scores = self.scores_where_oligo_binds(
+                left_primer_seqs, left_bind_fn, 'min')
+            right_scores = self.scores_where_oligo_binds(
+                right_primer_seqs, right_bind_fn, 'min')
+        return (left_scores, right_scores)
 
     def scores_where_guide_binds(self, guide_seqs):
         """Determine scores across the target sequences.
@@ -678,7 +731,12 @@ class CoverageAnalyzer:
             frac_bound[design_id] = float(len(seqs_bound)) / len(self.seqs)
         return frac_bound
 
-    def primer_stats(self, primer_set, left):
+    def primer_thermo_stats(self, primer_set, left):
+        """
+        """
+        if not thermo_props:
+            raise Exception("Primer3-py is not installed. Please install "
+                "primer3-py==0.6.1")
         primer_stats = [[], [], [], [], []]
         for primer in primer_set:
             primer_stats[0].append(thermo.calculate_melting_temp(primer,
@@ -699,31 +757,66 @@ class CoverageAnalyzer:
                 dna_conc=self.oligo_concentration*10**9).dg/1000)
         return primer_stats
 
-    def stats_of_primers(self):
-        primer_stats = {}
+    def guide_thermo_stats(self, guide_set):
+        """
+        """
+        if not thermo_props:
+            raise Exception("Primer3-py is not installed. Please install "
+                "primer3-py==0.6.1")
+        guide_stats = [[], [], [], []]
+        for guide in guide_set:
+            guide_stats[0].append(thermo.calculate_melting_temp(guide,
+                guide, False, self.sodium, self.magnesium, self.dNTP,
+                self.oligo_concentration, self.target_concentration) - 273.15)
+            guide_stats[1].append(thermo.gc_frac(guide))
+            guide_stats[2].append(primer3.calcHairpin(
+                guide, mv_conc=self.sodium*1000,
+                dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
+                dna_conc=self.oligo_concentration*10**9).dg/1000)
+            guide_stats[3].append(primer3.calcHomodimer(
+                guide, mv_conc=self.sodium*1000,
+                dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
+                dna_conc=self.oligo_concentration*10**9).dg/1000)
+        return guide_stats
+
+    def thermo_stats(self):
+        """
+        """
+        if not thermo_props:
+            raise Exception("Primer3-py is not installed. Please install "
+                "primer3-py==0.6.1")
+        thermo_stats = {}
         for design_id, design in self.designs.items():
-            logger.info(("Computing primer statistics of design "
+            logger.info(("Computing thermodynamic statistics of design "
                 "'%s'"), str(design_id))
-            left_primer_stats = self.primer_stats(design.primers[0], True)
-            right_primer_stats = self.primer_stats(design.primers[1], False)
+            guide_stats = self.guide_thermo_stats(design.guides)
+            left_primer_stats = self.primer_thermo_stats(design.primers[0], True)
+            right_primer_stats = self.primer_thermo_stats(design.primers[1], False)
             heterodimer = math.inf
-            for left_primer in design.primers[0]:
-                for right_primer in design.primers[1]:
+            all_oligos = [*design.primers[0], *design.primers[1],
+                *design.guides]
+            for i, oligo_i in enumerate(all_oligos):
+                for oligo_j in all_oligos[i:]:
                     new_hetero = primer3.calcHeterodimer(
-                        left_primer, right_primer,
-                        mv_conc=self.sodium*1000, dv_conc=self.magnesium*1000,
-                        dntp_conc=self.dNTP*1000,
+                        oligo_i, oligo_j, mv_conc=self.sodium*1000,
+                        dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
                         dna_conc=self.oligo_concentration*10**9)
                     if heterodimer >= new_hetero.dg/1000:
                         heterodimer = new_hetero.dg/1000
-            all_primer_stats = [
+            delta_melting_temperature_primer_probe = None
+            if len(guide_stats[0]) > 0:
+                delta_melting_temperature_primer_probe = np.mean(
+                    [np.mean(left_primer_stats[0]),
+                     np.mean(right_primer_stats[0])]) - np.mean(guide_stats[0])
+            all_oligo_stats = [
                 heterodimer,
                 abs(np.mean(left_primer_stats[0]) -
-                    np.mean(right_primer_stats[0]))
+                    np.mean(right_primer_stats[0])),
+                delta_melting_temperature_primer_probe
             ]
-            primer_stats[design_id] = (left_primer_stats, right_primer_stats,
-                all_primer_stats)
-        return primer_stats
+            thermo_stats[design_id] = (guide_stats, left_primer_stats,
+                right_primer_stats, all_oligo_stats)
+        return thermo_stats
 
     def per_seq_guide(self):
         """Determine the per sequence score of guides from each design.
@@ -740,8 +833,9 @@ class CoverageAnalyzer:
             scores[design_id] = self.scores_where_guide_binds(design.guides)
         return scores
 
-    def per_seq_primer_mismatches(self):
-        """Determine the per sequence mismatches of primers from each design.
+    def per_seq_primers(self):
+        """Determine the per sequence melting temperature of primers from each
+        design.
 
         Returns:
             tuple of two dicts (first for the left, second for the right)
@@ -751,48 +845,15 @@ class CoverageAnalyzer:
                                      best primer sequence,
                                      start position)}
         """
-        left_mismatches = {}
-        right_mismatches = {}
+        left_scores = {}
+        right_scores = {}
         for design_id, design in self.designs.items():
-            logger.info(("Computing per sequence mismatches of primers in design "
+            logger.info(("Computing per sequence scores of primers in design "
                 "'%s'"), str(design_id))
-            if self.primer_terminal_mismatches is None:
-                def bind_fn(seq, target_seq, pos, save=None):
-                    return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
-                        self.primer_mismatches, False, save=save)
-                left_bind_fn = bind_fn
-                right_bind_fn = bind_fn
-            else:
-                def left_bind_fn(seq, target_seq, pos, save=None):
-                    return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
-                        seq, target_seq, pos, self.primer_mismatches,
-                        self.primer_terminal_mismatches,
-                        self.bases_from_terminal, True, allow_gu_pairs=False,
-                        save=save)
-                def right_bind_fn(seq, target_seq, pos, save=None):
-                    return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
-                        seq, target_seq, pos, self.primer_mismatches,
-                        self.primer_terminal_mismatches,
-                        self.bases_from_terminal, False, allow_gu_pairs=False,
-                        save=save)
-            left_mismatches[design_id] = self.scores_where_oligo_binds(
-                design.primers[0], left_bind_fn)
-            right_mismatches[design_id] = self.scores_where_oligo_binds(
-                design.primers[1], right_bind_fn)
-        return (left_mismatches, right_mismatches)
-
-    def per_seq_primer_melting_temperatures(self):
-        left_tms = {}
-        right_tms = {}
-        for design_id, design in self.designs.items():
-            logger.info(("Computing per sequence melting temperatures of "
-                "primers in design '%s'"), str(design_id))
             left_bind_fn, right_bind_fn = self.primer_bind_fns()
-            left_tms[design_id] = self.scores_where_oligo_binds(
-                design.primers[0], left_bind_fn, 'max')
-            right_tms[design_id] = self.scores_where_oligo_binds(
-                design.primers[1], right_bind_fn, 'max')
-        return (left_tms, right_tms)
+            left_scores[design_id], right_scores[design_id] = \
+                self.scores_where_primers_binds(*design.primers)
+        return (left_scores, right_scores)
 
 
 class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
@@ -801,7 +862,7 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
     """
 
     def __init__(self, seqs, designs, guide_mismatches, allow_gu_pairs=True,
-            **kwargs):
+            guide_melting_temperature_variation=None, **kwargs):
         """
         Args:
             seqs: dict mapping sequence name to sequence; checks coverage of the
@@ -811,11 +872,15 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
                 whether a guide hybridizes to a target sequence
             allow_gu_pairs: if True, tolerate G-U base pairs between a guide
                 and target when computing whether a guide binds
+            guide_melting_temperature_variation: largest acceptable difference
+                in melting temperature between the perfectly matched guide
+                binding and the guide binding to a given sequence
             kwargs: keyword arguments from CoverageAnalyzer
         """
         super().__init__(seqs, designs, **kwargs)
         self.guide_mismatches = guide_mismatches
         self.allow_gu_pairs = allow_gu_pairs
+        self.guide_melting_temperature_variation = guide_melting_temperature_variation
 
     def scores_where_guide_binds(self, guide_seqs):
         """Determine mismatch scores across the target sequences.
@@ -828,8 +893,11 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
                                     best guide sequence,
                                     start position)}
         """
+        if self.guide_melting_temperature_variation is not None:
+            return self.scores_where_oligo_binds(guide_seqs, self.guide_bind_fn,
+                obj_type='max')
         return self.scores_where_oligo_binds(guide_seqs, self.guide_bind_fn,
-                                             obj_type='min')
+            obj_type='min')
 
     def guide_bind_fn(self, seq, target_seq, pos, save=None):
         """Evaluate binding with a mismatch model.
@@ -843,6 +911,11 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
         Returns:
             set of positions in pos where seq binds to target_seq
         """
+        if self.guide_melting_temperature_variation is not None:
+            pos_mm_filter = self.evaluate_pos_by_mismatches(seq,
+                target_seq, pos, self.guide_mismatches, False, save=save)
+            return self.evaluate_pos_by_thermo(seq, target_seq,
+                pos_mm_filter, True, save=save)
         return self.evaluate_pos_by_mismatches(seq, target_seq,
                 pos, self.guide_mismatches, self.allow_gu_pairs, save=save)
 
@@ -947,7 +1020,7 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
                     pairs_to_evaluate)
             if save is not None:
                 for i, p in zip(pos_evaluating, predictions):
-                    save[i] = (p, )
+                    save[i] = [p]
             predictions = [bool(p > 0) for p in predictions]
         bind_pos = set()
         for i, p in zip(pos_evaluating, predictions):

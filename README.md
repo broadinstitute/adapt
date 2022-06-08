@@ -65,13 +65,17 @@ ADAPT requires:
 * [NumPy](http://www.numpy.org) &gt;= 1.16.0, &lt; 1.19.0
 * [SciPy](https://www.scipy.org) == 1.4.1
 * [TensorFlow](https://www.tensorflow.org) == 2.3.2
+
+Using the thermodynamic modules of ADAPT requires:
 * [Primer3-py](https://libnano.github.io/primer3-py) == 0.6.1
 
 Using ADAPT with AWS cloud features additionally requires:
 * [Boto3](https://aws.amazon.com/sdk-for-python/) &gt;= 1.14.54
 * [Botocore](https://botocore.amazonaws.com/v1/documentation/api/latest/index.html) &gt;= 1.17.54
 
-Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed. Installing ADAPT with `pip` using the AWS cloud features, as described below, will install Boto3 and Botocore if they are not already installed as well.
+Installing ADAPT with `pip`, as described below, will install NumPy, SciPy, and TensorFlow if they are not already installed.
+Installing ADAPT with `pip` with the thermodynamic modules, as described below, will install Primer3-py if it is not already installed as well.
+Installing ADAPT with `pip` using the AWS cloud features, as described below, will install Boto3 and Botocore if they are not already installed as well.
 
 If using alignment features in subcommands below, ADAPT also requires a path to an executable of [MAFFT](https://mafft.cbrc.jp/alignment/software/).
 
@@ -109,18 +113,34 @@ Before installing ADAPT via Bioconda, we suggest you follow the instructions in 
 ```bash
 conda install -c bioconda adapt
 ```
+If you want to be able to use thermodynamic modules of ADAPT, run the following instead:
+```bash
+conda install -c bioconda "adapt[thermo]"
+```
 If you want to be able to use AWS cloud features through ADAPT, run the following instead:
 ```bash
 conda install -c bioconda "adapt[AWS]"
+```
+For both AWS and thermodynamics, run the following instead:
+```bash
+conda install -c bioconda "adapt[AWS,thermo]"
 ```
 
 Before installing ADAPT via PyPI, we suggest you follow the instructions in either the [Python documentation](https://docs.python.org/3/tutorial/venv.html) or [Setting up a conda environment](#setting-up-a-conda-environment) to set up and activate a virtual environment for ADAPT. To install via PyPI, run the following command:
 ```bash
 pip install adapt-diagnostics
 ```
+If you want to be able to use thermodynamic modules of ADAPT, run the following instead:
+```bash
+pip install "adapt-diagnostics[thermo]"
+```
 If you want to be able to use AWS cloud features through ADAPT, run the following instead:
 ```bash
 pip install "adapt-diagnostics[AWS]"
+```
+For both AWS and thermodynamics, run the following instead:
+```bash
+pip install "adapt-diagnostics[AWS,thermo]"
 ```
 
 If you wish to modify ADAPT's code, ADAPT can be installed by cloning the repository and installing the package with `pip`:
@@ -131,9 +151,17 @@ pip install -e .
 ```
 Depending on your setup (i.e., if you do not have write permissions in the installation directory), you may need to supply `--user` to `pip install`.
 
+If you want to be able to use thermodynamic modules of ADAPT, replace the last line with the following:
+```bash
+pip install -e ".[thermo]"
+```
 If you want to be able to use AWS cloud features through ADAPT, replace the last line with the following:
 ```bash
 pip install -e ".[AWS]"
+```
+For both AWS and thermodynamics, replace the last line with the following:
+```bash
+pip install -e ".[AWS,thermo]"
 ```
 
 ## Testing

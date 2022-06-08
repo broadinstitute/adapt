@@ -267,7 +267,6 @@ def binds(oligo_seq, target_seq, ideal_tm, delta_tm,
       return False
     tm = calculate_melting_temp(oligo_seq, target_seq, reverse_oligo,
         sodium, magnesium, dNTP, oligo_concentration, target_concentration)
-    logging.info(abs(ideal_tm - tm))
     return abs(ideal_tm - tm) <= delta_tm
 
 
