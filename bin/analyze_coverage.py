@@ -467,14 +467,14 @@ def run(args):
         if not no_guides:
             per_seq_guides = analyzer.per_seq_guide()
 
-        if args.primer_mismatches:
+        if args.primer_mismatches is not None:
             per_seq_primers = analyzer.per_seq_primers()
         else:
             no_primers = True
             per_seq_primers = None
             logger.warning("No primer evaluation was set and so primers will "
                 "not be analyzed. Use --primer-mismatches to evaluate "
-                "primers; --primer-terminal-mismatches and --primer-thermo"
+                "primers; --primer-terminal-mismatches and --primer-thermo "
                 "can be additionally used to filter primers.")
 
         if no_guides and no_primers:
@@ -547,7 +547,7 @@ def argv_to_args(argv):
 
     # Parameter determining whether a primer binds to target
     parser.add_argument('-pm', '--primer-mismatches',
-        type=int, default=0,
+        type=int,
         help=("Allow for this number of mismatches when determining "
               "whether a primer covers a sequence. (ignore this if "
               "the targets only consist of guides)"))

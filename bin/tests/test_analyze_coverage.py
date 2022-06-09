@@ -41,7 +41,7 @@ class TestAnalyzeCoverage(object):
     class TestAnalyzeCoverageCase(unittest.TestCase):
         def setUp(self):
             # Disable logging
-            logging.disable(logging.INFO)
+            logging.disable(logging.WARNING)
 
             # Create a temporary input files
             self.input_designs = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -126,8 +126,7 @@ class TestAnalyzeCoverage(object):
             Returns:
                 List of strings that are the arguments of the test
             """
-            argv = ['analyze_coverage.py',
-                    self.input_designs.name]
+            argv = ['analyze_coverage.py', self.input_designs.name, '-pm', '0']
 
             if use_accessions:
                 self.input_accs = tempfile.NamedTemporaryFile(mode='w', delete=False)
