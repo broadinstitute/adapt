@@ -850,7 +850,6 @@ class CoverageAnalyzer:
         for design_id, design in self.designs.items():
             logger.info(("Computing per sequence scores of primers in design "
                 "'%s'"), str(design_id))
-            left_bind_fn, right_bind_fn = self.primer_bind_fns()
             left_scores[design_id], right_scores[design_id] = \
                 self.scores_where_primers_binds(*design.primers)
         return (left_scores, right_scores)
