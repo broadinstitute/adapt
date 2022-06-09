@@ -235,7 +235,7 @@ class CoverageAnalyzer:
         return bind_pos
 
     def evaluate_pos_by_thermo(self, seq, target_seq, pos, left, save=None):
-        """Evaluate binding with a mismatch model.
+        """Evaluate binding with a thermodynamic model.
 
         Args:
             seq: guide or primer sequence to lookup
@@ -261,13 +261,15 @@ class CoverageAnalyzer:
                 bind_pos.add(i)
                 if save is not None:
                     if i in save:
+                        # If there is content in save already, put the melting
+                        # temperature in the list as the first element
                         save[i] = [thermo.calculate_melting_temp(seq,
                             target_subseq, (not left), self.sodium,
                             self.magnesium, self.dNTP,
                             self.oligo_concentration,
                             self.target_concentration)] + save[i]
-
                     else:
+                        # Otherwise, just add the melting temperature directly
                         save[i] = [thermo.calculate_melting_temp(seq,
                             target_subseq, (not left), self.sodium,
                             self.magnesium, self.dNTP,
@@ -276,11 +278,32 @@ class CoverageAnalyzer:
         return bind_pos
 
     def primer_bind_fns(self):
-        """
+        """Get the binding functions for the left and right primers
+
+        Returns:
+            tuple of (left primer binding function,
+                right primer binding function)
         """
         if self.primer_terminal_mismatches is not None:
             if self.primer_melting_temperature_variation is not None:
                 def primer_left_bind_fn(seq, target_seq, pos, save=None):
+                    """Determine whether primer detects target at positions.
+
+                    Treats seq as a forward primer and filters on mismatches,
+                    terminal mismatches, and melting temperature.
+
+                    Args:
+                        seq: guide or primer sequence to lookup
+                        target_seq: target sequence against which to check
+                        pos: list of positions indicating subsequence in
+                            target_seq to check for binding of seq
+                        save: if set, this saves binding scores as
+                            save[p]=[scores] for each p in pos for which
+                            this can compute scores
+
+                    Returns:
+                        set of positions in pos where seq binds to target_seq
+                    """
                     pos_mm_filter = self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches, self.bases_from_terminal,
@@ -288,6 +311,23 @@ class CoverageAnalyzer:
                     return self.evaluate_pos_by_thermo(seq, target_seq,
                         pos_mm_filter, True, save=save)
                 def primer_right_bind_fn(seq, target_seq, pos, save=None):
+                    """Determine whether primer detects target at positions.
+
+                    Treats seq as a reverse primer and filters on mismatches,
+                    terminal mismatches, and melting temperature.
+
+                    Args:
+                        seq: guide or primer sequence to lookup
+                        target_seq: target sequence against which to check
+                        pos: list of positions indicating subsequence in
+                            target_seq to check for binding of seq
+                        save: if set, this saves binding scores as
+                            save[p]=[scores] for each p in pos for which
+                            this can compute scores
+
+                    Returns:
+                        set of positions in pos where seq binds to target_seq
+                    """
                     pos_mm_filter = self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches, self.bases_from_terminal,
@@ -296,11 +336,45 @@ class CoverageAnalyzer:
                         pos_mm_filter, False, save=save)
             else:
                 def primer_left_bind_fn(seq, target_seq, pos, save=None):
+                    """Determine whether primer detects target at positions.
+
+                    Treats seq as a forward primer and filters on mismatches
+                    and terminal mismatches.
+
+                    Args:
+                        seq: guide or primer sequence to lookup
+                        target_seq: target sequence against which to check
+                        pos: list of positions indicating subsequence in
+                            target_seq to check for binding of seq
+                        save: if set, this saves binding scores as
+                            save[p]=[scores] for each p in pos for which
+                            this can compute scores
+
+                    Returns:
+                        set of positions in pos where seq binds to target_seq
+                    """
                     return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches, self.bases_from_terminal,
                         True, save=save)
                 def primer_right_bind_fn(seq, target_seq, pos, save=None):
+                    """Determine whether primer detects target at positions.
+
+                    Treats seq as a reverse primer and filters on mismatches
+                    and terminal mismatches.
+
+                    Args:
+                        seq: guide or primer sequence to lookup
+                        target_seq: target sequence against which to check
+                        pos: list of positions indicating subsequence in
+                            target_seq to check for binding of seq
+                        save: if set, this saves binding scores as
+                            save[p]=[scores] for each p in pos for which
+                            this can compute scores
+
+                    Returns:
+                        set of positions in pos where seq binds to target_seq
+                    """
                     return self.evaluate_pos_by_terminal_mismatches_and_total_mismatches(
                         seq, target_seq, pos, self.primer_mismatches,
                         self.primer_terminal_mismatches, self.bases_from_terminal,
@@ -308,17 +382,67 @@ class CoverageAnalyzer:
         else:
             if self.primer_melting_temperature_variation is not None:
                 def primer_left_bind_fn(seq, target_seq, pos, save=None):
+                    """Determine whether primer detects target at positions.
+
+                    Treats seq as a forward primer and filters on mismatches
+                    and melting temperature.
+
+                    Args:
+                        seq: guide or primer sequence to lookup
+                        target_seq: target sequence against which to check
+                        pos: list of positions indicating subsequence in
+                            target_seq to check for binding of seq
+                        save: if set, this saves binding scores as
+                            save[p]=[scores] for each p in pos for which
+                            this can compute scores
+
+                    Returns:
+                        set of positions in pos where seq binds to target_seq
+                    """
                     pos_mm_filter = self.evaluate_pos_by_mismatches(seq,
                         target_seq, pos, self.primer_mismatches, False, save=save)
                     return self.evaluate_pos_by_thermo(seq, target_seq,
                         pos_mm_filter, True, save=save)
                 def primer_right_bind_fn(seq, target_seq, pos, save=None):
+                    """Determine whether primer detects target at positions.
+
+                    Treats seq as a reverse primer and filters on mismatches
+                    and melting temperature.
+
+                    Args:
+                        seq: guide or primer sequence to lookup
+                        target_seq: target sequence against which to check
+                        pos: list of positions indicating subsequence in
+                            target_seq to check for binding of seq
+                        save: if set, this saves binding scores as
+                            save[p]=[scores] for each p in pos for which
+                            this can compute scores
+
+                    Returns:
+                        set of positions in pos where seq binds to target_seq
+                    """
                     pos_mm_filter = self.evaluate_pos_by_mismatches(seq,
                         target_seq, pos, self.primer_mismatches, False, save=save)
                     return self.evaluate_pos_by_thermo(seq, target_seq,
                         pos_mm_filter, False, save=save)
             else:
                 def primer_bind_fn(seq, target_seq, pos, save=None):
+                    """Determine whether primer detects target at positions.
+
+                    Filters on mismatches.
+
+                    Args:
+                        seq: guide or primer sequence to lookup
+                        target_seq: target sequence against which to check
+                        pos: list of positions indicating subsequence in
+                            target_seq to check for binding of seq
+                        save: if set, this saves binding scores as
+                            save[p]=[scores] for each p in pos for which
+                            this can compute scores
+
+                    Returns:
+                        set of positions in pos where seq binds to target_seq
+                    """
                     return self.evaluate_pos_by_mismatches(seq, target_seq, pos,
                         self.primer_mismatches, False, save=save)
                 primer_left_bind_fn = primer_bind_fn
@@ -469,23 +593,27 @@ class CoverageAnalyzer:
         return target_scores
 
     def scores_where_primers_binds(self, left_primer_seqs, right_primer_seqs):
-        """Determine mismatch scores across the target sequences.
+        """Determine primer scores across the target sequences.
 
         Args:
-            guide_seqs: guide sequences to lookup (treat as a guide set)
+            left_primer_seqs: left primers sequences (treat as a set)
+            right_primer_seqs: right primers sequences (treat as a set)
 
         Returns:
-            dict {target seq name: ((number of mismatches, ),
-                                    best guide sequence,
-                                    start position)}
+            tuple of two dicts (first for the left, second for the right)
+            that contain: {target seq in self.seqs: (primer scores,
+                                                     best primer sequence,
+                                                     start position)}
         """
         left_bind_fn, right_bind_fn = self.primer_bind_fns()
         if self.primer_melting_temperature_variation:
+            # The highest melting temperature is the perfect match binding
             left_scores = self.scores_where_oligo_binds(
                 left_primer_seqs, left_bind_fn, 'max')
             right_scores = self.scores_where_oligo_binds(
                 right_primer_seqs, right_bind_fn, 'max')
         else:
+            # Scores are based on mismatches
             left_scores = self.scores_where_oligo_binds(
                 left_primer_seqs, left_bind_fn, 'min')
             right_scores = self.scores_where_oligo_binds(
@@ -493,7 +621,7 @@ class CoverageAnalyzer:
         return (left_scores, right_scores)
 
     def scores_where_guide_binds(self, guide_seqs):
-        """Determine scores across the target sequences.
+        """Determine guide scores across the target sequences.
 
         Args:
             guide_seqs: guide sequences to lookup (treat as a guide set)
@@ -731,26 +859,50 @@ class CoverageAnalyzer:
             frac_bound[design_id] = float(len(seqs_bound)) / len(self.seqs)
         return frac_bound
 
-    def primer_thermo_stats(self, primer_set, left):
-        """
+    def primer_thermo_stats(self, primer_list, left):
+        """Get the thermodynamic statistics of the primers
+
+        Does not look at variation; just gets the thermodynamics of the primers
+        as oligos
+
+        Args:
+            primer_list: list of primers to analyze
+            left: True if the primers are forward/left primers; False if the
+                primers are reverse/right primers
+
+        Returns:
+            list of 5 lists. Each interior list uses the same ordering as the
+            primer list given. The first contains perfect match melting
+            temperatures; the second contains the fraction of bases that are
+            G/C; the third contains the fraction of the last 6 bases that are
+            G/C (to check for a GC clamp); the fourth contains the free energy
+            of any hairpin structures at 37°C; the fifth contains the free
+            energy of any homodimers at 37°C
         """
         if not thermo_props:
             raise Exception("Primer3-py is not installed. Please install "
                 "primer3-py==0.6.1")
         primer_stats = [[], [], [], [], []]
-        for primer in primer_set:
+        for primer in primer_list:
+            # Tm
             primer_stats[0].append(thermo.calculate_melting_temp(primer,
                 primer, (not left), self.sodium, self.magnesium, self.dNTP,
                 self.oligo_concentration, self.target_concentration) - 273.15)
+            # GC frac
             primer_stats[1].append(thermo.gc_frac(primer))
+            # GC clamp
             if left:
                 primer_stats[2].append(thermo.gc_frac(primer[-min(6, len(primer)):]))
             else:
                 primer_stats[2].append(thermo.gc_frac(primer[:min(6, len(primer))]))
+            # Hairpin
+            # calcHairpin outputs delta G as cals; output as kcals
             primer_stats[3].append(primer3.calcHairpin(
                 primer, mv_conc=self.sodium*1000,
                 dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
                 dna_conc=self.oligo_concentration*10**9).dg/1000)
+            # Homodimer
+            # calcHomodimer outputs delta G as cals; output as kcals
             primer_stats[4].append(primer3.calcHomodimer(
                 primer, mv_conc=self.sodium*1000,
                 dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
@@ -758,21 +910,41 @@ class CoverageAnalyzer:
         return primer_stats
 
     def guide_thermo_stats(self, guide_set):
-        """
+        """Get the thermodynamic statistics of the guides
+
+        Does not look at variation; just gets the thermodynamics of the guides
+        as oligos
+
+        Args:
+            guide_list: list of guides to analyze
+
+        Returns:
+            list of 4 lists. Each interior list uses the same ordering as the
+            guide list given. The first contains perfect match melting
+            temperatures; the second contains the fraction of bases that are
+            G/C; the third contains the free energy of any hairpin structures
+            at 37°C; the fifth contains the free energy of any homodimers
+            at 37°C
         """
         if not thermo_props:
             raise Exception("Primer3-py is not installed. Please install "
                 "primer3-py==0.6.1")
         guide_stats = [[], [], [], []]
         for guide in guide_set:
+            # Tm
             guide_stats[0].append(thermo.calculate_melting_temp(guide,
                 guide, False, self.sodium, self.magnesium, self.dNTP,
                 self.oligo_concentration, self.target_concentration) - 273.15)
+            # GC frac
             guide_stats[1].append(thermo.gc_frac(guide))
+            # Hairpin
+            # calcHairpin outputs delta G as cals; output as kcals
             guide_stats[2].append(primer3.calcHairpin(
                 guide, mv_conc=self.sodium*1000,
                 dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
                 dna_conc=self.oligo_concentration*10**9).dg/1000)
+            # Homodimer
+            # calcHomodimer outputs delta G as cals; output as kcals
             guide_stats[3].append(primer3.calcHomodimer(
                 guide, mv_conc=self.sodium*1000,
                 dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
@@ -780,7 +952,21 @@ class CoverageAnalyzer:
         return guide_stats
 
     def thermo_stats(self):
-        """
+        """Get the thermodynamic statistics of the designs
+
+        Does not look at variation; just gets the thermodynamics of the oligos
+        in the assay
+
+        Returns:
+            dict mapping design identifier (self.designs.keys()) to a tuple of
+            (guide thermodynamic statistics, left primer thermodynamic
+            statistics, right primer thermodynamic statistics, cross oligo
+            thermodynamic statistics). Guide thermodynamic statistics is the
+            output of guide_thermo_stats; primer thermodynamic statistics are
+            the outputs of primer_thermo_stats. Cross oligo stats is a list of
+            [free energy of heterodimers at 37°C, difference in melting
+            temperature between primers, difference in melting temperature
+            between the primer and the guide]
         """
         if not thermo_props:
             raise Exception("Primer3-py is not installed. Please install "
@@ -797,6 +983,7 @@ class CoverageAnalyzer:
                 *design.guides]
             for i, oligo_i in enumerate(all_oligos):
                 for oligo_j in all_oligos[i:]:
+                    # calcHeterodimer outputs delta G as cals; output as kcals
                     new_hetero = primer3.calcHeterodimer(
                         oligo_i, oligo_j, mv_conc=self.sodium*1000,
                         dv_conc=self.magnesium*1000, dntp_conc=self.dNTP*1000,
@@ -808,14 +995,14 @@ class CoverageAnalyzer:
                 delta_melting_temperature_primer_probe = np.mean(
                     [np.mean(left_primer_stats[0]),
                      np.mean(right_primer_stats[0])]) - np.mean(guide_stats[0])
-            all_oligo_stats = [
+            cross_oligo_stats = [
                 heterodimer,
                 abs(np.mean(left_primer_stats[0]) -
                     np.mean(right_primer_stats[0])),
                 delta_melting_temperature_primer_probe
             ]
             thermo_stats[design_id] = (guide_stats, left_primer_stats,
-                right_primer_stats, all_oligo_stats)
+                right_primer_stats, cross_oligo_stats)
         return thermo_stats
 
     def per_seq_guide(self):
@@ -834,16 +1021,14 @@ class CoverageAnalyzer:
         return scores
 
     def per_seq_primers(self):
-        """Determine the per sequence melting temperature of primers from each
-        design.
+        """Determine the per sequence scores of primers from each design.
 
         Returns:
             tuple of two dicts (first for the left, second for the right)
             mapping design identifier (self.designs.keys()) to a
-            dict {target seq name: ((primer mismatches,
-                                     (optional) primer terminal mismatchs),
-                                     best primer sequence,
-                                     start position)}
+            dict {target seq name: (primer scores,
+                                    best primer sequence,
+                                    start position)}
         """
         left_scores = {}
         right_scores = {}
@@ -906,6 +1091,9 @@ class CoverageAnalyzerWithMismatchModel(CoverageAnalyzer):
             target_seq: target sequence against which to check
             pos: list of positions indicating subsequence in target_seq
                 to check for binding of seq
+            save: if set, this saves binding scores as
+                save[p]=[scores] for each p in pos for which
+                this can compute scores
 
         Returns:
             set of positions in pos where seq binds to target_seq
@@ -983,9 +1171,9 @@ class CoverageAnalyzerWithPredictedActivity(CoverageAnalyzer):
             target_seq: target sequence against which to check
             pos: list of positions indicating subsequence in target_seq
                 to check for binding of seq
-            save: if set, this saves computed activities as
-                save[p]=activity for each p in pos for which
-                this can compute activity; self.highly_active must be False
+            save: if set, this saves binding scores as
+                save[p]=[scores] for each p in pos for which
+                this can compute scores; self.highly_active must be False
 
         Returns:
             set of positions in pos where seq binds to target_seq

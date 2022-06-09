@@ -85,7 +85,18 @@ def read_accessions(fn):
 
 
 def write_thermo_stats(designs, thermo_stats, out_fn):
-    """
+    """Write table giving thermodynamic statistics of the oligos in an assay.
+
+    Args:
+        designs: dict {design_id: design} where design_id is an
+            identifier for design and design is a coverage_analysis.
+            Design object
+        thermo_stats: dict {design_id: design_thermo_stats}} where design_id is
+            an identifier for a design and design_thermo_stats is the output
+            of CoverageAnalyzer.thermo_stats (a tuple of (guide thermo stats,
+            left primer thermo stats, right primer thermo stats, cross oligo
+            thermo stats))
+        out_fn: path to TSV file at which to write table
     """
     header = ['design_id',
               'guide-target-sequences',
@@ -543,7 +554,10 @@ def argv_to_args(argv):
               "which to write the table. If set, a predictive model must be "
               "set without --predict-activity-require-highly-active"))
     parser.add_argument('--write-thermo-stats',
-        help=(""))
+        help=("If set, write a table in which each row represents an "
+              "input design and gives the thermodynamic statistics of the "
+              "oligos used by the design. This is particularly useful for "
+              "checking PCR primers and qPCR probe sequences."))
 
     # Parameter determining whether a primer binds to target
     parser.add_argument('-pm', '--primer-mismatches',
@@ -566,13 +580,14 @@ def argv_to_args(argv):
     parser.add_argument('-pt', '--primer-thermo',
         action='store_true',
         help=("If set, in addition to using mismatches, use a thermodynamic "
-              "model to determine whether primers cover a sequence."))
+              "model to determine whether primers cover a sequence. This is "
+              "particularly useful for PCR primers."))
     parser.add_argument('--primer-melting-temperature-variation',
         type=int, default=20,
         help=("Allow for at most PRIMER_MELTING_TEMPERATURE_VARIATION°C "
               "deviation from the perfect match primer's melting temperature "
               "for a sequence to be considered 'bound' still."
-              "Default is 20°C"))
+              "Default is 20°C. Only used if --primer-thermo is set."))
     # Parameters determining whether a guide binds to target based on
     # mismatch model
     parser.add_argument('-gm', '--guide-mismatches',
@@ -593,13 +608,14 @@ def argv_to_args(argv):
     parser.add_argument('-gt', '--guide-thermo',
         action='store_true',
         help=("If set, in addition to using mismatches, use a thermodynamic "
-              "model to determine whether guides cover a sequence."))
+              "model to determine whether guides cover a sequence. This is "
+              "particularly useful for qPCR probes."))
     parser.add_argument('--guide-melting-temperature-variation',
         type=int, default=20,
         help=("Allow for at most GUIDE_MELTING_TEMPERATURE_VARIATION°C "
               "deviation from the perfect match primer's melting temperature "
               "for a sequence to be considered 'bound' still."
-              "Default is 20°C"))
+              "Default is 20°C. Only used if --guide-thermo is set."))
     # Set thermodynamic parameters
     parser.add_argument('-na', '--sodium-conc', type=float, default=5e-2,
         help=("Concentration of sodium (in mol/L). Can be used for the "
