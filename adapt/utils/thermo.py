@@ -490,6 +490,13 @@ def _delta_g_from_h_s(h, s, t=310.15):
     return h - t * s
 
 
+def _avg_delta_h_s(thermo_table, w, x, z):
+    return np.mean([np.mean([np.mean([thermo_table[w_i][x_j][z_k]
+                                   for w_i in FASTA_CODES[w]], axis=0)
+                          for x_j in FASTA_CODES[x]], axis=0)
+                 for z_k in FASTA_CODES[z]], axis=0)
+
+
 def binds(oligo_seq, target_seq, ideal_tm, delta_tm,
         reverse_oligo=False, sodium=5e-2, magnesium=0, dNTP=0,
         oligo_concentration=3e-7, target_concentration=0):
@@ -802,9 +809,9 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=5e-2,
         if prev_match is None:
             prev_match = is_complement(w, y) == 1
         if prev_match:
-            return (thermo_prev_match[w][x][z], curr_match)
+            return (_avg_delta_h_s(thermo_prev_match, w, x, z), curr_match)
         elif curr_match:
-            return (DNA_DNA_INTERNAL[z][y][w], curr_match)
+            return (_avg_delta_h_s(DNA_DNA_INTERNAL, z, y, w), curr_match)
         else:
             raise DoubleMismatchesError("delta H/S cannot be calculated with "
                                         "two mismatches next to each other.")
