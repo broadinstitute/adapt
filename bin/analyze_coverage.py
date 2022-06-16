@@ -616,7 +616,7 @@ def argv_to_args(argv):
               "deviation from the perfect match primer's melting temperature "
               "for a sequence to be considered 'bound' still."
               "Default is 20°C. Only used if --guide-thermo is set."))
-    # Set thermodynamic parameters
+    # Set thermodynamic conditions
     parser.add_argument('-na', '--sodium-conc', type=float, default=5e-2,
         help=("Concentration of sodium (in mol/L). Can be used for the "
               "concentration of all monovalent cations. Only used if "
