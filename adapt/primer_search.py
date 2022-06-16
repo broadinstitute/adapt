@@ -16,7 +16,7 @@ class PrimerResult:
     """Store results of a primer cover at a site."""
 
     def __init__(self, start, num_primers, primer_length, frac_bound,
-            primers_in_cover):
+            primers_in_cover, obj_value):
         """
         Args:
             start: start position of the primer
@@ -31,6 +31,7 @@ class PrimerResult:
         self.primer_length = primer_length
         self.frac_bound = frac_bound
         self.primers_in_cover = primers_in_cover
+        self.obj_value = obj_value
 
     def overlaps(self, other, expand=0):
         """Determine if self overlaps other.
@@ -83,41 +84,29 @@ class PrimerResult:
                 self.primers_in_cover == other.primers_in_cover)
 
 
-class PrimerSearcherMinimizePrimers(search.OligoSearcherMinimizeNumber):
+class PrimerSearcher(search.OligoSearcher):
     """Methods to search for primers over a genome.
 
-    This is a special case of guide_search.GuideSearcherMinimizeGuides; thus, it
-    is a subclass of guide_search.GuideSearcherMinimizeGuides. This effectively
-    looks for guides (here, primers) within each window of size w
-    where w is the length of a primer.
+    This looks for oligos (here, primers) within each window of size w
+    where w is the maximum length of a primer.
 
-    The input is an alignment of sequences over which to search, as well as
-    parameters defining the space of acceptable primers.
+    This is a base class, with subclasses defining methods depending on the
+    oligo. It should not be used without subclassing, as it does not define
+    all the positional arguments necessary for search.OligoSearcher.
     """
 
-    def __init__(self, aln, primer_length, mismatches, cover_frac,
-            missing_data_params, primer_gc_content_bounds=None,
-            is_suitable_fns=[], **kwargs):
+    def __init__(self, primer_gc_content_bounds=None, pre_filter_fns=None,
+            **kwargs):
         """
         Args:
-            aln: alignment.Alignment representing an alignment of sequences
-            primer_length: length of the primer to construct
-            mismatches: threshold on number of mismatches for determining whether
-                a primer would hybridize to a target sequence
-            cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
-                 a primer; see seq_groups
-            missing_data_params: tuple (a, b, c) specifying to not attempt to
-                design guides overlapping sites where the fraction of
-                sequences with missing data is > min(a, max(b, c*m)), where m is
-                the median fraction of sequences with missing data over the
-                alignment
             primer_gc_content_bounds: a tuple (lo, hi) such that this only
                 yields sites where all primers have a GC content fraction in
                 [lo, hi]; or None for no bounds
-            is_suitable_fns: if set, the value of this argument is a list
+            pre_filter_fns: if set, the value of this argument is a list
                 of functions f(x) such that this will only construct a primer x
                 for which each f(x) is True
         """
+        pre_filter_fns = pre_filter_fns if pre_filter_fns is not None else []
         if primer_gc_content_bounds:
             lo, hi = primer_gc_content_bounds
             assert lo <= hi
@@ -133,12 +122,9 @@ class PrimerSearcherMinimizePrimers(search.OligoSearcherMinimizeNumber):
                 """
                 gc_frac = oligo.gc_frac(primer_seq)
                 return (gc_frac >= lo and gc_frac <= hi)
-            is_suitable_fns = is_suitable_fns + [check_gc_content]
+            pre_filter_fns = pre_filter_fns + [check_gc_content]
 
-        super().__init__(aln=aln, min_oligo_length=primer_length,
-            max_oligo_length=primer_length, cover_frac=cover_frac,
-            mismatches=mismatches, missing_data_params=missing_data_params,
-            is_suitable_fns=is_suitable_fns, **kwargs)
+        super().__init__(pre_filter_fns=pre_filter_fns, **kwargs)
 
 
     def find_primers(self, max_at_site=None):
@@ -165,6 +151,10 @@ class PrimerSearcherMinimizePrimers(search.OligoSearcherMinimizeNumber):
             start, end, primers_in_cover = cover
             num_primers = len(primers_in_cover)
             frac_bound = self.total_frac_bound(primers_in_cover)
+            if self.obj_type == 'min':
+                obj_value = self.obj_value(primers_in_cover)
+            else:
+                obj_value = self.obj_value(start, end, primers_in_cover)
 
             # Check constraints
             if max_at_site is not None and num_primers > max_at_site:
@@ -172,4 +162,71 @@ class PrimerSearcherMinimizePrimers(search.OligoSearcherMinimizeNumber):
 
             yield PrimerResult(
                 start, num_primers, window_size,
-                frac_bound, primers_in_cover)
+                frac_bound, primers_in_cover, obj_value)
+
+
+class PrimerSearcherMaximizeActivity(search.OligoSearcherMaximizeActivity,
+        PrimerSearcher):
+    """Methods to search for primers over a genome.
+
+    This looks for oligos (here, primers) within each window of size w
+    where w is the maximum length of a primer.
+
+    """
+
+    def __init__(self, aln, min_primer_length, max_primer_length,
+            soft_constraint, hard_constraint, penalty_strength,
+            missing_data_params, **kwargs):
+        """
+        Args:
+            missing_data_params: tuple (a, b, c) specifying to not attempt to
+                design oligos overlapping sites where the fraction of
+                sequences with missing data is > min(a, max(b, c*m), where m is
+                the median fraction of sequences with missing data over the
+                alignment
+            soft_constraint: number of oligos for the soft constraint
+            hard_constraint: number of oligos for the hard constraint
+            penalty_strength: coefficient in front of the soft penalty term
+                (i.e., its importance relative to expected activity)
+        """
+        super().__init__(aln=aln, min_oligo_length=min_primer_length,
+            max_oligo_length=max_primer_length, soft_constraint=soft_constraint,
+            hard_constraint=hard_constraint, penalty_strength=penalty_strength,
+            missing_data_params=missing_data_params, **kwargs)
+
+
+class PrimerSearcherMinimizePrimers(search.OligoSearcherMinimizeNumber,
+        PrimerSearcher):
+    """Methods to search for primers over a genome.
+
+    This looks for oligos (here, primers) within each window of size w
+    where w is the length of a primer.
+
+    The input is an alignment of sequences over which to search, as well as
+    parameters defining the space of acceptable primers.
+    """
+
+    def __init__(self, aln, primer_length, mismatches, cover_frac,
+            missing_data_params, primer_gc_content_bounds=None, **kwargs):
+        """
+        Args:
+            aln: alignment.Alignment representing an alignment of sequences
+            primer_length: length of the primer to construct
+            mismatches: threshold on number of mismatches for determining whether
+                a primer would hybridize to a target sequence
+            cover_frac: fraction in (0, 1] of sequences that must be 'captured' by
+                 a primer; see seq_groups
+            missing_data_params: tuple (a, b, c) specifying to not attempt to
+                design guides overlapping sites where the fraction of
+                sequences with missing data is > min(a, max(b, c*m)), where m is
+                the median fraction of sequences with missing data over the
+                alignment
+            primer_gc_content_bounds: a tuple (lo, hi) such that this only
+                yields sites where all primers have a GC content fraction in
+                [lo, hi]; or None for no bounds
+        """
+
+        super().__init__(aln=aln, min_oligo_length=primer_length,
+            max_oligo_length=primer_length, cover_frac=cover_frac,
+            mismatches=mismatches, missing_data_params=missing_data_params,
+            primer_gc_content_bounds=primer_gc_content_bounds, **kwargs)

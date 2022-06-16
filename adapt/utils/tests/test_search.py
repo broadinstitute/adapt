@@ -31,7 +31,7 @@ class TestOligoSearcher(unittest.TestCase):
         self.aln = alignment.Alignment.from_list_of_seqs(self.seqs)
 
         self.s = search.OligoSearcher(self.aln, 3, 5, (1, 1, 100),
-                                 predictor=PredictorTest())
+                predictor=PredictorTest(), obj_type='max')
 
         # Create a generic searcher that can have its alignment overriden
         # (for testing construct_oligo)
@@ -84,7 +84,7 @@ class TestOligoSearcher(unittest.TestCase):
         ignored_ranges = {(3, 8), (15, 19)}
 
         s = search.OligoSearcher(aln, 3, 5, (1, 1, 100),
-            ignored_ranges=ignored_ranges)
+            ignored_ranges=ignored_ranges, obj_type='max')
 
         # For each position i, encode 1 if the oligo (length 3, 4, or 5
         # respectively) starting at i overlaps a ignored range, and 0 otherwise
@@ -153,7 +153,7 @@ class TestOligoSearcher(unittest.TestCase):
 
     def test_find_oligos_for_each_window(self):
         s = OligoSearcherTest(self.aln, 3, 5, (1, 1, 100),
-                                     predictor=PredictorTest())
+                predictor=PredictorTest(), obj_type='max')
         olgs_win =  [(0, 7, {'CGAAT', 'ATC'}),
                      (1, 8, {'GAATT', 'TCG'}),
                      (2, 9, {'AATTC', 'CGA'}),
@@ -349,8 +349,8 @@ class TestOligoSearcher(unittest.TestCase):
                 return False
             else:
                 return True
-        prev_suitable_fns = self.gen_s.is_suitable_fns
-        self.gen_s.is_suitable_fns = prev_suitable_fns + [f]
+        prev_suitable_fns = self.gen_s.pre_filter_fns
+        self.gen_s.pre_filter_fns = prev_suitable_fns + [f]
 
         # Now the best oligo is 'CTACCA'
         olg, olg_seqs, score = self.gen_s.construct_oligo(0, oligo_length,
@@ -365,7 +365,7 @@ class TestOligoSearcher(unittest.TestCase):
                 return False
             else:
                 return True
-        self.gen_s.is_suitable_fns = prev_suitable_fns + [f]
+        self.gen_s.pre_filter_fns = prev_suitable_fns + [f]
 
         # Now there is no suitable oligo
         with self.assertRaises(search.CannotConstructOligoError):
@@ -393,14 +393,16 @@ class TestOligoSearcher(unittest.TestCase):
 
         # Only predict oligos starting with 'A' to be active
         class PredictorTest:
-            def __init__(self):
+            def __init__(self, start_base):
                 self.context_nt = 0
+                self.min_activity = 0
+                self.start_base = start_base
             def determine_highly_active(self, start_pos, pairs):
                 y = []
                 for target, oligo in pairs:
-                    y += [oligo[0] == 'A']
+                    y += [oligo[0] == self.start_base]
                 return y
-        self.gen_s.predictor = PredictorTest()
+        self.gen_s.predictor = PredictorTest('A')
         # Now the best oligo is 'ATACCA'
         olg, olg_seqs, score = self.gen_s.construct_oligo(0, oligo_length,
                                                           seqs_to_consider,
@@ -411,29 +413,11 @@ class TestOligoSearcher(unittest.TestCase):
 
         # Only predict oligos starting with 'A' to be active, and impose an
         # early stopping criterion
-        class PredictorTest:
-            def __init__(self):
-                self.context_nt = 0
-            def determine_highly_active(self, start_pos, pairs):
-                y = []
-                for target, oligo in pairs:
-                    y += [oligo[0] == 'A']
-                return y
-        self.gen_s.predictor = PredictorTest()
         # With early stopping, it will not find a oligo
         with self.assertRaises(search.CannotConstructOligoError):
             self.gen_s.construct_oligo(0, oligo_length, seqs_to_consider)
 
-        # Only predictor oligos starting with 'C' to be active
-        class PredictorTest:
-            def __init__(self):
-                self.context_nt = 0
-            def determine_highly_active(self, start_pos, pairs):
-                y = []
-                for target, oligo in pairs:
-                    y += [oligo[0] == 'C']
-                return y
-        self.gen_s.predictor = PredictorTest()
+        self.gen_s.predictor = PredictorTest('C')
         # Now there is no suitable oligo
         with self.assertRaises(search.CannotConstructOligoError):
             self.gen_s.construct_oligo(0, oligo_length, seqs_to_consider)
@@ -484,6 +468,7 @@ class TestOligoSearcher(unittest.TestCase):
 class PredictorTest:
     def __init__(self):
         self.context_nt = 1
+        self.min_activity = 0
 
     def compute_activity(self, start_pos, pairs):
         y = []

@@ -475,6 +475,18 @@ DNA_DNA_TERMINAL = {
 # kcal/mol K
 R_CONSTANT = .001987
 
+
+class Conditions:
+    """docstring for PCRConditions"""
+    def __init__(self, sodium=5e-2, magnesium=0, dNTP=0,
+        oligo_concentration=3e-7, target_concentration=0):
+        self.sodium = sodium
+        self.magnesium = magnesium
+        self.dNTP = dNTP
+        self.oligo_concentration = oligo_concentration
+        self.target_concentration = target_concentration
+
+
 def _delta_g_from_h_s(h, s, t=310.15):
     """Get free energy from enthalpy and entropy
 

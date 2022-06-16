@@ -27,7 +27,6 @@ class GuideSearcher(search.OligoSearcher):
     This is a base class, with subclasses defining methods depending on the
     objective. It should not be used without subclassing, as it does not define
     all the positional arguments necessary for search.OligoSearcher.
-
     """
     def __init__(self, guide_length, **kwargs):
         """

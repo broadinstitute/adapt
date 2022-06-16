@@ -25,10 +25,10 @@ logger = logging.getLogger(__name__)
 class TargetSearcher:
     """Methods to search for targets over a genome."""
 
-    def __init__(self, ps, gs, obj_type='min', max_primers_at_site=None,
+    def __init__(self, lps, rps, gs, obj_type='min', max_primers_at_site=None,
             max_target_length=None, obj_weights=None,
             only_account_for_amplified_seqs=False, halt_early=False,
-            obj_value_shift=None, mutator=None):
+            obj_value_shift=None, mutator=None, primer_set_filters=None):
         """
         Args:
             ps: PrimerSearcher object
@@ -65,12 +65,9 @@ class TargetSearcher:
             mutator: a adapt.utils.mutate Mutator object. If None (default),
                 do not predict activity after mutations.
         """
-        self.ps = ps
+        self.lps = lps
+        self.rps = rps
         self.gs = gs
-
-        if obj_type not in ['min', 'max']:
-            raise ValueError(("obj_type must be 'min' or 'max'"))
-        self.obj_type = obj_type
 
         self.max_primers_at_site = max_primers_at_site
         self.max_target_length = max_target_length if (max_target_length is not
@@ -103,26 +100,47 @@ class TargetSearcher:
                 self.obj_value_shift = 4.0
 
         self.mutator = mutator
+        self.primer_set_filters = primer_set_filters if primer_set_filters is not None else []
 
     def _find_primer_pairs(self):
-        """Find suitable primer pairs using self.ps.
+        """Find suitable primer pairs using self.lps and self.rps.
 
         Yields:
             tuple (p_i, p_j) where p_i is a tuple containing a
             primer_search.PrimerResult object, and likewise for p_j.
             The start position of p_j is > the start position of p_i.
         """
-        primers = list(self.ps.find_primers(
+        left_primers = list(self.lps.find_primers(
             max_at_site=self.max_primers_at_site))
-        for i in range(len(primers) - 1):
-            p1 = primers[i]
-            for j in range(i + 1, len(primers)):
-                p2 = primers[j]
+        if self.lps is self.rps:
+            right_primers = left_primers
+        else:
+            right_primers = list(self.rps.find_primers(
+            max_at_site=self.max_primers_at_site))
+        min_j = 0
+        for i in range(len(left_primers) - 1):
+            p1 = left_primers[i]
+            while (min_j < len(right_primers) and
+                   right_primers[min_j].start <= p1.start):
+                min_j += 1
+            if min_j >= len(right_primers):
+                break
+            for j in range(min_j, len(right_primers)):
+                p2 = right_primers[j]
                 target_length = p2.start + p2.primer_length - p1.start
                 if target_length > self.max_target_length:
                     # This is longer than allowed, so skip it and anything later
                     break
                 else:
+                    skip_primers = False
+                    for primer_set_filter in self.primer_set_filters:
+                        if primer_set_filter({*p1.primers_in_cover,
+                                *p2.primers_in_cover}) is False:
+                            # Skip these primers
+                            skip_primers = True
+                            break
+                    if skip_primers:
+                        continue
                     yield (p1, p2)
 
     def _find_mutated_activity(self, targets):
@@ -177,10 +195,10 @@ class TargetSearcher:
         # store each as a tuple ((+/-)obj_value, push_id, target)
         # The heap is a min heap, so popped values are the ones with
         # the smallest value in the first element
-        #   - When self.obj_type is 'min' we store -obj_value in the
+        #   - When self.gs.obj_type is 'min' we store -obj_value in the
         #     first element so that the one with the highest objective
         #     value (worst) is popped.
-        #   - When self.obj_type is 'max' we store +obj_value in
+        #   - When self.gs.obj_type is 'max' we store +obj_value in
         #     the first element so that the one with the smallest
         #     objective value (worst) is popped
         # In both cases, target_heap[0] refers to the target with the
@@ -192,22 +210,22 @@ class TargetSearcher:
         target_heap = []
         push_id_counter = itertools.count()
 
-        assert self.obj_type in ['min', 'max']
+        assert self.gs.obj_type in ['min', 'max']
         assert no_overlap in ['amplicon', 'primer', 'none']
         def obj_value(i):
             # Return objective value of the i'th element
-            if self.obj_type == 'min':
+            if self.gs.obj_type == 'min':
                 return -1 * target_heap[i][0]
-            elif self.obj_type == 'max':
+            elif self.gs.obj_type == 'max':
                 return target_heap[i][0]
 
         def obj_value_is_better(new, old):
             # Compare new objective value to old, and return True iff
             # new is better
-            if self.obj_type == 'min':
+            if self.gs.obj_type == 'min':
                 if new < old:
                     return True
-            elif self.obj_type == 'max':
+            elif self.gs.obj_type == 'max':
                 if new > old:
                     return True
             return False
@@ -254,9 +272,12 @@ class TargetSearcher:
             last_window_start = window_start
 
             # Calculate a cost of the primers
-            p1_num = p1.num_primers
-            p2_num = p2.num_primers
-            cost_primers = self.obj_weight_primers * (p1_num + p2_num)
+            p1_obj = p1.obj_value
+            p2_obj = p2.obj_value
+
+            cost_primers = self.obj_weight_primers * (p1_obj + p2_obj)
+            if self.lps.obj_type == 'max':
+                cost_primers *= -1
 
             # Calculate a cost of the window length
             cost_window = self.obj_weight_length * math.log2(window_length)
@@ -264,24 +285,24 @@ class TargetSearcher:
             # Calculate a best-case objective value for this target,
             # which can be done assuming a best-case for the guide search
             # This is useful for pruning the search
-            if self.obj_type == 'min':
+            if self.gs.obj_type == 'min':
                 best_possible_obj_value = (best_guide_obj_value +
                         cost_primers + cost_window)
-            elif self.obj_type == 'max':
+            elif self.gs.obj_type == 'max':
                 best_possible_obj_value = (best_guide_obj_value -
                         cost_primers - cost_window)
 
             # Check if we should bother trying to find guides in this window
             if len(target_heap) >= best_n:
                 curr_worst_obj_value = obj_value(0)
-                if self.obj_type == 'min':
+                if self.gs.obj_type == 'min':
                     if best_possible_obj_value >= curr_worst_obj_value:
                         # The objective value is already >= than all in the
                         # current best_n, and will only stay the same or get
                         # bigger after adding the term for guides, so there is
                         # no reason to continue considering this window
                         continue
-                elif self.obj_type == 'max':
+                elif self.gs.obj_type == 'max':
                     if best_possible_obj_value <= curr_worst_obj_value:
                         # The objective value is <= all in the current best_n
                         # even in the best-case outcome for the guide search,
@@ -357,8 +378,8 @@ class TargetSearcher:
                 # instance of GuideSearcherMinimizeGuides (i.e., not for
                 # MaximizeActivity -- mostly for technical implementation
                 # reasons)
-                p1_bound_seqs = self.ps.seqs_bound(p1.primers_in_cover)
-                p2_bound_seqs = self.ps.seqs_bound(p2.primers_in_cover)
+                p1_bound_seqs = self.lps.seqs_bound(p1.primers_in_cover)
+                p2_bound_seqs = self.rps.seqs_bound(p2.primers_in_cover)
                 primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
                 guide_seqs_to_consider = primer_bound_seqs
             else:
@@ -408,8 +429,8 @@ class TargetSearcher:
                                 activities=activities)
             else:
                 # There is no predictor to predict activities
-                # This should only be the case if self.obj_type is 'min',
-                # and may not necessarily be the case if self.obj_type is
+                # This should only be the case if self.gs.obj_type is 'min',
+                # and may not necessarily be the case if self.gs.obj_type is
                 # 'min'
                 activities = None
                 guides_activity_expected = math.nan
@@ -426,11 +447,11 @@ class TargetSearcher:
                     guides_activity_median, guides_activity_5thpctile)
 
             # Calculate a total objective value
-            if self.obj_type == 'min':
+            if self.gs.obj_type == 'min':
                 obj_value_total = (self.gs.obj_value(guides) +
                         cost_primers + cost_window)
                 obj_value_to_add = -1 * obj_value_total
-            elif self.obj_type == 'max':
+            elif self.gs.obj_type == 'max':
                 gs_obj_value = self.gs.obj_value(window_start, window_end,
                         guides, activities=activities)
                 obj_value_total = (gs_obj_value -
@@ -504,7 +525,7 @@ class TargetSearcher:
         # In particular, sort by a 'sort_tuple' whose first element is
         # objective_value and then the target endpoints; it has the target
         # endpoints to break ties in objective value
-        if self.obj_type == 'min':
+        if self.gs.obj_type == 'min':
             r = [(-obj_value, target) for obj_value, push_id, target in target_heap]
             r_with_sort_tuple = []
             for (obj_value, target) in r:
@@ -514,7 +535,7 @@ class TargetSearcher:
                 sort_tuple = (obj_value, target_start)
                 r_with_sort_tuple += [(sort_tuple, obj_value, target)]
             r_with_sort_tuple = sorted(r_with_sort_tuple, key=lambda x: x[0])
-        elif self.obj_type == 'max':
+        elif self.gs.obj_type == 'max':
             r = [(obj_value, target) for obj_value, push_id, target in target_heap]
             r_with_sort_tuple = []
             for (obj_value, target) in r:
@@ -634,8 +655,8 @@ class TargetSearcher:
                              for gd_seq in guides_seqs_sorted]
                 else:
                     # There is no predictor to predict activities
-                    # This should only be the case if self.obj_type is 'min',
-                    # and may not necessarily be the case if self.obj_type is
+                    # This should only be the case if self.gs.obj_type is 'min',
+                    # and may not necessarily be the case if self.gs.obj_type is
                     # 'min'
                     expected_activities_per_guide = \
                             [math.nan for gd_seq in guides_seqs_sorted]
