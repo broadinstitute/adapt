@@ -170,7 +170,6 @@ class OligoSearcher:
 
         if start in inner_dict:
             # The result has been memoized
-
             p_memoized = inner_dict[start]
 
             # p was compressed before memoizing it; decompress
@@ -181,7 +180,6 @@ class OligoSearcher:
                 p = self._decompress_result(p_memoized)
         else:
             # The result is not memoized; compute it and memoize it
-
             p = call_fn()
 
             if p is None:
@@ -1871,7 +1869,8 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         # Initialize an empty oligo set, with 0 activity against each
         # target sequence
         curr_oligo_set = set()
-        curr_activities = np.zeros(self.aln.num_sequences)
+        curr_activities = np.full(self.aln.num_sequences,
+            self.predictor.min_activity)
 
         def add_oligo(olg, olg_pos, olg_activities):
             # Add olg into curr_oligo_set and update curr_activities

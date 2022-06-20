@@ -116,7 +116,7 @@ class TargetSearcher:
             right_primers = left_primers
         else:
             right_primers = list(self.rps.find_primers(
-            max_at_site=self.max_primers_at_site))
+                max_at_site=self.max_primers_at_site))
         min_j = 0
         for i in range(len(left_primers) - 1):
             p1 = left_primers[i]

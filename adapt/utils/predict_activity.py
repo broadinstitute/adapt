@@ -444,7 +444,7 @@ class TmPredictor:
 
         self.key_fn = key_fn
 
-        self.min_activity = -max_delta_tm
+        self.min_activity = -self.ideal_tm
 
     def compute_activity(self, start_pos, pairs):
         """Compute a single activity measurement for pairs.

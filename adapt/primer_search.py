@@ -150,10 +150,11 @@ class PrimerSearcher(search.OligoSearcher):
                 window_size, hide_warnings=True):
             start, end, primers_in_cover = cover
             num_primers = len(primers_in_cover)
-            frac_bound = self.total_frac_bound(primers_in_cover)
             if self.obj_type == 'min':
+                frac_bound = self.total_frac_bound(primers_in_cover)
                 obj_value = self.obj_value(primers_in_cover)
             else:
+                frac_bound = self.total_frac_bound(start, end, primers_in_cover)
                 obj_value = self.obj_value(start, end, primers_in_cover)
 
             # Check constraints

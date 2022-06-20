@@ -828,11 +828,11 @@ def design_for_id(args):
                     oligo_concentration=args.oligo_conc,
                     target_concentration=args.target_conc)
                 left_primer_predictor = predict_activity.TmPredictor(
-                    args.ideal_primer_melting_temperature,
+                    args.ideal_primer_melting_temperature + 273.15,
                     args.primer_melting_temperature_variation,
                     conditions, False, shared_memo=shared_memo)
                 right_primer_predictor = predict_activity.TmPredictor(
-                    args.ideal_primer_melting_temperature,
+                    args.ideal_primer_melting_temperature + 273.15,
                     args.primer_melting_temperature_variation,
                     conditions, True, shared_memo=shared_memo)
 
@@ -860,7 +860,7 @@ def design_for_id(args):
                     aln, args.primer_length, args.primer_length,
                     args.soft_primer_constraint, args.hard_primer_constraint,
                     args.primer_penalty_strength, args.missing_thres,
-                    algorithm=args.maximization_algorithm,
+                    algorithm='greedy',
                     primer_gc_content_bounds=primer_gc_content_bounds,
                     post_filter_fns=post_filter_primers,
                     predictor=left_primer_predictor)
@@ -868,7 +868,7 @@ def design_for_id(args):
                     aln, args.primer_length, args.primer_length,
                     args.soft_primer_constraint, args.hard_primer_constraint,
                     args.primer_penalty_strength, args.missing_thres,
-                    algorithm=args.maximization_algorithm,
+                    algorithm='greedy',
                     primer_gc_content_bounds=primer_gc_content_bounds,
                     post_filter_fns=post_filter_primers,
                     predictor=right_primer_predictor)
