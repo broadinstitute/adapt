@@ -21,7 +21,7 @@ except ImportError:
 else:
     thermo_props = True
 
-__author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
+__author__ = 'Priya P. Pillai <ppillai@broadinstitute.org>'
 
 SEQS = OrderedDict()
 SEQS["genome_1"] = "AACTAG"
@@ -81,7 +81,7 @@ FAKE_DNA_DNA_SYM = (0, 0)
 
 FAKE_DNA_DNA_TERM_AT = (0, 0)
 
-# With 2 bp matching, delta H is -20 and delta S is 0.1. With the thermodynamic
+# With 2 bp matching, delta H is 20 and delta S is 0.1. With the thermodynamic
 # conditions set to not interfere, the melting temperature is delta H/delta S,
 # which is 200K (Note: this doesn't actually make sense in practice, as Tm
 # can't go below 0°C; this is a toy example to make testing easier)
@@ -320,37 +320,35 @@ class TestAnalyzeCoverageCases(TestAnalyzeCoverage.TestAnalyzeCoverageCase):
                     [0], [0], [0], [0]]
         self.check_results(self.write_per_seq.name, expected, 'right-primer-terminal-mismatches')
 
+    @unittest.skipUnless(thermo_props, 'Primer3-Py required for this test')
     def test_thermo_stats(self):
-        if thermo_props:
-            argv = super().baseArgv(thermo_stats=True)
-            expected = [[PERFECT_TM], [PERFECT_TM, PERFECT_TM]]
-            args = analyze_coverage.argv_to_args(argv)
-            analyze_coverage.run(args)
-            self.check_results(self.write_thermo_stats.name, expected, 'guide-ideal-melting-temperature')
-            self.check_results(self.write_thermo_stats.name, expected, 'left-primer-ideal-melting-temperature')
-            self.check_results(self.write_thermo_stats.name, expected, 'right-primer-ideal-melting-temperature')
-            expected = [[0], [0, 1]]
-            self.check_results(self.write_thermo_stats.name, expected, 'left-primer-gc-clamp')
-            self.check_results(self.write_thermo_stats.name, expected, 'right-primer-gc-clamp')
-            self.check_results(self.write_thermo_stats.name, expected, 'left-primer-gc')
-            expected = [[.5], [.5, 1]]
-            self.check_results(self.write_thermo_stats.name, expected, 'right-primer-gc')
-            expected = [[.5], [.5, .5]]
-            self.check_results(self.write_thermo_stats.name, expected, 'guide-gc')
-            expected = [[0], [0, 0]]
-            self.check_results(self.write_thermo_stats.name, expected, 'guide-hairpin')
-            self.check_results(self.write_thermo_stats.name, expected, 'guide-self-dimer')
-            self.check_results(self.write_thermo_stats.name, expected, 'left-primer-hairpin')
-            self.check_results(self.write_thermo_stats.name, expected, 'right-primer-hairpin')
-            # Primer3 outputs; cannot be simplified
-            self.check_results(self.write_thermo_stats.name, [[0], [0, -0.2644850000062052]], 'left-primer-self-dimer')
-            self.check_results(self.write_thermo_stats.name, [[0], [0, -0.19606500000620508]], 'right-primer-self-dimer')
-            self.check_results(self.write_thermo_stats.name, [[0], [-0.2644850000062052]], 'heterodimer')
-            expected = [[0], [0]]
-            self.check_results(self.write_thermo_stats.name, expected, 'delta-melting-temperature-primers')
-            self.check_results(self.write_thermo_stats.name, expected, 'delta-melting-temperature-primer-guide')
-        else:
-            return
+        argv = super().baseArgv(thermo_stats=True)
+        expected = [[PERFECT_TM], [PERFECT_TM, PERFECT_TM]]
+        args = analyze_coverage.argv_to_args(argv)
+        analyze_coverage.run(args)
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-ideal-melting-temperature')
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-ideal-melting-temperature')
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-ideal-melting-temperature')
+        expected = [[0], [0, 1]]
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-gc-clamp')
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-gc-clamp')
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-gc')
+        expected = [[.5], [.5, 1]]
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-gc')
+        expected = [[.5], [.5, .5]]
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-gc')
+        expected = [[0], [0, 0]]
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-hairpin')
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-self-dimer')
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-hairpin')
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-hairpin')
+        # Primer3 outputs; cannot be simplified
+        self.check_results(self.write_thermo_stats.name, [[0], [0, -0.2644850000062052]], 'left-primer-self-dimer')
+        self.check_results(self.write_thermo_stats.name, [[0], [0, -0.19606500000620508]], 'right-primer-self-dimer')
+        self.check_results(self.write_thermo_stats.name, [[0], [-0.2644850000062052]], 'heterodimer')
+        expected = [[0], [0]]
+        self.check_results(self.write_thermo_stats.name, expected, 'delta-melting-temperature-primers')
+        self.check_results(self.write_thermo_stats.name, expected, 'delta-melting-temperature-primer-guide')
 
     def test_accs(self):
         argv = super().baseArgv(use_accessions=True)
@@ -368,33 +366,31 @@ class TestAnalyzeCoverageCases(TestAnalyzeCoverage.TestAnalyzeCoverageCase):
                     [0], [0], [0], [0]]
         self.check_results(self.write_per_seq.name, expected, 'right-primer-mismatches')
 
+    @unittest.skipUnless(thermo_props, 'Primer3-Py required for this test')
     def test_thermo_model(self):
-        if thermo_props:
-            argv = super().baseArgv(thermo_model=True)
-            args = analyze_coverage.argv_to_args(argv)
-            analyze_coverage.run(args)
-            expected = [[0.25], [1]]
-            self.check_results(self.write_frac_bound.name, expected, 'frac-bound')
-            expected = [[0], ['None'], [0], [0],
-                        [0], [0], [0], [0]]
-            self.check_results(self.write_per_seq.name, expected, 'guide-mismatches')
-            expected = [[PERFECT_TM], ['None'], [PERFECT_TM], [PERFECT_TM],
-                        [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
-            self.check_results(self.write_per_seq.name, expected, 'guide-melting-temperature')
-            expected = [[0], [0], ['None'], [0],
-                        [0], [0], [0], [0]]
-            self.check_results(self.write_per_seq.name, expected, 'left-primer-mismatches')
-            expected = [[PERFECT_TM], [PERFECT_TM], ['None'], [PERFECT_TM],
-                        [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
-            self.check_results(self.write_per_seq.name, expected, 'left-primer-melting-temperature')
-            expected = [[0], ['None'], [0], ['None'],
-                        [0], [0], [0], [0]]
-            self.check_results(self.write_per_seq.name, expected, 'right-primer-mismatches')
-            expected = [[PERFECT_TM], ['None'], [PERFECT_TM], ['None'],
-                        [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
-            self.check_results(self.write_per_seq.name, expected, 'right-primer-melting-temperature')
-        else:
-            return
+        argv = super().baseArgv(thermo_model=True)
+        args = analyze_coverage.argv_to_args(argv)
+        analyze_coverage.run(args)
+        expected = [[0.25], [1]]
+        self.check_results(self.write_frac_bound.name, expected, 'frac-bound')
+        expected = [[0], ['None'], [0], [0],
+                    [0], [0], [0], [0]]
+        self.check_results(self.write_per_seq.name, expected, 'guide-mismatches')
+        expected = [[PERFECT_TM], ['None'], [PERFECT_TM], [PERFECT_TM],
+                    [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
+        self.check_results(self.write_per_seq.name, expected, 'guide-melting-temperature')
+        expected = [[0], [0], ['None'], [0],
+                    [0], [0], [0], [0]]
+        self.check_results(self.write_per_seq.name, expected, 'left-primer-mismatches')
+        expected = [[PERFECT_TM], [PERFECT_TM], ['None'], [PERFECT_TM],
+                    [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
+        self.check_results(self.write_per_seq.name, expected, 'left-primer-melting-temperature')
+        expected = [[0], ['None'], [0], ['None'],
+                    [0], [0], [0], [0]]
+        self.check_results(self.write_per_seq.name, expected, 'right-primer-mismatches')
+        expected = [[PERFECT_TM], ['None'], [PERFECT_TM], ['None'],
+                    [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
+        self.check_results(self.write_per_seq.name, expected, 'right-primer-melting-temperature')
 
     def test_model(self):
         argv = super().baseArgv(model=True)
