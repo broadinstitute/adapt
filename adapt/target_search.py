@@ -601,6 +601,7 @@ class TargetSearcher:
 
         # If the primer searcher uses the 'max' objective, this is using a
         # thermodynamic model for primers-output that information
+        primer_tm = False
         if self.lps.obj_type == 'max':
             primer_tm = True
 
