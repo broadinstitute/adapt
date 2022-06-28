@@ -12,6 +12,7 @@ from adapt.prepare import ncbi_neighbors
 from adapt.utils import log
 from adapt.utils import predict_activity
 from adapt.utils import seq_io
+from adapt.utils import thermo
 from adapt.utils.version import get_project_path, get_latest_model_version
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -36,7 +37,7 @@ def read_designs(fn):
     col_names = []
     with open(fn) as f:
         for i, line in enumerate(f):
-            line = line.rstrip('\n')
+            line = line.rstrip('\n\r ')
             ls = line.split('\t')
             if i == 0:
                 # Column is header
@@ -128,11 +129,15 @@ def write_thermo_stats(designs, thermo_stats, out_fn):
             left_primers = ' '.join(sorted(left_primers))
             right_primers = designs[design_id].primers[1]
             right_primers = ' '.join(sorted(right_primers))
+            # thermo_stats[design_id] is 4 lists: the guide stats, the
+            # left primer stats, the right primer stats, and the cross oligo
+            # stats. The * unpacks each of these lists
             row = [design_id,
                 guides, *thermo_stats[design_id][0],
                 left_primers, *thermo_stats[design_id][1],
                 right_primers, *thermo_stats[design_id][2],
                 *thermo_stats[design_id][3]]
+            assert len(row) == len(header)
             fw.write('\t'.join([str(x) for x in row]) + '\n')
 
 
@@ -282,33 +287,56 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
                         target_end = None
                     row.extend([target_start, target_end, target_length])
 
+                    # Make sure the primer statistics are formatted correctly
+                    # Depending on what model is used for primers, the number
+                    # of statistics outputted changes, so use indexing variable
                     stat_loc = 0
                     # Tm
                     if primer_thermo:
+                        # If it's 0 or None, make sure it's set to None
                         if not left_scores[stat_loc]:
                             left_scores[stat_loc] = None
+                            # The number of mismatches needs to be set to None
+                            # if it hasn't been
                             if len(left_scores) == 1:
                                 left_scores.append(None)
+                                # The number of terminal mismatches needs to be
+                                # set to None if using a terminal mismatch model
                                 if primer_terminal_mismatches:
                                     left_scores.append(None)
                         else:
-                            left_scores[stat_loc] = left_scores[stat_loc]-273.15
+                            # Otherwise, it's a real Tm
+                            # Convert from Kelvin to Celsius
+                            left_scores[stat_loc] = left_scores[stat_loc]-thermo.CELSIUS_TO_KELVIN
+                        # Repeat for the right primer
+                        # If it's 0 or None, make sure it's set to None
                         if not right_scores[stat_loc]:
                             right_scores[stat_loc] = None
+                            # The number of mismatches needs to be set to None
+                            # if it hasn't been
                             if len(right_scores) == 1:
                                 right_scores.append(None)
+                                # The number of terminal mismatches needs to be
+                                # set to None if using a terminal mismatch model
                                 if primer_terminal_mismatches:
                                     right_scores.append(None)
                         else:
-                            right_scores[stat_loc] = right_scores[stat_loc]-273.15
+                            # Otherwise, it's a real Tm
+                            # Convert from Kelvin to Celsius
+                            right_scores[stat_loc] = right_scores[stat_loc]-thermo.CELSIUS_TO_KELVIN
                         stat_loc += 1
-                    # Mismatches
+                    # Check mismatch formatting
+                    # If the mismatches are infinity (no binding), set to None
                     if left_scores[stat_loc] == math.inf:
                         left_scores[stat_loc] = None
+                        # If terminal mismatches need to be set to None, do so
                         if len(left_scores) == stat_loc + 1 and primer_terminal_mismatches:
                             left_scores.append(None)
+                    # Repeat for the right primer
+                    # If the mismatches are infinity (no binding), set to None
                     if right_scores[stat_loc] == math.inf:
                         right_scores[stat_loc] = None
+                        # If terminal mismatches need to be set to None, do so
                         if len(right_scores) == stat_loc + 1 and primer_terminal_mismatches:
                             right_scores.append(None)
 
@@ -318,17 +346,25 @@ def write_per_seq(designs, seqs, out_fn, per_seq_guides=None,
                 if per_seq_guides:
                     guide_scores, guide_target, guide_start = \
                         per_seq_guides[design_id][seq_name]
+                    # Make sure the guide statistics are formatted correctly
+                    # Depending on what model is used for the guide, the number
+                    # of statistics outputted changes, so use indexing variable
                     stat_loc = 0
+                    # Tm
                     if guide_thermo:
+                        # If it's 0 or None, make sure it's set to None
                         if not guide_scores[stat_loc]:
                             guide_scores[stat_loc] = None
+                            # The mismatches/activity score needs to be set to
+                            # None if it hasn't been
                             if len(guide_scores) == 1:
                                 guide_scores.append(None)
                         else:
-                            guide_scores[stat_loc] = guide_scores[stat_loc]-273.15
+                            guide_scores[stat_loc] = guide_scores[stat_loc]-thermo.CELSIUS_TO_KELVIN
                         stat_loc += 1
-
+                    # Either mismatches or activity score
                     if guide_scores[stat_loc] == guide_none:
+                        # If it matches the None value, set it to None
                         guide_scores[stat_loc] = None
                     row.extend([*guide_scores, guide_target, guide_start])
                 fw.write('\t'.join([str(x) for x in row]) + '\n')
@@ -356,6 +392,10 @@ def run(args):
     seqs = seq_io.read_fasta(seqs_fn, skip_gaps=True)
 
     primer_tm_variation = args.primer_melting_temperature_variation if args.primer_thermo else None
+    conditions = thermo.Conditions(sodium=args.pcr_sodium_conc,
+        magnesium=args.pcr_magnesium_conc, dNTP=args.pcr_dntp_conc,
+        oligo_concentration=args.pcr_oligo_conc,
+        target_concentration=args.pcr_target_conc)
     if (args.guide_mismatches is not None) and args.predict_activity_model_path:
         raise Exception(("Cannot set both --guide-mismatches and "
             "--predict-activity-model-path. Choose --guide-mismatches "
@@ -374,9 +414,7 @@ def run(args):
                 primer_terminal_mismatches=args.primer_terminal_mismatches,
                 bases_from_terminal=args.bases_from_terminal,
                 max_target_length=args.max_target_length,
-                sodium=args.sodium_conc, magnesium=args.magnesium_conc,
-                dNTP=args.dntp_conc, oligo_concentration=args.oligo_conc,
-                target_concentration=args.target_conc)
+                conditions=conditions)
     elif args.predict_activity_model_path or args.predict_cas13a_activity_model is not None:
         if args.predict_activity_model_path:
             cla_path, reg_path = args.predict_activity_model_path
@@ -421,9 +459,7 @@ def run(args):
                 bases_from_terminal=args.bases_from_terminal,
                 max_target_length=args.max_target_length,
                 primer_melting_temperature_variation=primer_tm_variation,
-                sodium=args.sodium_conc, magnesium=args.magnesium_conc,
-                dNTP=args.dntp_conc, oligo_concentration=args.oligo_conc,
-                target_concentration=args.target_conc)
+                conditions=conditions)
     else:
         analyzer = coverage_analysis.CoverageAnalyzer(
             seqs, designs, primer_mismatches=args.primer_mismatches,
@@ -432,9 +468,7 @@ def run(args):
             primer_melting_temperature_variation=primer_tm_variation,
             fully_sensitive=args.fully_sensitive,
             max_target_length=args.max_target_length,
-            sodium=args.sodium_conc, magnesium=args.magnesium_conc,
-            dNTP=args.dntp_conc, oligo_concentration=args.oligo_conc,
-            target_concentration=args.target_conc)
+            conditions=conditions)
 
     # Perform analyses
     performed_analysis = False
@@ -557,7 +591,10 @@ def argv_to_args(argv):
         help=("If set, write a table in which each row represents an "
               "input design and gives the thermodynamic statistics of the "
               "oligos used by the design. This is particularly useful for "
-              "checking PCR primers and qPCR probe sequences."))
+              "checking PCR primers and qPCR probe sequences. The 'design_id' "
+              "column gives the row number of the design in the designs input "
+              "(1 for the first design). The provided argument is a path to "
+              "a TSV file at which to write the table."))
 
     # Parameter determining whether a primer binds to target
     parser.add_argument('-pm', '--primer-mismatches',
@@ -573,9 +610,10 @@ def argv_to_args(argv):
               "this if the targets only consist of guides)"))
     parser.add_argument('--bases-from-terminal',
         type=int, default=5,
-        help=("Allow for PRIMER_TERMINAL_MISMATCHES in this many bases from "
-              "the 3' end when determining whether a primer covers a sequence."
-              "Default is 5 and is only used if PRIMER_TERMINAL_MISMATCHES set"
+        help=("Consider the last BASES_FROM_TERMINAL bases from the 3' end to "
+              "be 'terminal'  bases when calculating terminal mismatches and "
+              "GC clamps. Default is 5 and is only used if either "
+              "PRIMER_TERMINAL_MISMATCHES or WRITE_THERMO_STATS is set."
               "(ignore this if the targets only consist of guides)"))
     parser.add_argument('-pt', '--primer-thermo',
         action='store_true',
@@ -617,25 +655,25 @@ def argv_to_args(argv):
               "for a sequence to be considered 'bound' still."
               "Default is 20°C. Only used if --guide-thermo is set."))
     # Set thermodynamic conditions
-    parser.add_argument('-na', '--sodium-conc', type=float, default=5e-2,
+    parser.add_argument('-na', '--pcr-sodium-conc', type=float, default=5e-2,
         help=("Concentration of sodium (in mol/L). Can be used for the "
               "concentration of all monovalent cations. Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "0.050 mol/L."))
-    parser.add_argument('-mg', '--magnesium-conc', type=float, default=2.5e-3,
+    parser.add_argument('-mg', '--pcr-magnesium-conc', type=float, default=2.5e-3,
         help=("Concentration of magnesium (in mol/L). Can be used for the "
               "concentration of all divalent cations. Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "0.0025 mol/L."))
-    parser.add_argument('--dntp-conc', type=float, default=1.6e-3,
+    parser.add_argument('--pcr-dntp-conc', type=float, default=1.6e-3,
         help=("Concentration of dNTPs (in mol/L). Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "0.0016 mol/L."))
-    parser.add_argument('--oligo-conc', type=float, default=3e-7,
+    parser.add_argument('--pcr-oligo-conc', type=float, default=3e-7,
         help=("Oligo concentration (in mol/L). Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "3e-7 mol/L."))
-    parser.add_argument('--target-conc', type=float, default=0,
+    parser.add_argument('--pcr-target-conc', type=float, default=0,
         help=("Target concentration (in mol/L). Only used if "
               "--primer-thermo or --guide-thermo is set; only needed if "
               "target concentration is not significantly less than oligo "

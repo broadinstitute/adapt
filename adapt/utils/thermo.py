@@ -142,9 +142,9 @@ DNA_DNA_INTERNAL = {
         },
     },
 }
-# Define entropic terms from Santalucia et al 2004
+
+# Santalucia 2004
 # DOI:10.1146/annurev.biophys.32.110601.141800
-# Constants derived from MELTING software package
 # DNA_DNA_INTERNAL = {
 #     'A': {
 #         'A': {
@@ -252,119 +252,29 @@ DNA_DNA_INTERNAL = {
 #     },
 # }
 
-DNA_DNA_INTERNAL_DOUBLE = {
-    "GG/TT": (5.8, 0.0163),
-    "GT/TG": (4.1, 0.0095),
-    "TG/GT": (-1.4, -0.0062)
-}
+# Double mismatch constants derived from MELTING software package
+# DNA_DNA_INTERNAL_DOUBLE = {
+#     "GG/TT": (5.8, 0.0163),
+#     "GT/TG": (4.1, 0.0095),
+#     "TG/GT": (-1.4, -0.0062)
+# }
 
-DNA_DNA_TERMINAL = {
-    'A': {
-        'A': {
-            'A': (1.2, 0.0017),
-            'T': (-7.9, -0.0222),
-            'C': (2.3, 0.0046),
-            'G': (-0.6, -0.0023),
-        },
-        'T': {
-            'A': (-7.2, -0.0204),
-            'T': (-2.7, -0.0108),
-            'C': (-1.2, -0.0062),
-            'G': (-2.5, -0.0083),
-        },
-        'C': {
-            'A': (5.3, 0.0146),
-            'T': (0.7, 0.0002),
-            'C': (0.0, -0.0044),
-            'G': (-8.4, -0.0224),
-        },
-        'G': {
-            'A': (-0.7, -0.0023),
-            'T': (1.0, 0.0009),
-            'C': (-7.8, -0.0210),
-            'G': (-3.1, -0.0095),
-        },
-    },
-    'T': {
-        'A': {
-            'A': (4.7, 0.0129),
-            'T': (-7.2, -0.0213),
-            'C': (3.4, 0.0080),
-            'G': (0.7, 0.0007),
-        },
-        'T': {
-            'A': (-7.9, -0.0222),
-            'T': (0.2, -0.0015),
-            'C': (1.0, 0.0007),
-            'G': (-1.3, -0.0053),
-        },
-        'C': {
-            'A': (7.6, 0.0202),
-            'T': (1.2, 0.0007),
-            'C': (6.1, 0.0164),
-            'G': (-8.2, -0.0222),
-        },
-        'G': {
-            'A': (3.0, 0.0074),
-            'T': (-0.1, -0.0017),
-            'C': (-8.5, -0.0227),
-            'G': (1.6, 0.0036),
-        },
-    },
-    'C': {
-        'A': {
-            'A': (-0.9, -0.0042),
-            'T': (-8.5, -0.0227),
-            'C': (1.9, 0.0037),
-            'G': (-0.7, -0.0023),
-        },
-        'T': {
-            'A': (-7.8, -0.0210),
-            'T': (-5.0, -0.0158),
-            'C': (-1.5, -0.0061),
-            'G': (-2.8, -0.0080),
-        },
-        'C': {
-            'A': (0.6, -0.0006),
-            'T': (-0.8, -0.0045),
-            'C': (-1.5, -0.0072),
-            'G': (-8.0, -0.0199),
-        },
-        'G': {
-            'A': (-4.0, -0.0132),
-            'T': (-4.1, -0.0117),
-            'C': (-10.6, -0.0272),
-            'G': (-4.9, -0.0153),
-        },
-    },
-    'G': {
-        'A': {
-            'A': (-2.9, -0.0098),
-            'T': (-8.2, -0.0222),
-            'C': (5.2, 0.0142),
-            'G': (-0.6, -0.0010),
-        },
-        'T': {
-            'A': (-8.4, -0.0224),
-            'T': (-2.2, -0.0084),
-            'C': (5.2, 0.0135),
-            'G': (-4.4, -0.0123),
-        },
-        'C': {
-            'A': (-0.7, -0.0038),
-            'T': (2.3, 0.0054),
-            'C': (3.6, 0.0089),
-            'G': (-9.8, -0.0244),
-        },
-        'G': {
-            'A': (0.5, 0.0032),
-            'T': (3.3, 0.0104),
-            'C': (-8.0, -0.0199),
-            'G': (-6.0, -0.0158),
-        },
-    },
-}
+# DNA_DNA_TERMINAL accounts for the thermodynamic properities of pairs of bases
+# that are at the ends of the binding region, as long as there is <= 1
+# mismatch in that pair
+# If the sequences are
+#   ...5'-WX-3'
+#   ...3'-YZ-5'
+# If W matches with Y, the thermodynamic properties can be found at DNA_DNA_INTERNAL[W][X][Z].
+# If X matches with Z, the thermodynamic properties can be found at DNA_DNA_INTERNAL[Z][Y][W].
+# Constants derived from Primer3 and MELTING software package
+# Santalucia 1998 uses the same constants for terminal bases as internal ones;
+# Santalucia 2004 uses different ones.
 
+# Santalucia 1998
+DNA_DNA_TERMINAL = DNA_DNA_INTERNAL
+
+# Santalucia 2004
 # DNA_DNA_TERMINAL = {
 #     'A': {
 #         'A': {
@@ -475,16 +385,34 @@ DNA_DNA_TERMINAL = {
 # kcal/mol K
 R_CONSTANT = .001987
 
+# Adding this converts from Celsius to Kelvin
+CELSIUS_TO_KELVIN = 273.15
+
 
 class Conditions:
-    """docstring for PCRConditions"""
-    def __init__(self, sodium=5e-2, magnesium=0, dNTP=0,
-        oligo_concentration=3e-7, target_concentration=0):
+    """Thermodynamic conditions of the oligo binding reactions
+    """
+    def __init__(self, sodium=5e-2, magnesium=2.5e-3, dNTP=1.6e-3,
+            oligo_concentration=3e-7, target_concentration=0, t=310.15):
+        """
+        Args:
+            sodium: molar concentration of sodium ions.
+            magnesium: molar concentration of magnesium ions. Only needed if
+                magnesium concentration is greater than dNTP concentration.
+            dNTP: molar concentration of dNTPs. Only needed if
+                magnesium concentration is greater than dNTP concentration.
+            oligo_concentration: molar concentration of oligos in reaction.
+            target_concentration: molar concentration of target in reaction.
+                Only needed if not significantly smaller than oligo
+                concentration.
+            t: temperature of the reaction.
+        """
         self.sodium = sodium
         self.magnesium = magnesium
         self.dNTP = dNTP
         self.oligo_concentration = oligo_concentration
         self.target_concentration = target_concentration
+        self.t = t
 
 
 def _delta_g_from_h_s(h, s, t=310.15):
@@ -507,9 +435,8 @@ def _avg_delta_h_s(thermo_table, w, x, z):
                  for z_k in FASTA_CODES[z]], axis=0)
 
 
-def binds(oligo_seq, target_seq, ideal_tm, delta_tm,
-        reverse_oligo=False, sodium=5e-2, magnesium=0, dNTP=0,
-        oligo_concentration=3e-7, target_concentration=0):
+def binds(oligo_seq, target_seq, ideal_tm, delta_tm, reverse_oligo=True,
+        conditions=Conditions()):
     """Determine whether an oligo binds to a target sequence.
 
     This tolerates ambiguity and decides whether an oligo binds based on
@@ -528,33 +455,26 @@ def binds(oligo_seq, target_seq, ideal_tm, delta_tm,
         ideal_tm: float of the ideal melting temperature of the oligo
         delta_tm: float of how much the melting temperature of the oligo can
             vary from the ideal_tm and still be considered as binding
-        reverse_oligo: True if the oligo is binding to the 3' end of the
-            amplicon, False (default) if the oligo is binding to the 5' end
-        sodium: molar concentration of sodium ions
-        magnesium: molar concentration of magnesium ions. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        dNTP: molar concentration of dNTPs. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        oligo_concentration: molar concentration of oligos in reaction.
-        target_concentration: molar concentration of target in reaction.
-            Only needed if not significantly smaller than oligo
-            concentration.
+        reverse_oligo: True (default) if the oligo needs to be reverse
+            complemented (if the oligo is a guide or a primer binding to
+            the 3' end), False if the target needs to be reverse
+            complemented (if the oligo is a primer binding to the 5' end)
+        conditions: a Conditions object
 
     Returns:
-        True iff the number of mismatches between oligo_seq and target_seq
-        is <= mismatches
+        True if the binding melting temperature is within delta_tm of the
+        ideal_tm
     """
     if '-' in target_seq:
       assert '-' not in oligo_seq
       return False
     tm = calculate_melting_temp(oligo_seq, target_seq, reverse_oligo,
-        sodium, magnesium, dNTP, oligo_concentration, target_concentration)
+        conditions)
     return abs(ideal_tm - tm) <= delta_tm
 
 
-def calculate_melting_temp(oligo, target, reverse_oligo=False, sodium=5e-2,
-        magnesium=2.5e-3, dNTP=1.6e-3, oligo_concentration=3e-7,
-        target_concentration=0, saltmethod='santalucia'):
+def calculate_melting_temp(oligo, target, reverse_oligo=True,
+        conditions=Conditions(), saltmethod='santalucia'):
     """Calculate the melting temperature of the oligo binding to the target
 
     Uses the equations:
@@ -565,20 +485,17 @@ def calculate_melting_temp(oligo, target, reverse_oligo=False, sodium=5e-2,
     Args:
         target: target sequence
         oligo: oligo sequence's perfect match target
-        reverse_oligo: True if the oligo is binding to the 3' end of the
-            amplicon, False (default) if the oligo is binding to the 5' end
-        sodium: molar concentration of sodium ions
-        magnesium: molar concentration of magnesium ions. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        dNTP: molar concentration of dNTPs. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        oligo_concentration: molar concentration of oligos in reaction.
-        target_concentration: molar concentration of target in reaction.
-            Only needed if not significantly smaller than oligo
-            concentration.
+        reverse_oligo: True (default) if the oligo needs to be reverse
+            complemented (if the oligo is a guide or a primer binding to
+            the 3' end), False if the target needs to be reverse
+            complemented (if the oligo is a primer binding to the 5' end)
+        conditions: a Conditions object
         saltmethod: str of either 'santalucia' (default) or 'owczarzy'.
-            'santalucia' uses the salt correction described in Santalucia 2004;
-            'owczarzy' uses the salt correction described in Owczarzy 2004.
+            'santalucia' uses the salt correction described in Santalucia 2004
+            (DOI:10.1146/annurev.biophys.32.110601.141800, eq. 5) /
+            von Ahsen 2001 (DOI:10.1093/clinchem/47.11.1956, eq. 7)
+            'owczarzy' uses the salt correction described in Owczarzy 2004/2008
+            (DOI:10.1021/bi034621r, eq. 22; DOI:10.1021/bi702363u, eq. 17).
             Anything else uses no salt correction
             TODO: 'owczarzy' still a bit buggy, possibly remove
 
@@ -589,24 +506,25 @@ def calculate_melting_temp(oligo, target, reverse_oligo=False, sodium=5e-2,
         if saltmethod=='santalucia':
             h,s = calculate_delta_h_s(target, oligo,
                                       reverse_oligo=reverse_oligo,
-                                      sodium=sodium, magnesium=magnesium,
-                                      dNTP=dNTP)
+                                      conditions=conditions)
         else:
             h,s = calculate_delta_h_s(target, oligo,
                                       reverse_oligo=reverse_oligo,
-                                      sodium=1, magnesium=0, dNTP=0)
+                                      conditions=Conditions(
+                                        sodium=1, magnesium=0, dNTP=0))
     except DoubleMismatchesError:
         return 0
 
-    tm = h/(s + R_CONSTANT * np.log(oligo_concentration-target_concentration/2))
+    tm = h/(s + R_CONSTANT * np.log(
+        conditions.oligo_concentration-conditions.target_concentration/2))
 
     if saltmethod=='owczarzy':
         K_a = 3e4
-        D = (K_a*dNTP - K_a*magnesium + 1)**2 + 4 * K_a * magnesium
-        free_mg = (-(K_a * dNTP - K_a * magnesium + 1) + D**.5)/(2*K_a)
+        D = (K_a*conditions.dNTP - K_a*conditions.magnesium + 1)**2 + 4 * K_a * conditions.magnesium
+        free_mg = (-(K_a * conditions.dNTP - K_a * conditions.magnesium + 1) + D**.5)/(2*K_a)
         fgc = gc_frac(oligo)
-        lnna = math.log(sodium)
-        r = free_mg**.5/sodium
+        lnna = math.log(conditions.sodium)
+        r = free_mg**.5/conditions.sodium
         if r < .22:
             tm = (1/tm
                   + (((4.29*fgc-3.95)*lnna
@@ -618,7 +536,7 @@ def calculate_melting_temp(oligo, target, reverse_oligo=False, sodium=5e-2,
             d = 1.42
             g = 8.31
             if r < 6:
-                a *= 0.843 - 0.352*(sodium**.5)*lnna
+                a *= 0.843 - 0.352*(conditions.sodium**.5)*lnna
                 d *= 1.279 - 4.03e-3*lnna - 8.03e-3*lnna**2
                 g *= 0.486 - 0.258*lnna + 5.25e-3*lnna**3
             tm = (1/tm
@@ -631,9 +549,8 @@ def calculate_melting_temp(oligo, target, reverse_oligo=False, sodium=5e-2,
     return tm
 
 
-def calculate_percent_bound(oligo, target, reverse_oligo=False, sodium=5e-2,
-        magnesium=0, dNTP=0, oligo_concentration=3e-7,
-        target_concentration=0, t=310.15):
+def calculate_percent_bound(oligo, target, reverse_oligo=True,
+        conditions=Conditions()):
     """Calculate the percent of oligo bound to the target
 
     Uses the equations:
@@ -648,36 +565,30 @@ def calculate_percent_bound(oligo, target, reverse_oligo=False, sodium=5e-2,
     Args:
         oligo: oligo sequence's perfect match target
         target: target sequence
-        reverse_oligo: True if the oligo is binding to the 3' end of the
-            amplicon, False (default) if the oligo is binding to the 5' end
-        sodium: molar concentration of sodium ions
-        magnesium: molar concentration of magnesium ions. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        dNTP: molar concentration of dNTPs. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        oligo_concentration: molar concentration of oligos in reaction.
-        target_concentration: molar concentration of target in reaction.
-            Only needed if not significantly smaller than oligo
-            concentration.
-        t: temperature in Kelvin
+        reverse_oligo: True (default) if the oligo needs to be reverse
+            complemented (if the oligo is a guide or a primer binding to
+            the 3' end), False if the target needs to be reverse
+            complemented (if the oligo is a primer binding to the 5' end)
+        conditions: a Conditions object
 
     Returns:
         Percent of oligo bound to the target
     """
-    K = calculate_equilibrium_constant(target, oligo, reverse_oligo=False,
-                                       sodium=sodium, magnesium=magnesium,
-                                       dNTP=dNTP, t=310.15)
+    K = calculate_equilibrium_constant(target, oligo,
+        reverse_oligo=reverse_oligo, conditions=conditions)
 
     # Coefficients for quadratic formula
     a = K
-    b = -K*(oligo_concentration + target_concentration) + 1
-    c = K*oligo_concentration*target_concentration
+    b = -K*(conditions.oligo_concentration + conditions.target_concentration + 1)
+    c = K*conditions.oligo_concentration*conditions.target_concentration
+    ab_conc = np.roots((a, b, c))
+    percent_bound = ab_conc/conditions.oligo_concentration
+    percent_bound = percent_bound[percent_bound>=0]
+    return percent_bound[percent_bound<=1]
 
-    return np.roots(a, b, c)
 
-
-def calculate_equilibrium_constant(oligo, target, reverse_oligo=False,
-        sodium=5e-2, magnesium=0, dNTP=0, t=310.15):
+def calculate_equilibrium_constant(oligo, target, reverse_oligo=True,
+        conditions=Conditions()):
     """Calculate equilibrium constant of the target and oligo annealing
 
     Uses the equation:
@@ -689,26 +600,22 @@ def calculate_equilibrium_constant(oligo, target, reverse_oligo=False,
     Args:
         oligo: oligo sequence's perfect match target
         target: target sequence
-        reverse_oligo: True if the oligo is binding to the 3' end of the
-            amplicon, False (default) if the oligo is binding to the 5' end
-        sodium: molar concentration of sodium ions
-        magnesium: molar concentration of magnesium ions. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        dNTP: molar concentration of dNTPs. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        t: temperature in Kelvin
+        reverse_oligo: True (default) if the oligo needs to be reverse
+            complemented (if the oligo is a guide or a primer binding to
+            the 3' end), False if the target needs to be reverse
+            complemented (if the oligo is a primer binding to the 5' end)
+        conditions: a Conditions object
 
     Returns:
         Equilibrium constant
     """
     delta_g = calculate_delta_g(target, oligo, reverse_oligo=reverse_oligo,
-                                sodium=sodium, magnesium=magnesium, dNTP=dNTP,
-                                t=t)
-    return math.e**(-delta_g/(R_CONSTANT*t))
+        conditions=conditions)
+    return math.e**(-delta_g/(R_CONSTANT*conditions.t))
 
 
-def calculate_delta_g(target, oligo, reverse_oligo=False, sodium=5e-2,
-        magnesium=0, dNTP=0, t=310.15):
+def calculate_delta_g(target, oligo, reverse_oligo=True,
+        conditions=Conditions()):
     """Calculate free energy of the target and oligo annealing
 
     Based on SantaLucia et al 2004, von Ahsen et al 2001, MELTING, & Primer3
@@ -718,14 +625,11 @@ def calculate_delta_g(target, oligo, reverse_oligo=False, sodium=5e-2,
     Args:
         target: target sequence
         oligo: oligo sequence's perfect match target
-        reverse_oligo: True if the oligo is binding to the 3' end of the
-            amplicon, False (default) if the oligo is binding to the 5' end
-        sodium: molar concentration of sodium ions
-        magnesium: molar concentration of magnesium ions. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        dNTP: molar concentration of dNTPs. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        t: temperature in Kelvin
+        reverse_oligo: True (default) if the oligo needs to be reverse
+            complemented (if the oligo is a guide or a primer binding to
+            the 3' end), False if the target needs to be reverse
+            complemented (if the oligo is a primer binding to the 5' end)
+        conditions: a Conditions object
     TODO: handling degeneracy properly
 
     Returns:
@@ -733,29 +637,27 @@ def calculate_delta_g(target, oligo, reverse_oligo=False, sodium=5e-2,
     """
 
     h,s = calculate_delta_h_s(target, oligo, reverse_oligo=reverse_oligo,
-                              sodium=sodium, magnesium=magnesium, dNTP=dNTP)
+                              conditions=conditions)
 
-    return _delta_g_from_h_s(h, s, t=t)
+    return _delta_g_from_h_s(h, s, t=conditions.t)
 
 
-def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=5e-2,
-        magnesium=0, dNTP=0):
+def calculate_delta_h_s(target, oligo, reverse_oligo=True,
+        conditions=Conditions()):
     """Calculate enthalpy and entropy of the target and oligo annealing
 
     Based on SantaLucia et al 2004, von Ahsen et al 2001, MELTING, & Primer3
-    SantaLucia DOI:10.1146/annurev.biophys.32.110601.141800
-    von Ahsen DOI: 10.1093/clinchem/47.11.1956
+    SantaLucia DOI:10.1146/annurev.biophys.32.110601.141800 (eq. 5)
+    von Ahsen DOI:10.1093/clinchem/47.11.1956 (eq. 7)
 
     Args:
         target: target sequence
         oligo: oligo sequence's perfect match target
-        reverse_oligo: True if the oligo is binding to the 3' end of the
-            amplicon, False (default) if the oligo is binding to the 5' end
-        sodium: molar concentration of sodium ions
-        magnesium: molar concentration of magnesium ions. Only needed if
-            magnesium concentration is greater than dNTP concentration
-        dNTP: molar concentration of dNTPs. Only needed if
-            magnesium concentration is greater than dNTP concentration
+        reverse_oligo: True (default) if the oligo needs to be reverse
+            complemented (if the oligo is a guide or a primer binding to
+            the 3' end), False if the target needs to be reverse
+            complemented (if the oligo is a primer binding to the 5' end)
+        conditions: a Conditions object
     TODO: handling degeneracy properly
 
     Returns:
@@ -773,16 +675,14 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=5e-2,
     delta_s = 0
 
     # Terminal AT penalties
-    if (forward_seq[0] in FASTA_CODES['W'] and
-            reverse_seq[0] in FASTA_CODES['W']):
+    if oligo[0] in FASTA_CODES['W']:
         delta_h += DNA_DNA_TERM_AT[0]
         delta_s += DNA_DNA_TERM_AT[1]
     else:
         delta_h += DNA_DNA_TERM_GC[0]
         delta_s += DNA_DNA_TERM_GC[1]
 
-    if (forward_seq[-1] in FASTA_CODES['W'] and
-            reverse_seq[-1] in FASTA_CODES['W']):
+    if oligo[-1] in FASTA_CODES['W']:
         delta_h += DNA_DNA_TERM_AT[0]
         delta_s += DNA_DNA_TERM_AT[1]
     else:
@@ -854,7 +754,8 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=5e-2,
 
     # Salt Correction
     phosphates = len(forward_seq) - 1
-    pos_ions = sodium + 120 * (max((magnesium*1000 - dNTP*1000), 0)**0.5/1000)
+    pos_ions = conditions.sodium + 120 * (max(
+        (conditions.magnesium*1000 - conditions.dNTP*1000), 0)**0.5/1000)
     salt_corr = phosphates * np.log(pos_ions)
 
     delta_h += DNA_DNA_SALT[0] * salt_corr
@@ -862,18 +763,22 @@ def calculate_delta_h_s(target, oligo, reverse_oligo=False, sodium=5e-2,
     return delta_h, delta_s
 
 
-def calculate_i_x(target, oligo, reverse_oligo=False):
+def calculate_i_x(target, oligo, reverse_oligo=True):
     """
     i_x is a linear score based on the distance of the nearest mismatch
     to the end, where a mismatch at the end is 6 and a mismatch 5 bp
     away from the end is 1. No mismatches in the 6 bps from the 3' end
     gives an i_x of 0.
+    This is needed to use the Terminal Mismatch Model (TMM) for extension bias,
+    as described in Döring 2019 (DOI:10.1038/s41598-019-47173-w)
 
     Args:
         target: target sequence
         oligo: oligo sequence's perfect match target
-        reverse_oligo: True if the oligo is binding to the 3' end of the
-            amplicon, False (default) if the oligo is binding to the 5' end
+        reverse_oligo: True (default) if the oligo needs to be reverse
+            complemented (if the oligo is a guide or a primer binding to
+            the 3' end), False if the target needs to be reverse
+            complemented (if the oligo is a primer binding to the 5' end)
 
     Returns:
         i_x of the oligo, as defined above
@@ -890,7 +795,7 @@ def calculate_i_x(target, oligo, reverse_oligo=False):
             # check from end of string
             bp = ol - 1 - i
         if oligo[bp] != target[bp]:
-            i_x = i
+            i_x = 6-i
             break
 
     return i_x
