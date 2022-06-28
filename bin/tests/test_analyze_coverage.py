@@ -11,10 +11,17 @@ from collections import OrderedDict
 from argparse import Namespace
 from adapt import alignment
 from adapt.prepare import align, ncbi_neighbors, prepare_alignment, cluster
-from adapt.utils import seq_io, predict_activity
+from adapt.utils import seq_io, predict_activity, thermo
 from bin import analyze_coverage
 
-__author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
+try:
+    import primer3
+except ImportError:
+    thermo_props = False
+else:
+    thermo_props = True
+
+__author__ = 'Priya P. Pillai <ppillai@broadinstitute.org>'
 
 SEQS = OrderedDict()
 SEQS["genome_1"] = "AACTAG"
@@ -32,6 +39,54 @@ DESIGN_OPTS = [
     ['0', '5', 'CT CA', 'AA GC', 'AG CG'],
 ]
 
+FAKE_DNA_DNA_INSIDE ={
+    'A': {
+        'A': (1, 0.005),
+        'T': (10, 0.05),
+        'C': (1, 0.005),
+        'G': (1, 0.005),
+    },
+    'T': {
+        'A': (10, 0.05),
+        'T': (1, 0.005),
+        'C': (1, 0.005),
+        'G': (1, 0.005),
+    },
+    'C': {
+        'A': (1, 0.005),
+        'T': (1, 0.005),
+        'C': (1, 0.005),
+        'G': (10, 0.05),
+    },
+    'G': {
+        'A': (1, 0.005),
+        'T': (1, 0.005),
+        'C': (10, 0.05),
+        'G': (1, 0.005),
+    }
+}
+
+FAKE_DNA_DNA_INTERNAL = {
+    'A': FAKE_DNA_DNA_INSIDE,
+    'T': FAKE_DNA_DNA_INSIDE,
+    'C': FAKE_DNA_DNA_INSIDE,
+    'G': FAKE_DNA_DNA_INSIDE,
+}
+
+FAKE_DNA_DNA_TERMINAL = FAKE_DNA_DNA_INTERNAL
+
+FAKE_DNA_DNA_TERM_GC = (0, 0)
+
+FAKE_DNA_DNA_SYM = (0, 0)
+
+FAKE_DNA_DNA_TERM_AT = (0, 0)
+
+# With 2 bp matching, delta H is 20 and delta S is 0.1. With the thermodynamic
+# conditions set to not interfere, the melting temperature is delta H/delta S,
+# which is 200K (Note: this doesn't actually make sense in practice, as Tm
+# can't go below 0°C; this is a toy example to make testing easier)
+PERFECT_TM = 200 - thermo.CELSIUS_TO_KELVIN
+
 class TestAnalyzeCoverage(object):
     """General class for testing analyze_coverage.py
 
@@ -41,7 +96,19 @@ class TestAnalyzeCoverage(object):
     class TestAnalyzeCoverageCase(unittest.TestCase):
         def setUp(self):
             # Disable logging
-            logging.disable(logging.INFO)
+            logging.disable(logging.WARNING)
+
+            self.DNA_DNA_INTERNAL = thermo.DNA_DNA_INTERNAL
+            self.DNA_DNA_TERMINAL = thermo.DNA_DNA_TERMINAL
+            self.DNA_DNA_TERM_GC = thermo.DNA_DNA_TERM_GC
+            self.DNA_DNA_SYM = thermo.DNA_DNA_SYM
+            self.DNA_DNA_TERM_AT = thermo.DNA_DNA_TERM_AT
+
+            thermo.DNA_DNA_INTERNAL = FAKE_DNA_DNA_INTERNAL
+            thermo.DNA_DNA_TERMINAL = FAKE_DNA_DNA_TERMINAL
+            thermo.DNA_DNA_TERM_GC = FAKE_DNA_DNA_TERM_GC
+            thermo.DNA_DNA_SYM = FAKE_DNA_DNA_SYM
+            thermo.DNA_DNA_TERM_AT = FAKE_DNA_DNA_TERM_AT
 
             # Create a temporary input files
             self.input_designs = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -91,6 +158,7 @@ class TestAnalyzeCoverage(object):
             """
             col_loc = None
             with open(file) as f:
+                i = 0
                 for i, line in enumerate(f):
                     if i == 0:
                         headers = line[:-1].split('\t')
@@ -98,18 +166,26 @@ class TestAnalyzeCoverage(object):
                         col_loc = headers.index(header)
                         continue
                     self.assertLess(i, len(expected) + 1)
-                    val_line = line[:-1].split('\t')[col_loc]
+                    val_line = line[:-1].split('\t')[col_loc].strip('[]')
                     vals = val_line.split(' ')
-                    for val in vals:
+                    for j, val in enumerate(vals):
                         if val != 'None':
-                            self.assertIn(float(val), expected[i-1])
+                            val_float = float(val.strip(','))
+                            self.assertAlmostEqual(val_float, expected[i-1][j],
+                                msg="The value in column %s row %i position "
+                                "%i is %f when it should be %s"
+                                %(header, i, j+1, val_float, expected[i-1][j]))
                         else:
-                            self.assertIn('None', expected[i-1])
+                            self.assertEqual('None', expected[i-1][j],
+                                msg="The value in column %s row %i position "
+                                "%i is None when it should be %s"
+                                %(header, i, j+1, expected[i-1][j]))
                     self.assertEqual(len(vals), len(expected[i-1]))
                 self.assertEqual(i, len(expected))
 
         def baseArgv(self, model=False, use_accessions=False,
-                     primer_terminal_mismatches=False):
+                     primer_terminal_mismatches=False, thermo_model=False,
+                     thermo_stats=False):
             """Get arguments for tests
 
             Produces the correct arguments for a test case given details of
@@ -126,8 +202,10 @@ class TestAnalyzeCoverage(object):
             Returns:
                 List of strings that are the arguments of the test
             """
-            argv = ['analyze_coverage.py',
-                    self.input_designs.name]
+            argv = ['analyze_coverage.py', self.input_designs.name, '-pm', '0']
+            thermo_args = ['-na', '1', '-mg', '0', '--pcr-dntp-conc', '0',
+                           '--pcr-oligo-conc', '1', '--bases-from-terminal',
+                           '1']
 
             if use_accessions:
                 self.input_accs = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -183,10 +261,23 @@ class TestAnalyzeCoverage(object):
                 predict_activity.Predictor = PredictorTest
             else:
                 argv.extend(['-gm', '0'])
+                if thermo_model:
+                    argv.extend(['--primer-thermo', '--guide-thermo'])
+                    argv.extend(thermo_args)
 
-            argv.extend(['--write-frac-bound', self.write_frac_bound.name,
-                         '--write-per-seq', self.write_per_seq.name,
-                         '--fully-sensitive'])
+            if thermo_stats:
+                # Make a thermo stats output file
+                self.write_thermo_stats = tempfile.NamedTemporaryFile(mode='w', delete=False)
+                self.write_thermo_stats.close()
+                self.files_to_delete.append(self.write_thermo_stats.name)
+
+                argv.extend(['--write-thermo-stats',
+                             self.write_thermo_stats.name])
+                argv.extend(thermo_args)
+            else:
+                argv.extend(['--write-frac-bound', self.write_frac_bound.name,
+                             '--write-per-seq', self.write_per_seq.name,
+                             '--fully-sensitive'])
             return argv
 
         def tearDown(self):
@@ -196,6 +287,11 @@ class TestAnalyzeCoverage(object):
             # Re-enable logging
             logging.disable(logging.NOTSET)
             ncbi_neighbors.fetch_fastas = self.fetch_fastas
+            thermo.DNA_DNA_INTERNAL = self.DNA_DNA_INTERNAL
+            thermo.DNA_DNA_TERMINAL = self.DNA_DNA_TERMINAL
+            thermo.DNA_DNA_TERM_GC = self.DNA_DNA_TERM_GC
+            thermo.DNA_DNA_SYM = self.DNA_DNA_SYM
+            thermo.DNA_DNA_TERM_AT = self.DNA_DNA_TERM_AT
 
 
 class TestAnalyzeCoverageCases(TestAnalyzeCoverage.TestAnalyzeCoverageCase):
@@ -224,6 +320,36 @@ class TestAnalyzeCoverageCases(TestAnalyzeCoverage.TestAnalyzeCoverageCase):
                     [0], [0], [0], [0]]
         self.check_results(self.write_per_seq.name, expected, 'right-primer-terminal-mismatches')
 
+    @unittest.skipUnless(thermo_props, 'Primer3-Py required for this test')
+    def test_thermo_stats(self):
+        argv = super().baseArgv(thermo_stats=True)
+        expected = [[PERFECT_TM], [PERFECT_TM, PERFECT_TM]]
+        args = analyze_coverage.argv_to_args(argv)
+        analyze_coverage.run(args)
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-ideal-melting-temperature')
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-ideal-melting-temperature')
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-ideal-melting-temperature')
+        expected = [[0], [0, 1]]
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-gc-clamp')
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-gc-clamp')
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-gc')
+        expected = [[.5], [.5, 1]]
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-gc')
+        expected = [[.5], [.5, .5]]
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-gc')
+        expected = [[0], [0, 0]]
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-hairpin')
+        self.check_results(self.write_thermo_stats.name, expected, 'guide-self-dimer')
+        self.check_results(self.write_thermo_stats.name, expected, 'left-primer-hairpin')
+        self.check_results(self.write_thermo_stats.name, expected, 'right-primer-hairpin')
+        # Primer3 outputs; cannot be simplified
+        self.check_results(self.write_thermo_stats.name, [[0], [0, -0.2644850000062052]], 'left-primer-self-dimer')
+        self.check_results(self.write_thermo_stats.name, [[0], [0, -0.19606500000620508]], 'right-primer-self-dimer')
+        self.check_results(self.write_thermo_stats.name, [[0], [-0.2644850000062052]], 'heterodimer')
+        expected = [[0], [0]]
+        self.check_results(self.write_thermo_stats.name, expected, 'delta-melting-temperature-primers')
+        self.check_results(self.write_thermo_stats.name, expected, 'delta-melting-temperature-primer-guide')
+
     def test_accs(self):
         argv = super().baseArgv(use_accessions=True)
         args = analyze_coverage.argv_to_args(argv)
@@ -239,6 +365,32 @@ class TestAnalyzeCoverageCases(TestAnalyzeCoverage.TestAnalyzeCoverageCase):
         expected = [[0], ['None'], [0], ['None'],
                     [0], [0], [0], [0]]
         self.check_results(self.write_per_seq.name, expected, 'right-primer-mismatches')
+
+    @unittest.skipUnless(thermo_props, 'Primer3-Py required for this test')
+    def test_thermo_model(self):
+        argv = super().baseArgv(thermo_model=True)
+        args = analyze_coverage.argv_to_args(argv)
+        analyze_coverage.run(args)
+        expected = [[0.25], [1]]
+        self.check_results(self.write_frac_bound.name, expected, 'frac-bound')
+        expected = [[0], ['None'], [0], [0],
+                    [0], [0], [0], [0]]
+        self.check_results(self.write_per_seq.name, expected, 'guide-mismatches')
+        expected = [[PERFECT_TM], ['None'], [PERFECT_TM], [PERFECT_TM],
+                    [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
+        self.check_results(self.write_per_seq.name, expected, 'guide-melting-temperature')
+        expected = [[0], [0], ['None'], [0],
+                    [0], [0], [0], [0]]
+        self.check_results(self.write_per_seq.name, expected, 'left-primer-mismatches')
+        expected = [[PERFECT_TM], [PERFECT_TM], ['None'], [PERFECT_TM],
+                    [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
+        self.check_results(self.write_per_seq.name, expected, 'left-primer-melting-temperature')
+        expected = [[0], ['None'], [0], ['None'],
+                    [0], [0], [0], [0]]
+        self.check_results(self.write_per_seq.name, expected, 'right-primer-mismatches')
+        expected = [[PERFECT_TM], ['None'], [PERFECT_TM], ['None'],
+                    [PERFECT_TM], [PERFECT_TM], [PERFECT_TM], [PERFECT_TM]]
+        self.check_results(self.write_per_seq.name, expected, 'right-primer-melting-temperature')
 
     def test_model(self):
         argv = super().baseArgv(model=True)

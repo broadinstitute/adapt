@@ -1168,8 +1168,8 @@ def argv_to_args(argv):
               "predict guide-target activity. If neither this nor "
               "predict-activity-model-path is set, ADAPT does not predict "
               "activities to use during design. Optionally, two arguments can "
-              "be included to indicate version number, in the format 'v1_0' or "
-              "'latest'. Versions will default to latest."))
+              "be included to indicate version number, each in the format "
+              "'v1_0' or 'latest'. Versions will default to latest."))
     base_subparser.add_argument('--predict-activity-thres',
         type=float,
         nargs=2,
