@@ -25,6 +25,7 @@ class PrimerResult:
             frac_bound: total fraction of all sequences bound by the primers
             primers_in_cover: set of primers that achieve the desired coverage
                  and is minimal at the site
+            obj_value: value to use to compare primer covers to each other
         """
         self.start = start
         self.num_primers = num_primers

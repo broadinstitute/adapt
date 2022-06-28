@@ -14,7 +14,7 @@ import math
 import os
 import numpy as np
 
-from adapt.utils import search
+from adapt.utils import search, thermo
 from adapt import guide_search
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -599,19 +599,32 @@ class TargetSearcher:
                         target_overlapping_annotations.append(annotation)
                 overlapping_annotations.append(target_overlapping_annotations)
 
+        # If the primer searcher uses the 'max' objective, this is using a
+        # thermodynamic model for primers-output that information
+        if self.lps.obj_type == 'max':
+            primer_tm = True
+
         with open(out_fn, 'w') as outf:
             # Write a header
             headers = ['objective-value', 'target-start', 'target-end',
-                'target-length',
-                'left-primer-start', 'left-primer-num-primers',
-                'left-primer-frac-bound', 'left-primer-target-sequences',
-                'right-primer-start', 'right-primer-num-primers',
-                'right-primer-frac-bound', 'right-primer-target-sequences',
-                'num-guides', 'total-frac-bound-by-guides',
+                'target-length']
+            if primer_tm:
+                primer_headers = ['start', 'num-primers',
+                    'ideal-melting-temperature',
+                    'avg-melting-temperature-variation',
+                    'frac-bound', 'target-sequences']
+            else:
+                primer_headers = ['start', 'num-primers', 'frac-bound',
+                    'target-sequences']
+            headers.extend(['left-primer-%s' %primer_header for
+                primer_header in primer_headers])
+            headers.extend(['right-primer-%s' %primer_header for
+                primer_header in primer_headers])
+            headers.extend(['num-guides', 'total-frac-bound-by-guides',
                 'guide-set-expected-activity',
                 'guide-set-median-activity', 'guide-set-5th-pctile-activity',
                 'guide-expected-activities',
-                'guide-target-sequences', 'guide-target-sequence-positions']
+                'guide-target-sequences', 'guide-target-sequence-positions'])
             if self.mutator:
                 headers.append('guide-set-5th-pctile-mutated-activity')
             if overlapping_annotations:
@@ -663,13 +676,29 @@ class TargetSearcher:
                 expected_activities_per_guide_str = ' '.join(
                         str(a) for a in expected_activities_per_guide)
 
-                line = [obj_value, target_start, target_end, target_length,
-                    p1.start, p1.num_primers, p1.frac_bound, p1_seqs_str,
-                    p2.start, p2.num_primers, p2.frac_bound, p2_seqs_str,
-                    len(guides), guides_frac_bound, guides_activity_expected,
-                    guides_activity_median, guides_activity_5thpctile,
-                    expected_activities_per_guide_str,
-                    guides_seqs_str, guides_positions_str]
+                line = [obj_value, target_start, target_end, target_length]
+                if primer_tm:
+                    p1_tm = [thermo.calculate_melting_temp(p1_seq, p1_seq,
+                            reverse_oligo=False,
+                            conditions=self.lps.predictor.conditions) -
+                        thermo.CELSIUS_TO_KELVIN for p1_seq in p1_seqs_sorted]
+                    p2_tm = [thermo.calculate_melting_temp(p2_seq, p2_seq,
+                            reverse_oligo=False,
+                            conditions=self.rps.predictor.conditions) -
+                        thermo.CELSIUS_TO_KELVIN for p2_seq in p2_seqs_sorted]
+                    line.extend([p1.start, p1.num_primers, p1_tm, -p1.obj_value,
+                        p1.frac_bound, p1_seqs_str,
+                        p2.start, p2.num_primers, p2_tm, -p2.obj_value,
+                        p2.frac_bound, p2_seqs_str])
+                else:
+                    line.extend([
+                        p1.start, p1.num_primers, p1.frac_bound, p1_seqs_str,
+                        p2.start, p2.num_primers, p2.frac_bound, p2_seqs_str])
+                line.extend([len(guides), guides_frac_bound,
+                    guides_activity_expected, guides_activity_median,
+                    guides_activity_5thpctile,
+                    expected_activities_per_guide_str, guides_seqs_str,
+                    guides_positions_str])
                 if self.mutator:
                     line.append(mutated_activity[i])
                 if overlapping_annotations:

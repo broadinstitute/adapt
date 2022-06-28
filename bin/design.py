@@ -823,16 +823,18 @@ def design_for_id(args):
                 primer_gc_content_bounds = tuple(args.primer_gc_content_bounds)
             if args.primer_thermo:
                 shared_memo = {}
-                conditions = thermo.Conditions(sodium=args.sodium_conc,
-                    magnesium=args.magnesium_conc, dNTP=args.dntp_conc,
-                    oligo_concentration=args.oligo_conc,
-                    target_concentration=args.target_conc)
+                conditions = thermo.Conditions(sodium=args.pcr_sodium_conc,
+                    magnesium=args.pcr_magnesium_conc, dNTP=args.pcr_dntp_conc,
+                    oligo_concentration=args.pcr_oligo_conc,
+                    target_concentration=args.pcr_target_conc)
                 left_primer_predictor = predict_activity.TmPredictor(
-                    args.ideal_primer_melting_temperature + 273.15,
+                    args.ideal_primer_melting_temperature +
+                        thermo.CELSIUS_TO_KELVIN,
                     args.primer_melting_temperature_variation,
                     conditions, False, shared_memo=shared_memo)
                 right_primer_predictor = predict_activity.TmPredictor(
-                    args.ideal_primer_melting_temperature + 273.15,
+                    args.ideal_primer_melting_temperature +
+                        thermo.CELSIUS_TO_KELVIN,
                     args.primer_melting_temperature_variation,
                     conditions, True, shared_memo=shared_memo)
 
@@ -1378,17 +1380,16 @@ def argv_to_args(argv):
     #           "PRIMER_TERMINAL_MISMATCHES is set."))
     parser_ct_args.add_argument('-pt', '--primer-thermo',
         action='store_true',
-        help=("If set, in addition to using mismatches, use a thermodynamic "
-              "model to determine whether primers cover a sequence. This is "
-              "particularly useful for PCR primers."))
+        help=("If set, use a thermodynamic model to determine whether primers "
+              "cover a sequence. This is particularly useful for PCR."))
     parser_ct_args.add_argument('--ideal-primer-melting-temperature',
-        type=int, default=60,
+        type=float, default=60,
         help=("Allow for at most PRIMER_MELTING_TEMPERATURE_VARIATION°C "
               "deviation from the perfect match primer's melting temperature "
               "for a sequence to be considered 'bound' still."
               "Default is 60°C. Only used if --primer-thermo is set."))
     parser_ct_args.add_argument('--primer-melting-temperature-variation',
-        type=int, default=20,
+        type=float, default=20,
         help=("Allow for at most PRIMER_MELTING_TEMPERATURE_VARIATION°C "
               "deviation from the perfect match primer's melting temperature "
               "for a sequence to be considered 'bound' still."
@@ -1408,7 +1409,7 @@ def argv_to_args(argv):
         help=("Hard constraint on the number of primers. The number of "
               "primers designed for a target will be <= "
               "HARD_PRIMER_CONSTRAINT."))
-    # Penalty strength TODO what are reasonable values really
+    # Penalty strength TODO find reasonable values experimentally
     base_subparser.add_argument('--primer-penalty-strength', type=float,
         default=0.25,
         help=("Importance of the penalty when the number of primer "
@@ -1419,25 +1420,30 @@ def argv_to_args(argv):
               "Reasonable values are in the range [0.1, 0.5]."))
 
     # Set thermodynamic conditions
-    parser_ct_args.add_argument('-na', '--sodium-conc', type=float, default=5e-2,
+    parser_ct_args.add_argument('-na', '--pcr-sodium-conc', type=float,
+        default=5e-2,
         help=("Concentration of sodium (in mol/L). Can be used for the "
               "concentration of all monovalent cations. Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "0.050 mol/L."))
-    parser_ct_args.add_argument('-mg', '--magnesium-conc', type=float, default=2.5e-3,
+    parser_ct_args.add_argument('-mg', '--pcr-magnesium-conc', type=float,
+        default=2.5e-3,
         help=("Concentration of magnesium (in mol/L). Can be used for the "
               "concentration of all divalent cations. Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "0.0025 mol/L."))
-    parser_ct_args.add_argument('--dntp-conc', type=float, default=1.6e-3,
+    parser_ct_args.add_argument('--pcr-dntp-conc', type=float,
+        default=1.6e-3,
         help=("Concentration of dNTPs (in mol/L). Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "0.0016 mol/L."))
-    parser_ct_args.add_argument('--oligo-conc', type=float, default=3e-7,
+    parser_ct_args.add_argument('--pcr-oligo-conc', type=float,
+        default=3e-7,
         help=("Oligo concentration (in mol/L). Only used if "
               "--primer-thermo or --guide-thermo is set. Defaults to "
               "3e-7 mol/L."))
-    parser_ct_args.add_argument('--target-conc', type=float, default=0,
+    parser_ct_args.add_argument('--pcr-target-conc', type=float,
+        default=0,
         help=("Target concentration (in mol/L). Only used if "
               "--primer-thermo or --guide-thermo is set; only needed if "
               "target concentration is not significantly less than oligo "

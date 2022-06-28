@@ -98,6 +98,7 @@ class TestAnalyzeCoverage(object):
             # Disable logging
             logging.disable(logging.WARNING)
 
+            # Temporarily set constants to fake values
             self.DNA_DNA_INTERNAL = thermo.DNA_DNA_INTERNAL
             self.DNA_DNA_TERMINAL = thermo.DNA_DNA_TERMINAL
             self.DNA_DNA_TERM_GC = thermo.DNA_DNA_TERM_GC
@@ -286,6 +287,8 @@ class TestAnalyzeCoverage(object):
                     os.unlink(file)
             # Re-enable logging
             logging.disable(logging.NOTSET)
+
+            # Fix modified constants and functions
             ncbi_neighbors.fetch_fastas = self.fetch_fastas
             thermo.DNA_DNA_INTERNAL = self.DNA_DNA_INTERNAL
             thermo.DNA_DNA_TERMINAL = self.DNA_DNA_TERMINAL

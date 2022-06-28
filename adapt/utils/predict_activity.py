@@ -487,9 +487,7 @@ class TmPredictor:
             if self.key_fn(pair) not in mem:
                 mem[self.key_fn(pair)] = [-abs(thermo.calculate_melting_temp(
                     pair[0], pair[1], self.reverse,
-                    self.conditions.sodium, self.conditions.magnesium,
-                    self.conditions.dNTP, self.conditions.oligo_concentration,
-                    self.conditions.target_concentration) - self.ideal_tm)]
+                    self.conditions) - self.ideal_tm)]
 
     def cleanup_memoized(self, start_pos):
         """Cleanup memoizations no longer needed at a start position.

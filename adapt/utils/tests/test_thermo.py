@@ -117,7 +117,7 @@ class TestThermoCases(TestThermo.TestThermoCase):
         #    + (2 terminal AT bases * 5) = 32
         # s = (2 XA/XT base * 0.05) + (1 XC/XA bases * 0.01)
         #    + (2 terminal AT bases * 0.1) = 0.31
-        h,s = thermo.calculate_delta_h_s('AAAC','AAAT')
+        h,s = thermo.calculate_delta_h_s('AAAT','AAAC')
         self.assertEqual(h, 32)
         self.assertAlmostEqual(s, 0.31)
         # Reverse oligo false
@@ -125,7 +125,7 @@ class TestThermoCases(TestThermo.TestThermoCase):
         #    + (2 terminal AT bases * 5) = 31
         # s = (2 XA/XT base * 0.05) + (1 XT/XG bases * 0.005)
         #    + (2 terminal AT bases * 0.1) = 0.305
-        h,s = thermo.calculate_delta_h_s('AAAC','AAAT', reverse_oligo=False)
+        h,s = thermo.calculate_delta_h_s('AAAT','AAAC', reverse_oligo=False)
         self.assertEqual(h, 31)
         self.assertAlmostEqual(s, 0.305)
         # Symmetric

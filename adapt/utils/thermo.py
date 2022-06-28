@@ -504,11 +504,11 @@ def calculate_melting_temp(oligo, target, reverse_oligo=True,
     """
     try:
         if saltmethod=='santalucia':
-            h,s = calculate_delta_h_s(target, oligo,
+            h,s = calculate_delta_h_s(oligo, target,
                                       reverse_oligo=reverse_oligo,
                                       conditions=conditions)
         else:
-            h,s = calculate_delta_h_s(target, oligo,
+            h,s = calculate_delta_h_s(oligo, target,
                                       reverse_oligo=reverse_oligo,
                                       conditions=Conditions(
                                         sodium=1, magnesium=0, dNTP=0))
@@ -609,12 +609,12 @@ def calculate_equilibrium_constant(oligo, target, reverse_oligo=True,
     Returns:
         Equilibrium constant
     """
-    delta_g = calculate_delta_g(target, oligo, reverse_oligo=reverse_oligo,
+    delta_g = calculate_delta_g(oligo, target, reverse_oligo=reverse_oligo,
         conditions=conditions)
     return math.e**(-delta_g/(R_CONSTANT*conditions.t))
 
 
-def calculate_delta_g(target, oligo, reverse_oligo=True,
+def calculate_delta_g(oligo, target, reverse_oligo=True,
         conditions=Conditions()):
     """Calculate free energy of the target and oligo annealing
 
@@ -636,13 +636,13 @@ def calculate_delta_g(target, oligo, reverse_oligo=True,
         Free energy in kcal/mol
     """
 
-    h,s = calculate_delta_h_s(target, oligo, reverse_oligo=reverse_oligo,
+    h,s = calculate_delta_h_s(oligo, target, reverse_oligo=reverse_oligo,
                               conditions=conditions)
 
     return _delta_g_from_h_s(h, s, t=conditions.t)
 
 
-def calculate_delta_h_s(target, oligo, reverse_oligo=True,
+def calculate_delta_h_s(oligo, target, reverse_oligo=True,
         conditions=Conditions()):
     """Calculate enthalpy and entropy of the target and oligo annealing
 
