@@ -43,6 +43,8 @@ class OligoSearcher:
                 sequences with missing data is > min(a, max(b, c*m)), where m is
                 the median fraction of sequences with missing data over the
                 alignment
+            obj_type: either 'min' or 'max' depending on the optimization to
+                be used
             pre_filter_fns: if set, the value of this argument is a list
                 of functions f(x) such that this will only construct a oligo x
                 for which each f(x) is True. These filters run before activity
@@ -105,10 +107,14 @@ class OligoSearcher:
             raise ValueError(("obj_type must be 'min' or 'max'"))
         self.obj_type = obj_type
 
-        self.pre_filter_fns = pre_filter_fns if pre_filter_fns is not None else []
-        self.post_filter_fns = post_filter_fns if post_filter_fns is not None else []
-        self.required_oligos = required_oligos if required_oligos is not None else {}
-        self.ignored_ranges = ignored_ranges if ignored_ranges is not None else {}
+        self.pre_filter_fns = pre_filter_fns \
+            if pre_filter_fns is not None else []
+        self.post_filter_fns = post_filter_fns \
+            if post_filter_fns is not None else []
+        self.required_oligos = required_oligos \
+            if required_oligos is not None else {}
+        self.ignored_ranges = ignored_ranges \
+            if ignored_ranges is not None else set()
 
         # Verify positions of the oligos are within the alignment
         highest_possible_pos = self.aln.seq_length - self.min_oligo_length
@@ -1452,6 +1458,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                     determine_binding_and_active_seqs(olg)
             score = seq_idxs_score(binding_seqs)
             if score > best_olg_score:
+                skip_cluster = False
                 for is_suitable_fn in self.post_filter_fns:
                     if is_suitable_fn(olg) is False:
                         # Skip this cluster
@@ -1871,7 +1878,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         if end > self.aln.seq_length:
             raise ValueError("window end must be <= alignment length")
 
-        # Initialize an empty oligo set, with 0 activity against each
+        # Initialize an empty oligo set, with min activity against each
         # target sequence
         curr_oligo_set = set()
         curr_activities = np.full(self.aln.num_sequences,

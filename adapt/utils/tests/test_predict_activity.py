@@ -319,9 +319,9 @@ class TestTmPredictor(unittest.TestCase):
         conditions = thermo.Conditions(sodium=1, magnesium=0, dNTP=0,
             oligo_concentration=1)
         shared_memo = {}
-        left_predictor = predict_activity.TmPredictor(PERFECT_TM, 0.5,
+        left_predictor = predict_activity.TmPredictor(PERFECT_TM,
             conditions, False, shared_memo=shared_memo)
-        right_predictor = predict_activity.TmPredictor(PERFECT_TM, 0.5,
+        right_predictor = predict_activity.TmPredictor(PERFECT_TM,
             conditions, True, shared_memo=shared_memo)
         activities = left_predictor.compute_activity(0, pairs)
         expected = np.array([0, 0, -PERFECT_TM, 0, -20, -PERFECT_TM])

@@ -391,7 +391,7 @@ class TestOligoSearcher(unittest.TestCase):
         self.assertEqual(olg_seqs, {0,2,3})
         self.assertAlmostEqual(score, .75)
 
-        # Only predict oligos starting with 'A' to be active
+        # Only predict oligos starting with start_base to be active
         class PredictorTest:
             def __init__(self, start_base):
                 self.context_nt = 0

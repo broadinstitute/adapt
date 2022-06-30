@@ -1,7 +1,16 @@
 import numpy as np
 import math
 import logging
+import itertools
+
 from adapt.utils.oligo import FASTA_CODES, make_complement, is_complement, is_symmetric, gc_frac
+
+try:
+    import primer3
+except ImportError:
+    thermo_props = False
+else:
+    thermo_props = True
 
 logger = logging.getLogger(__name__)
 
@@ -799,6 +808,37 @@ def calculate_i_x(target, oligo, reverse_oligo=True):
             break
 
     return i_x
+
+
+def has_no_secondary_structure(oligo, conditions):
+    hairpin_dg = primer3.calcHairpin(oligo,
+        mv_conc=conditions.sodium*1000,
+        dv_conc=conditions.magnesium*1000,
+        dntp_conc=conditions.dNTP*1000,
+        dna_conc=conditions.oligo_concentration*10**9).dg/1000
+    if hairpin_dg <= -3:
+        return False
+    # Homodimer
+    homodimer_dg = primer3.calcHomodimer(oligo,
+        mv_conc=conditions.sodium*1000,
+        dv_conc=conditions.magnesium*1000,
+        dntp_conc=conditions.dNTP*1000,
+        dna_conc=conditions.oligo_concentration*10**9).dg/1000
+    if homodimer_dg <= -6:
+        return False
+    return True
+
+
+def has_no_heterodimers(oligo_set, conditions):
+    for olg_i, olg_j in itertools.combinations(oligo_set, 2):
+        heterodimer_dg = primer3.calcHeterodimer(olg_i, olg_j,
+            mv_conc=conditions.sodium*1000,
+            dv_conc=conditions.magnesium*1000,
+            dntp_conc=conditions.dNTP*1000,
+            dna_conc=conditions.oligo_concentration*10**9).dg/1000
+        if heterodimer_dg <= -6:
+            return False
+    return True
 
 
 class DoubleMismatchesError(ValueError):

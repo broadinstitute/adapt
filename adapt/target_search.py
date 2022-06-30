@@ -14,7 +14,7 @@ import math
 import os
 import numpy as np
 
-from adapt.utils import search, thermo
+from adapt.utils import search, thermo, predict_activity
 from adapt import guide_search
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -605,10 +605,9 @@ class TargetSearcher:
                         target_overlapping_annotations.append(annotation)
                 overlapping_annotations.append(target_overlapping_annotations)
 
-        # If the primer searcher uses the 'max' objective, this is using a
-        # thermodynamic model for primers-output that information
+        # If the primer predictor is for Tm-output thermodynamic information
         primer_tm = False
-        if self.lps.obj_type == 'max':
+        if isinstance(self.lps.predictor, predict_activity.TmPredictor):
             primer_tm = True
 
         with open(out_fn, 'w') as outf:
@@ -693,6 +692,8 @@ class TargetSearcher:
                             reverse_oligo=False,
                             conditions=self.rps.predictor.conditions) -
                         thermo.CELSIUS_TO_KELVIN for p2_seq in p2_seqs_sorted]
+                    # Note: the objective value for primers is the negative of
+                    # melting temperature variation with TmPredictor
                     line.extend([p1.start, p1.num_primers, p1_tm, -p1.obj_value,
                         p1.frac_bound, p1_seqs_str,
                         p2.start, p2.num_primers, p2_tm, -p2.obj_value,

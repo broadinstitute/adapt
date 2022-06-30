@@ -30,7 +30,41 @@ def onehot(b):
     return v
 
 
-class Predictor:
+class BasePredictor:
+    """Set up common functions for predictors
+    """
+    def __init__(self):
+        pass
+
+    def compute_activity(self, start_pos, pairs, percentiles=None):
+        """Compute a single activity measurement for pairs.
+
+        Args:
+            start_pos: start position of all guides in pairs; used for
+                memoizations
+            pairs: list of tuples (target with context, guide)
+            percentiles: single percentile or list of percentiles to compute,
+                each in [0,100] (0 is minimum, 100 is maximum)
+
+        Returns:
+            If percentile is not defined, list of activity value for each pair
+            If percentile is defined, tuple of (list of activity value for each
+                pair, the percentile(s) of those activities)
+        """
+        raise NotImplementedError("Subclasses of BasePredictor must implement "
+                                  "compute_activity")
+
+    def cleanup_memoized(self, start_pos):
+        """Cleanup memoizations no longer needed at a start position.
+
+        Args:
+            start_pos: start position of all oligos to remove
+        """
+        if start_pos in self._memoized_evaluations:
+            del self._memoized_evaluations[start_pos]
+
+
+class Predictor(BasePredictor):
     """This calls the activity models and memoizes results.
     """
 
@@ -156,7 +190,7 @@ class Predictor:
         # whether highly active)
         self._memoized_evaluations = {}
 
-        self.min_activity = 0
+        self.min_activity = self.regression_lower_bound
 
     def _model_input_from_nt(self, pairs):
         """Create one-hot input to models from nucleotide sequence.
@@ -394,40 +428,33 @@ class Predictor:
             return (activities, percentile_activity)
         return activities
 
-    def cleanup_memoized(self, start_pos):
-        """Cleanup memoizations no longer needed at a start position.
 
-        Args:
-            start_pos: start position of all guides to remove
-        """
-        if start_pos in self._memoized_evaluations:
-            del self._memoized_evaluations[start_pos]
-
-
-class TmPredictor:
+class TmPredictor(BasePredictor):
     """A Predictor object telling alignment.Alignment to compute activity based
     on a thermodynamic model of the oligos.
 
+    TmPredictor considers the "activity" of an oligo to be how far its melting
+    temperature is from an ideal melting temperature. While we want this to be
+    minimized, we are using a MaximizeActivity searcher, so we take the
+    negative of the activity.
     This does not use any machine learning models.
-    Note: This does have a scaling issue. Since the worst case melting
+
+    TmPredictor does have a scaling issue. Since the worst case melting
     temperature is -ideal_tm, the objective is then scaled based on what the
     ideal melting temperature is. This may be a problem when determining
     proper weight constants for primers vs guides, for example.
     """
 
-    def __init__(self, ideal_tm, max_delta_tm, conditions, reverse,
-            shared_memo=None):
+    def __init__(self, ideal_tm, conditions, reverse, shared_memo=None):
         """
         Args:
-            sodium: molar concentration of sodium ions
-            magnesium: molar concentration of magnesium ions. Only needed if
-                magnesium concentration is greater than dNTP concentration
-            dNTP: molar concentration of dNTPs. Only needed if
-                magnesium concentration is greater than dNTP concentration
-            oligo_concentration: molar concentration of oligos in reaction
-            target_concentration: molar concentration of target in reaction.
-                Only needed if not significantly smaller than oligo
-                concentration.
+            ideal_tm: Desired melting temperature
+            conditions: Conditions object
+            reverse: Boolean; True if the oligo being predicted is the
+                reverse compliment of the genomic target (so the right primer
+                and the guide), False otherwise (the left primer)
+            shared_memo: Dict; memo for evaluations to share between multiple
+                predictor objects. Lets right and left primers share a memo
         """
         self.conditions = conditions
         self.ideal_tm = ideal_tm
@@ -450,16 +477,20 @@ class TmPredictor:
 
         self.min_activity = -self.ideal_tm
 
-    def compute_activity(self, start_pos, pairs):
+    def compute_activity(self, start_pos, pairs, percentiles=None):
         """Compute a single activity measurement for pairs.
 
         Args:
             start_pos: start position of all guides in pairs; used for
                 memoizations
             pairs: list of tuples (target with context, guide)
+            percentiles: single percentile or list of percentiles to compute,
+                each in [0,100] (0 is minimum, 100 is maximum)
 
         Returns:
             If percentile is not defined, list of activity value for each pair
+            If percentile is defined, tuple of (list of activity value for each
+                pair, the percentile(s) of those activities)
         """
 
         # Determine which pairs do not have memoized results, and call
@@ -472,6 +503,11 @@ class TmPredictor:
         self._run_and_memoize(start_pos, unique_pairs_to_evaluate)
 
         dtms = [mem[self.key_fn(pair)][0] for pair in pairs]
+
+        if percentiles:
+            percentile_dtms = np.percentile(dtms, percentiles)
+            return (dtms, percentile_dtms)
+
         return dtms
 
     def _run_and_memoize(self, start_pos, pairs):
@@ -491,15 +527,6 @@ class TmPredictor:
             mem[self.key_fn(pair)] = [-abs(thermo.calculate_melting_temp(
                 pair[0], pair[1], self.reverse,
                 self.conditions) - self.ideal_tm)]
-
-    def cleanup_memoized(self, start_pos):
-        """Cleanup memoizations no longer needed at a start position.
-
-        Args:
-            start_pos: start position of all oligos to remove
-        """
-        if start_pos in self._memoized_evaluations:
-            del self._memoized_evaluations[start_pos]
 
 
 class SimpleBinaryPredictor:

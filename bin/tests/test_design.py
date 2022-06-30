@@ -232,8 +232,7 @@ class TestDesign(object):
                                  '0', '--pcr-oligo-conc', '1', '-pl', '2',
                                  '--primer-thermo', '-gl', '1',
                                  '--ideal-primer-melting-temperature',
-                                 str(PERFECT_TM),
-                                '--primer-melting-temperature-variation', '1'])
+                                 str(PERFECT_TM)])
                 else:
                     argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl',
                                  '1', '--max-primers-at-site', '2',

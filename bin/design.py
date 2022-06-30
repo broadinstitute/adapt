@@ -3,7 +3,6 @@
 
 import argparse
 from collections import defaultdict
-import itertools
 import logging
 import os
 import random
@@ -38,13 +37,6 @@ except ImportError:
     cloud = False
 else:
     cloud = True
-
-try:
-    import primer3
-except ImportError:
-    thermo_props = False
-else:
-    thermo_props = True
 
 __author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
@@ -830,34 +822,17 @@ def design_for_id(args):
                 left_primer_predictor = predict_activity.TmPredictor(
                     args.ideal_primer_melting_temperature +
                         thermo.CELSIUS_TO_KELVIN,
-                    args.primer_melting_temperature_variation,
                     conditions, False, shared_memo=shared_memo)
                 right_primer_predictor = predict_activity.TmPredictor(
                     args.ideal_primer_melting_temperature +
                         thermo.CELSIUS_TO_KELVIN,
-                    args.primer_melting_temperature_variation,
                     conditions, True, shared_memo=shared_memo)
 
-                def has_no_secondary_structure(oligo):
-                    hairpin_dg = primer3.calcHairpin(oligo,
-                        mv_conc=conditions.sodium*1000,
-                        dv_conc=conditions.magnesium*1000,
-                        dntp_conc=conditions.dNTP*1000,
-                        dna_conc=conditions.oligo_concentration*10**9).dg/1000
-                    if hairpin_dg <= -3:
-                        return False
-                    # Homodimer
-                    homodimer_dg = primer3.calcHomodimer(oligo,
-                        mv_conc=conditions.sodium*1000,
-                        dv_conc=conditions.magnesium*1000,
-                        dntp_conc=conditions.dNTP*1000,
-                        dna_conc=conditions.oligo_concentration*10**9).dg/1000
-                    if homodimer_dg <= -6:
-                        return False
-                    return True
+                post_filter_primers = [lambda oligo:
+                    thermo.has_no_secondary_structure(oligo, conditions)]
 
-                post_filter_primers = [has_no_secondary_structure]
-
+                # Since TmPredictor returns negative values, the algorithm must
+                # be greedy.
                 lps = primer_search.PrimerSearcherMaximizeActivity(
                     aln, args.primer_length, args.primer_length,
                     args.soft_primer_constraint, args.hard_primer_constraint,
@@ -875,18 +850,8 @@ def design_for_id(args):
                     post_filter_fns=post_filter_primers,
                     predictor=right_primer_predictor)
 
-                def has_no_heterodimers(oligo_set):
-                    for olg_i, olg_j in itertools.combinations(oligo_set, 2):
-                        heterodimer_dg = primer3.calcHeterodimer(olg_i, olg_j,
-                            mv_conc=conditions.sodium*1000,
-                            dv_conc=conditions.magnesium*1000,
-                            dntp_conc=conditions.dNTP*1000,
-                            dna_conc=conditions.oligo_concentration*10**9).dg/1000
-                        if heterodimer_dg <= -6:
-                            return False
-                    return True
-
-                primer_set_filter_fns = [has_no_heterodimers]
+                primer_set_filter_fns = [lambda oligo_set:
+                    thermo.has_no_heterodimers(oligo_set, conditions)]
             else:
                 lps = primer_search.PrimerSearcherMinimizePrimers(
                     aln, args.primer_length, args.primer_mismatches,
@@ -1381,19 +1346,14 @@ def argv_to_args(argv):
     parser_ct_args.add_argument('-pt', '--primer-thermo',
         action='store_true',
         help=("If set, use a thermodynamic model to determine whether primers "
-              "cover a sequence. This is particularly useful for PCR."))
+              "cover a sequence. This is particularly useful for PCR. While "
+              "this method uses the same optimization that the activity "
+              "models use, it is not guaranteed to be submodular."))
     parser_ct_args.add_argument('--ideal-primer-melting-temperature',
         type=float, default=60,
-        help=("Allow for at most PRIMER_MELTING_TEMPERATURE_VARIATION°C "
-              "deviation from the perfect match primer's melting temperature "
-              "for a sequence to be considered 'bound' still."
-              "Default is 60°C. Only used if --primer-thermo is set."))
-    parser_ct_args.add_argument('--primer-melting-temperature-variation',
-        type=float, default=20,
-        help=("Allow for at most PRIMER_MELTING_TEMPERATURE_VARIATION°C "
-              "deviation from the perfect match primer's melting temperature "
-              "for a sequence to be considered 'bound' still."
-              "Default is 20°C. Only used if --primer-thermo is set."))
+        help=("Minimize the deviation of a primer's melting temperature from "
+              "IDEAL_MELTING_TEMPERATURE°C. Default is 60°C. Only used if "
+              "--primer-thermo is set."))
 
     # Soft primer constraint
     base_subparser.add_argument('-spc', '--soft-primer-constraint', type=int,
@@ -1402,13 +1362,15 @@ def argv_to_args(argv):
               "penalty for a number of primers <= SOFT_PRIMER_CONSTRAINT, "
               "and having a number of primers beyond this is penalized. "
               "See --primer-penalty-strength. This value must be <= "
-              "HARD_PRIMER_CONSTRAINT."))
+              "HARD_PRIMER_CONSTRAINT. This is only used if --primer-thermo "
+              "is set."))
     # Hard primer constraint
     base_subparser.add_argument('-hpc', '--hard-primer-constraint', type=int,
         default=5,
         help=("Hard constraint on the number of primers. The number of "
               "primers designed for a target will be <= "
-              "HARD_PRIMER_CONSTRAINT."))
+              "HARD_PRIMER_CONSTRAINT. This is only used if --primer-thermo "
+              "is set."))
     # Penalty strength TODO find reasonable values experimentally
     base_subparser.add_argument('--primer-penalty-strength', type=float,
         default=0.25,
