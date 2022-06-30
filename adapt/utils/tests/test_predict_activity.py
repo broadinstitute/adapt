@@ -7,11 +7,58 @@ import numpy as np
 import os
 
 from adapt import alignment
-from adapt.utils import predict_activity
+from adapt.utils import predict_activity, thermo
 from adapt.utils.version import get_project_path, get_latest_model_version
 
-__author__ = 'Hayden Metsky <hayden@mit.edu>'
+__author__ = 'Hayden Metsky <hmetsky@broadinstitute.org>, Priya P. Pillai <ppillai@broadinstitute.org>'
 
+FAKE_DNA_DNA_INSIDE ={
+    'A': {
+        'A': (1, 0),
+        'T': (10, 0.05),
+        'C': (2, 0),
+        'G': (3, 0),
+    },
+    'T': {
+        'A': (10, 0.05),
+        'T': (1, 0),
+        'C': (2, 0),
+        'G': (3, 0),
+    },
+    'C': {
+        'A': (2, 0),
+        'T': (2, 0),
+        'C': (2, 0),
+        'G': (10, 0.05),
+    },
+    'G': {
+        'A': (3, 0),
+        'T': (3, 0),
+        'C': (10, 0.05),
+        'G': (3, 0),
+    }
+}
+
+FAKE_DNA_DNA_INTERNAL = {
+    'A': FAKE_DNA_DNA_INSIDE,
+    'T': FAKE_DNA_DNA_INSIDE,
+    'C': FAKE_DNA_DNA_INSIDE,
+    'G': FAKE_DNA_DNA_INSIDE,
+}
+
+FAKE_DNA_DNA_TERMINAL = FAKE_DNA_DNA_INTERNAL
+
+FAKE_DNA_DNA_TERM_GC = (0, 0)
+
+FAKE_DNA_DNA_SYM = (0, 0)
+
+FAKE_DNA_DNA_TERM_AT = (0, 0)
+
+# With n bp matching, delta H is 10n and delta S is 0.05n. With thermodynamic
+# conditions set to not interfere, the melting temperature is delta H/delta S,
+# which is 200K (Note: this doesn't actually make sense in practice, as Tm
+# can't go below 0°C; this is a toy example to make testing easier)
+PERFECT_TM = 200
 
 class TestPredictor(unittest.TestCase):
     """Tests methods in the Predictor class.
@@ -240,6 +287,56 @@ class TestPredictor(unittest.TestCase):
                 [False, True])
         self.assertListEqual(self.predictor.determine_highly_active(5, pairs_54),
                 [True, False])
+
+
+class TestTmPredictor(unittest.TestCase):
+    """Tests methods in the TestTmPredictor class.
+    """
+    def setUp(self):
+        # Temporarily set constants to fake values
+        self.DNA_DNA_INTERNAL = thermo.DNA_DNA_INTERNAL
+        self.DNA_DNA_TERMINAL = thermo.DNA_DNA_TERMINAL
+        self.DNA_DNA_TERM_GC = thermo.DNA_DNA_TERM_GC
+        self.DNA_DNA_SYM = thermo.DNA_DNA_SYM
+        self.DNA_DNA_TERM_AT = thermo.DNA_DNA_TERM_AT
+
+        thermo.DNA_DNA_INTERNAL = FAKE_DNA_DNA_INTERNAL
+        thermo.DNA_DNA_TERMINAL = FAKE_DNA_DNA_TERMINAL
+        thermo.DNA_DNA_TERM_GC = FAKE_DNA_DNA_TERM_GC
+        thermo.DNA_DNA_SYM = FAKE_DNA_DNA_SYM
+        thermo.DNA_DNA_TERM_AT = FAKE_DNA_DNA_TERM_AT
+
+
+    def test_compute_activity(self):
+        seqs = ['ATCG',
+                'ATCG',
+                'GGGC',
+                'ATCG',
+                'ATCA',
+                'GGGC']
+        oligo = 'ATCG'
+        pairs = [(seq, oligo) for seq in seqs]
+        conditions = thermo.Conditions(sodium=1, magnesium=0, dNTP=0,
+            oligo_concentration=1)
+        shared_memo = {}
+        left_predictor = predict_activity.TmPredictor(PERFECT_TM, 0.5,
+            conditions, False, shared_memo=shared_memo)
+        right_predictor = predict_activity.TmPredictor(PERFECT_TM, 0.5,
+            conditions, True, shared_memo=shared_memo)
+        activities = left_predictor.compute_activity(0, pairs)
+        expected = np.array([0, 0, -PERFECT_TM, 0, -20, -PERFECT_TM])
+        np.testing.assert_array_almost_equal(activities, expected)
+        activities = right_predictor.compute_activity(0, pairs)
+        expected = np.array([0, 0, -PERFECT_TM, 0, -30, -PERFECT_TM])
+        np.testing.assert_array_almost_equal(activities, expected)
+
+    def tearDown(self):
+        # Fix modified constants and functions
+        thermo.DNA_DNA_INTERNAL = self.DNA_DNA_INTERNAL
+        thermo.DNA_DNA_TERMINAL = self.DNA_DNA_TERMINAL
+        thermo.DNA_DNA_TERM_GC = self.DNA_DNA_TERM_GC
+        thermo.DNA_DNA_SYM = self.DNA_DNA_SYM
+        thermo.DNA_DNA_TERM_AT = self.DNA_DNA_TERM_AT
 
 
 class TestSimpleBinaryPredictor(unittest.TestCase):

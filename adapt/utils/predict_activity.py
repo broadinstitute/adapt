@@ -409,6 +409,10 @@ class TmPredictor:
     on a thermodynamic model of the oligos.
 
     This does not use any machine learning models.
+    Note: This does have a scaling issue. Since the worst case melting
+    temperature is -ideal_tm, the objective is then scaled based on what the
+    ideal melting temperature is. This may be a problem when determining
+    proper weight constants for primers vs guides, for example.
     """
 
     def __init__(self, ideal_tm, max_delta_tm, conditions, reverse,
@@ -430,7 +434,7 @@ class TmPredictor:
         self.reverse = reverse
         self.context_nt = 0
         self.rough_max_activity = 0
-        if shared_memo:
+        if shared_memo is not None:
             self._memoized_evaluations = shared_memo
         else:
             self._memoized_evaluations = {}
@@ -484,10 +488,9 @@ class TmPredictor:
         mem = self._memoized_evaluations[start_pos]
 
         for pair in pairs:
-            if self.key_fn(pair) not in mem:
-                mem[self.key_fn(pair)] = [-abs(thermo.calculate_melting_temp(
-                    pair[0], pair[1], self.reverse,
-                    self.conditions) - self.ideal_tm)]
+            mem[self.key_fn(pair)] = [-abs(thermo.calculate_melting_temp(
+                pair[0], pair[1], self.reverse,
+                self.conditions) - self.ideal_tm)]
 
     def cleanup_memoized(self, start_pos):
         """Cleanup memoizations no longer needed at a start position.

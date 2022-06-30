@@ -51,12 +51,6 @@ FAKE_DNA_DNA_TERM_AT = (5, 0.1)
 FAKE_DNA_DNA_SALT = (0, 0.0)
 FAKE_R_CONSTANT = 1/np.log(4)
 
-# # With 2 bp matching, delta H is 20 and delta S is 0.1. With the thermodynamic
-# # conditions set to not interfere, the melting temperature is delta H/delta S,
-# # which is 200K (Note: this doesn't actually make sense in practice, as Tm
-# # can't go below 0°C; this is a toy example to make testing easier)
-# PERFECT_TM = 200 - thermo.CELSIUS_TO_KELVIN
-
 
 class TestThermo(object):
     """General class for testing analyze_coverage.py
