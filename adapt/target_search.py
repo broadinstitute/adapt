@@ -137,8 +137,8 @@ class TargetSearcher:
                 else:
                     skip_primers = False
                     for primer_set_filter in self.primer_set_filter_fns:
-                        if primer_set_filter({*p1.primers_in_cover,
-                                *p2.primers_in_cover}) is False:
+                        if primer_set_filter({*p1.primers_in_set,
+                                *p2.primers_in_set}) is False:
                             # Skip these primers
                             skip_primers = True
                             break
@@ -384,8 +384,8 @@ class TargetSearcher:
                 # instance of GuideSearcherMinimizeGuides (i.e., not for
                 # MaximizeActivity -- mostly for technical implementation
                 # reasons)
-                p1_bound_seqs = self.lps.seqs_bound(p1.primers_in_cover)
-                p2_bound_seqs = self.rps.seqs_bound(p2.primers_in_cover)
+                p1_bound_seqs = self.lps.seqs_bound(p1.primers_in_set)
+                p2_bound_seqs = self.rps.seqs_bound(p2.primers_in_set)
                 primer_bound_seqs = p1_bound_seqs & p2_bound_seqs
                 guide_seqs_to_consider = primer_bound_seqs
             else:
@@ -651,9 +651,9 @@ class TargetSearcher:
                 target_length = target_end - target_start
 
                 # Construct string of primers and guides
-                p1_seqs_sorted = sorted(list(p1.primers_in_cover))
+                p1_seqs_sorted = sorted(list(p1.primers_in_set))
                 p1_seqs_str = ' '.join(p1_seqs_sorted)
-                p2_seqs_sorted = sorted(list(p2.primers_in_cover))
+                p2_seqs_sorted = sorted(list(p2.primers_in_set))
                 p2_seqs_str = ' '.join(p2_seqs_sorted)
                 guides_seqs_sorted = sorted(list(guides))
                 guides_seqs_str = ' '.join(guides_seqs_sorted)

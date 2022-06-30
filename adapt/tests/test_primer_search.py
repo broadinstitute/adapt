@@ -91,10 +91,10 @@ class TestPrimerSearch(unittest.TestCase):
         self.a_gc_bounds = primer_search.PrimerSearcherMinimizePrimers(self.a_aln,
                 4, 0, 1.0, (1, 1, 100), primer_gc_content_bounds=(0.4, 0.6))
 
-    def _pr(self, start, num_primers, frac_bound, primers_in_cover):
+    def _pr(self, start, num_primers, frac_bound, primers_in_set):
         # Construct a PrimerResult object
         return primer_search.PrimerResult(start, num_primers, 4, frac_bound,
-            primers_in_cover, num_primers)
+            primers_in_set, num_primers)
 
     def test_find_primers_simple(self):
         covers = list(self.a.find_primers())

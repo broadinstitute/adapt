@@ -59,7 +59,7 @@ class TestTargetSearch(unittest.TestCase):
             # Verify that the primer sequences are in the alignment
             # at their given locations
             for p in (p1, p2):
-                for primer in p.primers_in_cover:
+                for primer in p.primers_in_set:
                     in_aln = False
                     for seq in self.a_seqs:
                         if primer == seq[p.start:(p.start + 4)]:
