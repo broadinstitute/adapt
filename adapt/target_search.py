@@ -25,17 +25,15 @@ logger = logging.getLogger(__name__)
 class TargetSearcher:
     """Methods to search for targets over a genome."""
 
-    def __init__(self, lps, rps, gs, obj_type='min', max_primers_at_site=None,
+    def __init__(self, lps, rps, gs, max_primers_at_site=None,
             max_target_length=None, obj_weights=None,
             only_account_for_amplified_seqs=False, halt_early=False,
-            obj_value_shift=None, mutator=None, primer_set_filters=None):
+            obj_value_shift=None, mutator=None, primer_set_filter_fns=None):
         """
         Args:
-            ps: PrimerSearcher object
+            lps: PrimerSearcher object for the left primer
+            rps: PrimerSearcher object for the right primer
             gs: GuideSearcher object
-            obj_type: 'min' or 'max' indicating whether the objective
-                should be considered to be a minimization or maximization
-                problem
             max_primers_at_site: only allow amplicons in which each
                 end has at most this number of primers; or None for
                 no limit
@@ -64,9 +62,13 @@ class TargetSearcher:
                 set below based on obj_type.
             mutator: a adapt.utils.mutate Mutator object. If None (default),
                 do not predict activity after mutations.
+            primer_set_filter_fns: if set, the value of this argument is a list
+                of functions f(X) such that this will only output a primer set
+                X for which each f(X) is True.
         """
         self.lps = lps
         self.rps = rps
+        assert self.lps.obj_type == self.rps.obj_type
         self.gs = gs
 
         self.max_primers_at_site = max_primers_at_site
@@ -90,17 +92,18 @@ class TargetSearcher:
         self.halt_early = halt_early
 
         if obj_value_shift is None:
-            if obj_type == 'min':
+            if self.gs.obj_type == 'min':
                 # Values for all design options should all be positive, so
                 # no need to shift
                 self.obj_value_shift = 0
-            elif obj_type == 'max':
+            elif self.gs.obj_type == 'max':
                 # Values for some design options may be positive and others
                 # negative, so shift all up so that most are positive
                 self.obj_value_shift = 4.0
 
         self.mutator = mutator
-        self.primer_set_filters = primer_set_filters if primer_set_filters is not None else []
+        self.primer_set_filter_fns = primer_set_filter_fns if \
+            primer_set_filter_fns is not None else []
 
     def _find_primer_pairs(self):
         """Find suitable primer pairs using self.lps and self.rps.
@@ -118,7 +121,7 @@ class TargetSearcher:
             right_primers = list(self.rps.find_primers(
                 max_at_site=self.max_primers_at_site))
         min_j = 0
-        for i in range(len(left_primers) - 1):
+        for i in range(len(left_primers)):
             p1 = left_primers[i]
             while (min_j < len(right_primers) and
                    right_primers[min_j].start <= p1.start):
@@ -133,7 +136,7 @@ class TargetSearcher:
                     break
                 else:
                     skip_primers = False
-                    for primer_set_filter in self.primer_set_filters:
+                    for primer_set_filter in self.primer_set_filter_fns:
                         if primer_set_filter({*p1.primers_in_cover,
                                 *p2.primers_in_cover}) is False:
                             # Skip these primers
@@ -210,7 +213,6 @@ class TargetSearcher:
         target_heap = []
         push_id_counter = itertools.count()
 
-        assert self.gs.obj_type in ['min', 'max']
         assert no_overlap in ['amplicon', 'primer', 'none']
         def obj_value(i):
             # Return objective value of the i'th element
@@ -271,13 +273,17 @@ class TargetSearcher:
                 self.gs._cleanup_memo(pos)
             last_window_start = window_start
 
-            # Calculate a cost of the primers
+            # Calculate the objective value of the primers
             p1_obj = p1.obj_value
             p2_obj = p2.obj_value
 
-            cost_primers = self.obj_weight_primers * (p1_obj + p2_obj)
-            if self.lps.obj_type == 'max':
-                cost_primers *= -1
+            primers_obj_value = self.obj_weight_primers * (p1_obj + p2_obj)
+            # The overall optimization algorithm is based on the guide
+            # objective type, so if the primers objective type does not match
+            # the guide objective type, take the negative of the primers
+            # objective value
+            if self.gs.obj_type != self.lps.obj_type:
+                primers_obj_value *= -1
 
             # Calculate a cost of the window length
             cost_window = self.obj_weight_length * math.log2(window_length)
@@ -287,10 +293,10 @@ class TargetSearcher:
             # This is useful for pruning the search
             if self.gs.obj_type == 'min':
                 best_possible_obj_value = (best_guide_obj_value +
-                        cost_primers + cost_window)
+                        primers_obj_value + cost_window)
             elif self.gs.obj_type == 'max':
-                best_possible_obj_value = (best_guide_obj_value -
-                        cost_primers - cost_window)
+                best_possible_obj_value = (best_guide_obj_value +
+                        primers_obj_value - cost_window)
 
             # Check if we should bother trying to find guides in this window
             if len(target_heap) >= best_n:
@@ -449,13 +455,13 @@ class TargetSearcher:
             # Calculate a total objective value
             if self.gs.obj_type == 'min':
                 obj_value_total = (self.gs.obj_value(guides) +
-                        cost_primers + cost_window)
+                        primers_obj_value + cost_window)
                 obj_value_to_add = -1 * obj_value_total
             elif self.gs.obj_type == 'max':
                 gs_obj_value = self.gs.obj_value(window_start, window_end,
                         guides, activities=activities)
-                obj_value_total = (gs_obj_value -
-                        cost_primers - cost_window)
+                obj_value_total = (gs_obj_value +
+                        primers_obj_value - cost_window)
                 obj_value_to_add = obj_value_total
 
             # Add target to the heap (but only keep it if there are not

@@ -886,7 +886,7 @@ def design_for_id(args):
                             return False
                     return True
 
-                primer_set_filters = [has_no_heterodimers]
+                primer_set_filter_fns = [has_no_heterodimers]
             else:
                 lps = primer_search.PrimerSearcherMinimizePrimers(
                     aln, args.primer_length, args.primer_mismatches,
@@ -900,7 +900,7 @@ def design_for_id(args):
                 obj_weights=args.obj_fn_weights,
                 only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
                 halt_early=args.halt_search_early, mutator=mutator,
-                primer_set_filters=[])
+                primer_set_filter_fns=[])
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets, no_overlap=args.do_not_overlap,
                 annotations=args.annotations[i])
@@ -1466,8 +1466,8 @@ def argv_to_args(argv):
               "for a target. These specify weights for penalties on primers "
               "and amplicons relative to the guide objective. There are "
               "2 weights (A B), where the target objective function "
-              "is [(guide objective value) +/- (A*(total number of "
-              "primers) + B*log2(amplicon length)]. It is + when "
+              "is [(guide objective value) +/- (A*(primers "
+              "objective value) + B*log2(amplicon length)]. It is + when "
               "--obj is minimize-guides and - when --obj is "
               "maximize-activity."))
     parser_ct_args.add_argument('--best-n-targets', type=int, default=10,

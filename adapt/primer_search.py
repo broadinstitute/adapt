@@ -13,25 +13,25 @@ logger = logging.getLogger(__name__)
 
 
 class PrimerResult:
-    """Store results of a primer cover at a site."""
+    """Store results of a primer set at a site."""
 
     def __init__(self, start, num_primers, primer_length, frac_bound,
-            primers_in_cover, obj_value):
+            primers_in_set, obj_value):
         """
         Args:
             start: start position of the primer
             num_primers: number of primers designed at the site
             primer_length: length of each primer
             frac_bound: total fraction of all sequences bound by the primers
-            primers_in_cover: set of primers that achieve the desired coverage
-                 and is minimal at the site
-            obj_value: value to use to compare primer covers to each other
+            primers_in_set: set of primers that achieve the best obj_value at
+                a site
+            obj_value: value to use to compare primer sets to each other
         """
         self.start = start
         self.num_primers = num_primers
         self.primer_length = primer_length
         self.frac_bound = frac_bound
-        self.primers_in_cover = primers_in_cover
+        self.primers_in_set = primers_in_set
         self.obj_value = obj_value
 
     def overlaps(self, other, expand=0):
@@ -63,11 +63,11 @@ class PrimerResult:
 
     def __str__(self):
         return str((self.start, self.num_primers, self.primer_length,
-            self.frac_bound, self.primers_in_cover))
+            self.frac_bound, self.primers_in_set))
 
     def __repr__(self):
         return str((self.start, self.num_primers, self.primer_length,
-            self.frac_bound, self.primers_in_cover))
+            self.frac_bound, self.primers_in_set))
 
     def __eq__(self, other):
         """Determine equality of self and other.
@@ -82,7 +82,7 @@ class PrimerResult:
                 self.num_primers == other.num_primers and
                 self.primer_length == other.primer_length and
                 self.frac_bound == other.frac_bound and
-                self.primers_in_cover == other.primers_in_cover)
+                self.primers_in_set == other.primers_in_set)
 
 
 class PrimerSearcher(search.OligoSearcher):
@@ -147,16 +147,16 @@ class PrimerSearcher(search.OligoSearcher):
             alignment
         """
         window_size = self.max_oligo_length
-        for cover in self._find_oligos_for_each_window(
+        for primer_set in self._find_oligos_for_each_window(
                 window_size, hide_warnings=True):
-            start, end, primers_in_cover = cover
-            num_primers = len(primers_in_cover)
+            start, end, primers_in_set = primer_set
+            num_primers = len(primers_in_set)
             if self.obj_type == 'min':
-                frac_bound = self.total_frac_bound(primers_in_cover)
-                obj_value = self.obj_value(primers_in_cover)
+                frac_bound = self.total_frac_bound(primers_in_set)
+                obj_value = self.obj_value(primers_in_set)
             else:
-                frac_bound = self.total_frac_bound(start, end, primers_in_cover)
-                obj_value = self.obj_value(start, end, primers_in_cover)
+                frac_bound = self.total_frac_bound(start, end, primers_in_set)
+                obj_value = self.obj_value(start, end, primers_in_set)
 
             # Check constraints
             if max_at_site is not None and num_primers > max_at_site:
@@ -164,16 +164,17 @@ class PrimerSearcher(search.OligoSearcher):
 
             yield PrimerResult(
                 start, num_primers, window_size,
-                frac_bound, primers_in_cover, obj_value)
+                frac_bound, primers_in_set, obj_value)
 
 
 class PrimerSearcherMaximizeActivity(search.OligoSearcherMaximizeActivity,
         PrimerSearcher):
-    """Methods to search for primers over a genome.
+    """Methods to search for primers over a genome using activity models
 
-    This looks for oligos (here, primers) within each window of size w
-    where w is the maximum length of a primer.
-
+    'Activity' here is defined loosely by whatever the predictor's output is.
+    (For example, using predict_activity.TmPredictor, the activity would be
+    defined as the negative of the difference between the calculated and ideal
+    melting temperature)
     """
 
     def __init__(self, aln, min_primer_length, max_primer_length,

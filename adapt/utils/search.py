@@ -45,7 +45,12 @@ class OligoSearcher:
                 alignment
             pre_filter_fns: if set, the value of this argument is a list
                 of functions f(x) such that this will only construct a oligo x
-                for which each f(x) is True
+                for which each f(x) is True. These filters run before activity
+                is calculated.
+            post_filter_fns: if set, the value of this argument is a list
+                of functions f(x) such that this will only construct a oligo x
+                for which each f(x) is True. These filters run after activity
+                is calculated and determined to be good.
             required_oligos: dict that maps oligo sequences to their position
                 in the alignment; all of these oligo sequences are immediately
                 placed in the set of covering oligos for their appropriate
