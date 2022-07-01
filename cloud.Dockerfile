@@ -32,10 +32,7 @@ RUN wget https://mafft.cbrc.jp/alignment/software/mafft_7.487-1_amd64.deb \
     && dpkg -i mafft_7.487-1_amd64.deb \
     && rm -rf mafft_7.487-1_amd64.deb
 
-COPY ./requirements-with-aws.txt .
-RUN pip install -r requirements-with-aws.txt
-
 COPY . .
-RUN pip install -e .
+RUN pip install -e ".[AWS,thermo]"
 
 CMD "/bin/bash"

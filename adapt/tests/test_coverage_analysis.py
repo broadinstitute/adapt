@@ -163,40 +163,40 @@ class TestCoverageAnalysisWithMismatchModel(unittest.TestCase):
         self.assertIn('design1', per_seq_guide_scores)
         self.assertDictEqual(
                 per_seq_guide_scores['design1'],
-                {'seq1': [(math.inf, ), None, None],
-                 'seq2': [(math.inf, ), None, None],
-                 'seq3': [(math.inf, ), None, None]}
+                {'seq1': [[math.inf, ], None, None],
+                 'seq2': [[math.inf, ], None, None],
+                 'seq3': [[math.inf, ], None, None]}
         )
         self.assertIn('design2', per_seq_guide_scores)
         self.assertDictEqual(
                 per_seq_guide_scores['design2'],
-                {'seq1': [(0, ), 'TTCGA', 6],
-                 'seq2': [(0, ), 'TTCGA', 8],
-                 'seq3': [(0, ), 'CCGA', 5]}
+                {'seq1': [[0, ], 'TTCGA', 6],
+                 'seq2': [[0, ], 'TTCGA', 8],
+                 'seq3': [[0, ], 'CCGA', 5]}
         )
         self.assertIn('design3', per_seq_guide_scores)
         self.assertDictEqual(
                 per_seq_guide_scores['design3'],
-                {'seq1': [(0, ), 'ATTCGAT', 5],
-                 'seq2': [(1, ), 'ATTCGAT', 7],
-                 'seq3': [(math.inf, ), None, None]}
+                {'seq1': [[0, ], 'ATTCGAT', 5],
+                 'seq2': [[1, ], 'ATTCGAT', 7],
+                 'seq3': [[math.inf, ], None, None]}
         )
         self.assertIn('design4', per_seq_guide_scores)
         self.assertDictEqual(
                 per_seq_guide_scores['design4'],
-                {'seq1': [(1, ), 'ATTCGAG', 5],
-                 'seq2': [(0, ), 'ATTCGAG', 7],
-                 'seq3': [(math.inf, ), None, None]}
+                {'seq1': [[1, ], 'ATTCGAG', 5],
+                 'seq2': [[0, ], 'ATTCGAG', 7],
+                 'seq3': [[math.inf, ], None, None]}
         )
         self.assertIn('design5', per_seq_guide_scores)
         self.assertDictEqual(
                 per_seq_guide_scores['design5'],
-                {'seq1': [(0, ), 'ATTCGAT', 5],
-                 'seq2': [(0, ), 'ATTCGAG', 7],
-                 'seq3': [(math.inf, ), None, None]}
+                {'seq1': [[0, ], 'ATTCGAT', 5],
+                 'seq2': [[0, ], 'ATTCGAG', 7],
+                 'seq3': [[math.inf, ], None, None]}
         )
 
-    def test_per_seq_primer_mismatches(self):
+    def test_per_seq_primers(self):
         self.ca.designs = {
             'design1': coverage_analysis.Design(None, ({'GGGCC'},
                                                        {'TTCGA', 'CCGA'})),
@@ -204,98 +204,98 @@ class TestCoverageAnalysisWithMismatchModel(unittest.TestCase):
             'design3': coverage_analysis.Design(None, ({'ATTCGAT'},
                                                        {'ATTCGAT'})),
         }
-        per_seq_primer_mismatches = self.ca.per_seq_primer_mismatches()
-        self.assertIn('design1', per_seq_primer_mismatches[0])
-        self.assertIn('design1', per_seq_primer_mismatches[1])
+        per_seq_primers = self.ca.per_seq_primers()
+        self.assertIn('design1', per_seq_primers[0])
+        self.assertIn('design1', per_seq_primers[1])
         self.assertDictEqual(
-                per_seq_primer_mismatches[0]['design1'],
-                {'seq1': [(math.inf, ), None, None],
-                 'seq2': [(math.inf, ), None, None],
-                 'seq3': [(math.inf, ), None, None]}
+                per_seq_primers[0]['design1'],
+                {'seq1': [[math.inf, ], None, None],
+                 'seq2': [[math.inf, ], None, None],
+                 'seq3': [[math.inf, ], None, None]}
         )
         self.assertDictEqual(
-                per_seq_primer_mismatches[1]['design1'],
-                {'seq1': [(0, ), 'TTCGA', 6],
-                 'seq2': [(0, ), 'TTCGA', 8],
-                 'seq3': [(0, ), 'CCGA', 5]}
+                per_seq_primers[1]['design1'],
+                {'seq1': [[0, ], 'TTCGA', 6],
+                 'seq2': [[0, ], 'TTCGA', 8],
+                 'seq3': [[0, ], 'CCGA', 5]}
         )
-        self.assertIn('design2', per_seq_primer_mismatches[0])
-        self.assertIn('design2', per_seq_primer_mismatches[1])
+        self.assertIn('design2', per_seq_primers[0])
+        self.assertIn('design2', per_seq_primers[1])
         self.assertDictEqual(
-                per_seq_primer_mismatches[0]['design2'],
-                {'seq1': [(1, ), 'TATC', 9],
-                 'seq2': [(1, ), 'TATC', 1],
-                 'seq3': [(1, ), 'TATC', 7]}
-        )
-        self.assertDictEqual(
-                per_seq_primer_mismatches[1]['design2'],
-                {'seq1': [(1, ), 'TATC', 9],
-                 'seq2': [(1, ), 'TATC', 1],
-                 'seq3': [(1, ), 'TATC', 7]}
-        )
-        self.assertIn('design3', per_seq_primer_mismatches[0])
-        self.assertIn('design3', per_seq_primer_mismatches[1])
-        self.assertDictEqual(
-                per_seq_primer_mismatches[0]['design3'],
-                {'seq1': [(0, ), 'ATTCGAT', 5],
-                 'seq2': [(1, ), 'ATTCGAT', 7],
-                 'seq3': [(math.inf, ), None, None]}
+                per_seq_primers[0]['design2'],
+                {'seq1': [[1, ], 'TATC', 9],
+                 'seq2': [[1, ], 'TATC', 1],
+                 'seq3': [[1, ], 'TATC', 7]}
         )
         self.assertDictEqual(
-                per_seq_primer_mismatches[1]['design3'],
-                {'seq1': [(0, ), 'ATTCGAT', 5],
-                 'seq2': [(1, ), 'ATTCGAT', 7],
-                 'seq3': [(math.inf, ), None, None]}
+                per_seq_primers[1]['design2'],
+                {'seq1': [[1, ], 'TATC', 9],
+                 'seq2': [[1, ], 'TATC', 1],
+                 'seq3': [[1, ], 'TATC', 7]}
+        )
+        self.assertIn('design3', per_seq_primers[0])
+        self.assertIn('design3', per_seq_primers[1])
+        self.assertDictEqual(
+                per_seq_primers[0]['design3'],
+                {'seq1': [[0, ], 'ATTCGAT', 5],
+                 'seq2': [[1, ], 'ATTCGAT', 7],
+                 'seq3': [[math.inf, ], None, None]}
+        )
+        self.assertDictEqual(
+                per_seq_primers[1]['design3'],
+                {'seq1': [[0, ], 'ATTCGAT', 5],
+                 'seq2': [[1, ], 'ATTCGAT', 7],
+                 'seq3': [[math.inf, ], None, None]}
         )
 
         self.ca.primer_terminal_mismatches = 0
         self.ca.bases_from_terminal = 1
 
-        per_seq_primer_mismatches = self.ca.per_seq_primer_mismatches()
-        self.assertIn('design1', per_seq_primer_mismatches[0])
-        self.assertIn('design1', per_seq_primer_mismatches[1])
+        per_seq_primers = self.ca.per_seq_primers()
+        self.assertIn('design1', per_seq_primers[0])
+        self.assertIn('design1', per_seq_primers[1])
         self.assertDictEqual(
-                per_seq_primer_mismatches[0]['design1'],
-                {'seq1': [(math.inf, ), None, None],
-                 'seq2': [(math.inf, ), None, None],
-                 'seq3': [(math.inf, ), None, None]}
+                per_seq_primers[0]['design1'],
+                {'seq1': [[math.inf, ], None, None],
+                 'seq2': [[math.inf, ], None, None],
+                 'seq3': [[math.inf, ], None, None]}
         )
         self.assertDictEqual(
-                per_seq_primer_mismatches[1]['design1'],
-                {'seq1': [(0, 0), 'TTCGA', 6],
-                 'seq2': [(0, 0), 'TTCGA', 8],
-                 'seq3': [(0, 0), 'CCGA', 5]}
+                per_seq_primers[1]['design1'],
+                {'seq1': [[0, 0], 'TTCGA', 6],
+                 'seq2': [[0, 0], 'TTCGA', 8],
+                 'seq3': [[0, 0], 'CCGA', 5]}
         )
         # With terminal mismatches, only the left primer should be valid
-        self.assertIn('design2', per_seq_primer_mismatches[0])
-        self.assertIn('design2', per_seq_primer_mismatches[1])
+        self.assertIn('design2', per_seq_primers[0])
+        self.assertIn('design2', per_seq_primers[1])
         self.assertDictEqual(
-                per_seq_primer_mismatches[0]['design2'],
-                {'seq1': [(1, 0), 'TATC', 9],
-                 'seq2': [(1, 0), 'TATC', 1],
-                 'seq3': [(1, 0), 'TATC', 7]}
+                per_seq_primers[0]['design2'],
+                {'seq1': [[1, 0], 'TATC', 9],
+                 'seq2': [[1, 0], 'TATC', 1],
+                 'seq3': [[1, 0], 'TATC', 7]}
         )
         self.assertDictEqual(
-                per_seq_primer_mismatches[1]['design2'],
-                {'seq1': [(math.inf, ), None, None],
-                 'seq2': [(math.inf, ), None, None],
-                 'seq3': [(math.inf, ), None, None]}
+                per_seq_primers[1]['design2'],
+                {'seq1': [[math.inf, ], None, None],
+                 'seq2': [[math.inf, ], None, None],
+                 'seq3': [[math.inf, ], None, None]}
         )
         # With terminal mismatches, only the right primer should be valid for
         # the second sequence
-        self.assertIn('design3', per_seq_primer_mismatches[0])
-        self.assertIn('design3', per_seq_primer_mismatches[1])
+        self.assertIn('design3', per_seq_primers[0])
+        self.assertIn('design3', per_seq_primers[1])
         self.assertDictEqual(
-                per_seq_primer_mismatches[0]['design3'],
-                {'seq1': [(0, 0), 'ATTCGAT', 5],
-                 'seq2': [(math.inf, ), None, None],
-                 'seq3': [(math.inf, ), None, None]}
+                per_seq_primers[0]['design3'],
+                {'seq1': [[0, 0], 'ATTCGAT', 5],
+                 'seq2': [[math.inf, ], None, None],
+                 'seq3': [[math.inf, ], None, None]}
         )
         self.assertDictEqual(
-                per_seq_primer_mismatches[1]['design3'],
-                {'seq1': [(0, 0), 'ATTCGAT', 5],
-                 'seq2': [(1, 0), 'ATTCGAT', 7],
-                 'seq3': [(math.inf, ), None, None]}
+                per_seq_primers[1]['design3'],
+                {'seq1': [[0, 0], 'ATTCGAT', 5],
+                 'seq2': [[1, 0], 'ATTCGAT', 7],
+                 'seq3': [[math.inf, ], None, None]}
         )
 
     def tearDown(self):
@@ -368,33 +368,33 @@ class TestCoverageAnalysisWithPredictedActivity(unittest.TestCase):
     def test_scores_where_guide_binds(self):
         self.assertDictEqual(
                 self.ca.scores_where_guide_binds({'GGGCC'}),
-                {'seq1': [(0, ), None, None],
-                 'seq2': [(0, ), None, None],
-                 'seq3': [(0, ), None, None]}
+                {'seq1': [[0, ], None, None],
+                 'seq2': [[0, ], None, None],
+                 'seq3': [[0, ], None, None]}
         )
         self.assertDictEqual(
                 self.ca.scores_where_guide_binds({'ATTCGAT'}),
-                {'seq1': [(2, ), 'ATTCGAT', 5],
-                 'seq2': [(0, ), None, None],
-                 'seq3': [(0, ), None, None]}
+                {'seq1': [[2, ], 'ATTCGAT', 5],
+                 'seq2': [[0, ], None, None],
+                 'seq3': [[0, ], None, None]}
         )
         self.assertDictEqual(
                 self.ca.scores_where_guide_binds({'TTCGA'}),
-                {'seq1': [(1, ), 'TTCGA', 6],
-                 'seq2': [(1, ), 'TTCGA', 8],
-                 'seq3': [(0, ), None, None]}
+                {'seq1': [[1, ], 'TTCGA', 6],
+                 'seq2': [[1, ], 'TTCGA', 8],
+                 'seq3': [[0, ], None, None]}
         )
         self.assertDictEqual(
                 self.ca.scores_where_guide_binds({'TTCGA', 'ATTCGAT'}),
-                {'seq1': [(2, ), 'ATTCGAT', 5],
-                 'seq2': [(1, ), 'TTCGA', 8],
-                 'seq3': [(0, ), None, None]}
+                {'seq1': [[2, ], 'ATTCGAT', 5],
+                 'seq2': [[1, ], 'TTCGA', 8],
+                 'seq3': [[0, ], None, None]}
         )
         self.assertDictEqual(
                 self.ca.scores_where_guide_binds({'TTCGA', 'CCGA'}),
-                {'seq1': [(1, ), 'TTCGA', 6],
-                 'seq2': [(1, ), 'TTCGA', 8],
-                 'seq3': [(1, ), 'CCGA', 5]}
+                {'seq1': [[1, ], 'TTCGA', 6],
+                 'seq2': [[1, ], 'TTCGA', 8],
+                 'seq3': [[1, ], 'CCGA', 5]}
         )
 
     def test_seqs_where_guide_binds(self):

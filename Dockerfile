@@ -32,10 +32,7 @@ RUN wget https://mafft.cbrc.jp/alignment/software/mafft_7.487-1_amd64.deb \
     && dpkg -i mafft_7.487-1_amd64.deb \
     && rm -rf mafft_7.487-1_amd64.deb
 
-COPY ./requirements.txt .
-RUN pip install -r requirements.txt
-
 COPY . .
-RUN pip install -e .
+RUN pip install -e ".[thermo]"
 
 CMD "/bin/bash"

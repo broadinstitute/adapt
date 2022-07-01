@@ -83,7 +83,7 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
 
         # Determine the fraction of the sequences that each guide binds to
         if consensus_guide is not None:
-            consensus_guide_bound = aln.sequences_bound_by_guide(
+            consensus_guide_bound = aln.sequences_bound_by_oligo(
                     consensus_guide, i, args.guide_mismatches,
                     args.allow_gu_pairs, required_flanking_seqs=args.required_flanking_seqs)
             consensus_guide_frac = float(len(consensus_guide_bound)) / aln.num_sequences
@@ -94,7 +94,7 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
         if mode_guides is not None:
             mode_guides_bound = []
             for mode_guide in mode_guides:
-                mode_guides_bound.append(aln.sequences_bound_by_guide(
+                mode_guides_bound.append(aln.sequences_bound_by_oligo(
                         mode_guide, i, args.guide_mismatches,
                         args.allow_gu_pairs, required_flanking_seqs=args.required_flanking_seqs))
             all_mode_guides_bound = set().union(*mode_guides_bound)
@@ -113,7 +113,7 @@ def construct_guide_naively_at_each_pos(aln, args, ref_seq=None):
             mode_guides_frac = [0]
 
         if diversity_guide is not None:
-            diversity_guide_bound = aln.sequences_bound_by_guide(
+            diversity_guide_bound = aln.sequences_bound_by_oligo(
                 diversity_guide, i, args.guide_mismatches,
                 args.allow_gu_pairs, required_flanking_seqs=args.required_flanking_seqs)
             diversity_guide_frac = float(len(diversity_guide_bound)) / aln.num_sequences
