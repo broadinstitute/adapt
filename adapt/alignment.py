@@ -372,7 +372,7 @@ class Alignment(SequenceList):
 
     def determine_representative_oligos(self, start, oligo_length,
         seqs_to_consider, clusterer, missing_threshold=1,
-        is_suitable_fns=[], required_flanking_seqs=(None, None),
+        pre_filter_fns=[], required_flanking_seqs=(None, None),
         include_overall_consensus=True):
         """Construct a set of oligos representative of the target sequences.
 
@@ -392,7 +392,7 @@ class Alignment(SequenceList):
             missing_threshold: do not construct representative sequences if
                 the fraction of sequences with missing data, at any position
                 in the target range, exceeds this threshold
-            is_suitable_fns: if set, the value of this argument is a list
+            pre_filter_fns: if set, the value of this argument is a list
                 of functions f(x) such that this will only construct a oligo x
                 for which each f(x) is True
             required_flanking_seqs: tuple (s5, s3) that specifies sequences
@@ -454,7 +454,7 @@ class Alignment(SequenceList):
                 # Skip this guide; all sequences at a position in the cluster
                 # under consideration are 'N'
                 return False
-            for is_suitable_fn in is_suitable_fns:
+            for is_suitable_fn in pre_filter_fns:
                 if is_suitable_fn(olg) is False:
                     # Skip this oligo/cluster
                     return False

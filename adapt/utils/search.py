@@ -29,10 +29,10 @@ class OligoSearcher:
     """
 
     def __init__(self, aln, min_oligo_length, max_oligo_length,
-            missing_data_params, is_suitable_fns=[], required_oligos={},
-            ignored_ranges={}, allow_gu_pairs=False,
-            required_flanking_seqs=(None, None), do_not_memoize=False,
-            predictor=None):
+            missing_data_params, obj_type, pre_filter_fns=None,
+            post_filter_fns=None, required_oligos=None, ignored_ranges=None,
+            allow_gu_pairs=False, required_flanking_seqs=(None, None),
+            do_not_memoize=False, predictor=None):
         """
         Args:
             aln: alignment.Alignment representing an alignment of sequences
@@ -43,9 +43,16 @@ class OligoSearcher:
                 sequences with missing data is > min(a, max(b, c*m)), where m is
                 the median fraction of sequences with missing data over the
                 alignment
-            is_suitable_fns: if set, the value of this argument is a list
+            obj_type: either 'min' or 'max' depending on the optimization to
+                be used
+            pre_filter_fns: if set, the value of this argument is a list
                 of functions f(x) such that this will only construct a oligo x
-                for which each f(x) is True
+                for which each f(x) is True. These filters run before activity
+                is calculated.
+            post_filter_fns: if set, the value of this argument is a list
+                of functions f(x) such that this will only construct a oligo x
+                for which each f(x) is True. These filters run after activity
+                is calculated and determined to be good.
             required_oligos: dict that maps oligo sequences to their position
                 in the alignment; all of these oligo sequences are immediately
                 placed in the set of covering oligos for their appropriate
@@ -96,9 +103,18 @@ class OligoSearcher:
         self.missing_threshold = min(missing_max, max(missing_min,
             missing_coeff * self.aln.median_sequences_with_missing_data()))
 
-        self.is_suitable_fns = is_suitable_fns
+        if obj_type not in ['min', 'max']:
+            raise ValueError(("obj_type must be 'min' or 'max'"))
+        self.obj_type = obj_type
 
-        self.required_oligos = required_oligos
+        self.pre_filter_fns = pre_filter_fns \
+            if pre_filter_fns is not None else []
+        self.post_filter_fns = post_filter_fns \
+            if post_filter_fns is not None else []
+        self.required_oligos = required_oligos \
+            if required_oligos is not None else {}
+        self.ignored_ranges = ignored_ranges \
+            if ignored_ranges is not None else set()
 
         # Verify positions of the oligos are within the alignment
         highest_possible_pos = self.aln.seq_length - self.min_oligo_length
@@ -113,10 +129,8 @@ class OligoSearcher:
         # memoize them
         self._memoized_seqs_covered_by_required_oligos = {}
 
-        self.ignored_ranges = ignored_ranges
-
         # Verify ignored ranges are within the alignment
-        for start, end in ignored_ranges:
+        for start, end in self.ignored_ranges:
             if start < 0 or end <= start or end > self.aln.seq_length:
                 raise Exception(("An ignored range [%d, %d) is invalid "
                     "for a given alignment; ranges must fall within the "
@@ -167,7 +181,6 @@ class OligoSearcher:
 
         if start in inner_dict:
             # The result has been memoized
-
             p_memoized = inner_dict[start]
 
             # p was compressed before memoizing it; decompress
@@ -178,7 +191,6 @@ class OligoSearcher:
                 p = self._decompress_result(p_memoized)
         else:
             # The result is not memoized; compute it and memoize it
-
             p = call_fn()
 
             if p is None:
@@ -680,7 +692,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
         """
         self.mismatches = mismatches
 
-        super().__init__(**kwargs)
+        super().__init__(obj_type='min', **kwargs)
 
         if seq_groups is None and (cover_frac <= 0 or cover_frac > 1):
             raise ValueError("cover_frac must be in (0,1]")
@@ -1433,7 +1445,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                 # are 'N'
                 continue
             skip_cluster = False
-            for is_suitable_fn in self.is_suitable_fns:
+            for is_suitable_fn in self.pre_filter_fns:
                 if is_suitable_fn(olg) is False:
                     # Skip this cluster
                     skip_cluster = True
@@ -1446,6 +1458,14 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                     determine_binding_and_active_seqs(olg)
             score = seq_idxs_score(binding_seqs)
             if score > best_olg_score:
+                skip_cluster = False
+                for is_suitable_fn in self.post_filter_fns:
+                    if is_suitable_fn(olg) is False:
+                        # Skip this cluster
+                        skip_cluster = True
+                        break
+                if skip_cluster:
+                    continue
                 best_olg = olg
                 best_olg_binding_seqs = binding_seqs
                 best_olg_score = score
@@ -1481,7 +1501,7 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                     # s has ambiguity; skip it
                     continue
                 skip_cluster = False
-                for is_suitable_fn in self.is_suitable_fns:
+                for is_suitable_fn in self.pre_filter_fns:
                     if is_suitable_fn(s) is False:
                         # Skip this cluster
                         skip_cluster = True
@@ -1494,6 +1514,13 @@ class OligoSearcherMinimizeNumber(OligoSearcher):
                             [(s_with_context, s)])[0]:
                         # s is not active against itself; skip it
                         continue
+                for is_suitable_fn in self.post_filter_fns:
+                    if is_suitable_fn(s) is False:
+                        # Skip this cluster
+                        skip_cluster = True
+                        break
+                if skip_cluster:
+                    continue
                 # s has no ambiguity and is a suitable oligo; use it
                 olg = s
                 binding_seqs, _, _ = determine_binding_and_active_seqs(olg)
@@ -1563,7 +1590,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         # memoize the ground set of oligos at each site
         self._memoized_ground_sets = {}
 
-        super().__init__(**kwargs)
+        super().__init__(obj_type='max', **kwargs)
 
     def _obj_value_from_params(self, expected_activity, num_oligos):
         """Compute value of objective function from parameter values.
@@ -1851,10 +1878,11 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
         if end > self.aln.seq_length:
             raise ValueError("window end must be <= alignment length")
 
-        # Initialize an empty oligo set, with 0 activity against each
+        # Initialize an empty oligo set, with min activity against each
         # target sequence
         curr_oligo_set = set()
-        curr_activities = np.zeros(self.aln.num_sequences)
+        curr_activities = np.full(self.aln.num_sequences,
+            self.predictor.min_activity)
 
         def add_oligo(olg, olg_pos, olg_activities):
             # Add olg into curr_oligo_set and update curr_activities
@@ -1968,9 +1996,10 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             activities = self.oligo_set_activities(window_start, window_end,
                     oligo_set)
 
-        # Calculate weighted fraction of activity values >0
+        # Calculate weighted fraction of activity values >min_activity
         frac_active = sum(self.aln.seq_norm_weights[i]
-                         for i, x in enumerate(activities) if x > 0)
+                         for i, x in enumerate(activities)
+                         if x > self.predictor.min_activity)
 
         return frac_active
 
@@ -2040,7 +2069,7 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
             ground_set = self.aln.determine_representative_oligos(
                     start, max_oligo_length, seqs_to_consider,
                     self.clusterer, missing_threshold=self.missing_threshold,
-                    is_suitable_fns=self.is_suitable_fns,
+                    pre_filter_fns=self.pre_filter_fns,
                     required_flanking_seqs=self.required_flanking_seqs)
         except CannotConstructOligoError:
             # There may be too much missing data or a related issue
@@ -2081,6 +2110,14 @@ class OligoSearcherMaximizeActivity(OligoSearcher):
                         continue
                 # Chooses smallest oligo when tied; make a setting?
                 if expected_activity > best_expected_activity:
+                    skip_olg = False
+                    for is_suitable_fn in self.post_filter_fns:
+                        if is_suitable_fn(short_olg_seq) is False:
+                            # Skip this oligo
+                            skip_olg = True
+                            break
+                    if skip_olg:
+                        continue
                     best_seq = olg_seq[:oligo_length]
                     best_activities = activities
                     best_expected_activity = expected_activity

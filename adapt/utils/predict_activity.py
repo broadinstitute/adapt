@@ -10,29 +10,15 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 import numpy as np
 import tensorflow as tf
 
+from adapt.utils.oligo import FASTA_CODES
+from adapt.utils import thermo
+
 # Again, suppress TensorFlow warnings
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 
-# Define function for creating a one-hot encoding from
-# nucleotide sequence
-FASTA_CODES = {'A': set(('A')),
-               'T': set(('T')),
-               'C': set(('C')),
-               'G': set(('G')),
-               'K': set(('G', 'T')),
-               'M': set(('A', 'C')),
-               'R': set(('A', 'G')),
-               'Y': set(('C', 'T')),
-               'S': set(('C', 'G')),
-               'W': set(('A', 'T')),
-               'B': set(('C', 'G', 'T')),
-               'V': set(('A', 'C', 'G')),
-               'H': set(('A', 'C', 'T')),
-               'D': set(('A', 'G', 'T')),
-               'N': set(('A', 'T', 'C', 'G'))}
 onehot_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
 def onehot(b):
     # One-hot encoding of base b
@@ -44,13 +30,46 @@ def onehot(b):
     return v
 
 
-class Predictor:
+class BasePredictor:
+    """Set up common functions for predictors
+    """
+    def __init__(self):
+        pass
+
+    def compute_activity(self, start_pos, pairs, percentiles=None):
+        """Compute a single activity measurement for pairs.
+
+        Args:
+            start_pos: start position of all guides in pairs; used for
+                memoizations
+            pairs: list of tuples (target with context, guide)
+            percentiles: single percentile or list of percentiles to compute,
+                each in [0,100] (0 is minimum, 100 is maximum)
+
+        Returns:
+            If percentile is not defined, list of activity value for each pair
+            If percentile is defined, tuple of (list of activity value for each
+                pair, the percentile(s) of those activities)
+        """
+        raise NotImplementedError("Subclasses of BasePredictor must implement "
+                                  "compute_activity")
+
+    def cleanup_memoized(self, start_pos):
+        """Cleanup memoizations no longer needed at a start position.
+
+        Args:
+            start_pos: start position of all oligos to remove
+        """
+        if start_pos in self._memoized_evaluations:
+            del self._memoized_evaluations[start_pos]
+
+
+class Predictor(BasePredictor):
     """This calls the activity models and memoizes results.
     """
 
     def __init__(self, classification_model_path, regression_model_path,
-            classification_threshold=None,
-            regression_threshold=None):
+            classification_threshold=None, regression_threshold=None):
         """
         Args:
             classification_model_path: path to serialized classification model
@@ -170,6 +189,8 @@ class Predictor:
         # where each X is a tuple of (overall activity, False/True indicating
         # whether highly active)
         self._memoized_evaluations = {}
+
+        self.min_activity = self.regression_lower_bound
 
     def _model_input_from_nt(self, pairs):
         """Create one-hot input to models from nucleotide sequence.
@@ -407,14 +428,105 @@ class Predictor:
             return (activities, percentile_activity)
         return activities
 
-    def cleanup_memoized(self, start_pos):
-        """Cleanup memoizations no longer needed at a start position.
+
+class TmPredictor(BasePredictor):
+    """A Predictor object telling alignment.Alignment to compute activity based
+    on a thermodynamic model of the oligos.
+
+    TmPredictor considers the "activity" of an oligo to be how far its melting
+    temperature is from an ideal melting temperature. While we want this to be
+    minimized, we are using a MaximizeActivity searcher, so we take the
+    negative of the activity.
+    This does not use any machine learning models.
+
+    TmPredictor does have a scaling issue. Since the worst case melting
+    temperature is -ideal_tm, the objective is then scaled based on what the
+    ideal melting temperature is. This may be a problem when determining
+    proper weight constants for primers vs guides, for example.
+    """
+
+    def __init__(self, ideal_tm, conditions, reverse, shared_memo=None):
+        """
+        Args:
+            ideal_tm: Desired melting temperature
+            conditions: Conditions object
+            reverse: Boolean; True if the oligo being predicted is the
+                reverse compliment of the genomic target (so the right primer
+                and the guide), False otherwise (the left primer)
+            shared_memo: Dict; memo for evaluations to share between multiple
+                predictor objects. Lets right and left primers share a memo
+        """
+        self.conditions = conditions
+        self.ideal_tm = ideal_tm
+        self.reverse = reverse
+        self.context_nt = 0
+        self.rough_max_activity = 0
+        if shared_memo is not None:
+            self._memoized_evaluations = shared_memo
+        else:
+            self._memoized_evaluations = {}
+
+        if self.reverse:
+            def key_fn(pair):
+                return pair[::-1]
+        else:
+            def key_fn(pair):
+                return pair
+
+        self.key_fn = key_fn
+
+        self.min_activity = -self.ideal_tm
+
+    def compute_activity(self, start_pos, pairs, percentiles=None):
+        """Compute a single activity measurement for pairs.
 
         Args:
-            start_pos: start position of all guides to remove
+            start_pos: start position of all guides in pairs; used for
+                memoizations
+            pairs: list of tuples (target with context, guide)
+            percentiles: single percentile or list of percentiles to compute,
+                each in [0,100] (0 is minimum, 100 is maximum)
+
+        Returns:
+            If percentile is not defined, list of activity value for each pair
+            If percentile is defined, tuple of (list of activity value for each
+                pair, the percentile(s) of those activities)
         """
-        if start_pos in self._memoized_evaluations:
-            del self._memoized_evaluations[start_pos]
+
+        # Determine which pairs do not have memoized results, and call
+        # these
+        if start_pos not in self._memoized_evaluations:
+            self._memoized_evaluations[start_pos] = {}
+        mem = self._memoized_evaluations[start_pos]
+        unique_pairs_to_evaluate = [pair for pair in set(pairs)
+                if self.key_fn(pair) not in mem]
+        self._run_and_memoize(start_pos, unique_pairs_to_evaluate)
+
+        dtms = [mem[self.key_fn(pair)][0] for pair in pairs]
+
+        if percentiles:
+            percentile_dtms = np.percentile(dtms, percentiles)
+            return (dtms, percentile_dtms)
+
+        return dtms
+
+    def _run_and_memoize(self, start_pos, pairs):
+        """Run thermodynamic model, and memoize all results in
+        self._memoized_evaluations
+
+        Args:
+            start_pos: start position of all guides in pairs
+            pairs: list of tuples (target with context, guide)
+        """
+        # Memoize results
+        if start_pos not in self._memoized_evaluations:
+            self._memoized_evaluations[start_pos] = {}
+        mem = self._memoized_evaluations[start_pos]
+
+        for pair in pairs:
+            mem[self.key_fn(pair)] = [-abs(thermo.calculate_melting_temp(
+                pair[0], pair[1], self.reverse,
+                self.conditions) - self.ideal_tm)]
 
 
 class SimpleBinaryPredictor:
@@ -445,6 +557,7 @@ class SimpleBinaryPredictor:
         self.required_flanking_seqs = required_flanking_seqs
 
         self.rough_max_activity = 1.0
+        self.min_activity = 0
 
     def compute_activity(self, start_pos, gd_sequence, aln, percentiles=None):
         """Compute activity by checking hybridization across an alignment.

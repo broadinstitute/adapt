@@ -1,7 +1,16 @@
 import numpy as np
 import math
 import logging
+import itertools
+
 from adapt.utils.oligo import FASTA_CODES, make_complement, is_complement, is_symmetric, gc_frac
+
+try:
+    import primer3
+except ImportError:
+    thermo_props = False
+else:
+    thermo_props = True
 
 logger = logging.getLogger(__name__)
 
@@ -504,11 +513,11 @@ def calculate_melting_temp(oligo, target, reverse_oligo=True,
     """
     try:
         if saltmethod=='santalucia':
-            h,s = calculate_delta_h_s(target, oligo,
+            h,s = calculate_delta_h_s(oligo, target,
                                       reverse_oligo=reverse_oligo,
                                       conditions=conditions)
         else:
-            h,s = calculate_delta_h_s(target, oligo,
+            h,s = calculate_delta_h_s(oligo, target,
                                       reverse_oligo=reverse_oligo,
                                       conditions=Conditions(
                                         sodium=1, magnesium=0, dNTP=0))
@@ -609,12 +618,12 @@ def calculate_equilibrium_constant(oligo, target, reverse_oligo=True,
     Returns:
         Equilibrium constant
     """
-    delta_g = calculate_delta_g(target, oligo, reverse_oligo=reverse_oligo,
+    delta_g = calculate_delta_g(oligo, target, reverse_oligo=reverse_oligo,
         conditions=conditions)
     return math.e**(-delta_g/(R_CONSTANT*conditions.t))
 
 
-def calculate_delta_g(target, oligo, reverse_oligo=True,
+def calculate_delta_g(oligo, target, reverse_oligo=True,
         conditions=Conditions()):
     """Calculate free energy of the target and oligo annealing
 
@@ -636,13 +645,13 @@ def calculate_delta_g(target, oligo, reverse_oligo=True,
         Free energy in kcal/mol
     """
 
-    h,s = calculate_delta_h_s(target, oligo, reverse_oligo=reverse_oligo,
+    h,s = calculate_delta_h_s(oligo, target, reverse_oligo=reverse_oligo,
                               conditions=conditions)
 
     return _delta_g_from_h_s(h, s, t=conditions.t)
 
 
-def calculate_delta_h_s(target, oligo, reverse_oligo=True,
+def calculate_delta_h_s(oligo, target, reverse_oligo=True,
         conditions=Conditions()):
     """Calculate enthalpy and entropy of the target and oligo annealing
 
@@ -799,6 +808,37 @@ def calculate_i_x(target, oligo, reverse_oligo=True):
             break
 
     return i_x
+
+
+def has_no_secondary_structure(oligo, conditions):
+    hairpin_dg = primer3.calcHairpin(oligo,
+        mv_conc=conditions.sodium*1000,
+        dv_conc=conditions.magnesium*1000,
+        dntp_conc=conditions.dNTP*1000,
+        dna_conc=conditions.oligo_concentration*10**9).dg/1000
+    if hairpin_dg <= -3:
+        return False
+    # Homodimer
+    homodimer_dg = primer3.calcHomodimer(oligo,
+        mv_conc=conditions.sodium*1000,
+        dv_conc=conditions.magnesium*1000,
+        dntp_conc=conditions.dNTP*1000,
+        dna_conc=conditions.oligo_concentration*10**9).dg/1000
+    if homodimer_dg <= -6:
+        return False
+    return True
+
+
+def has_no_heterodimers(oligo_set, conditions):
+    for olg_i, olg_j in itertools.combinations(oligo_set, 2):
+        heterodimer_dg = primer3.calcHeterodimer(olg_i, olg_j,
+            mv_conc=conditions.sodium*1000,
+            dv_conc=conditions.magnesium*1000,
+            dntp_conc=conditions.dNTP*1000,
+            dna_conc=conditions.oligo_concentration*10**9).dg/1000
+        if heterodimer_dg <= -6:
+            return False
+    return True
 
 
 class DoubleMismatchesError(ValueError):

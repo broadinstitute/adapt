@@ -27,6 +27,7 @@ from adapt.utils import seq_io
 from adapt.utils import year_cover
 from adapt.utils import mutate
 from adapt.utils import weight
+from adapt.utils import thermo
 from adapt.utils.version import get_project_path, get_latest_model_version
 
 try:
@@ -773,7 +774,7 @@ def design_for_id(args):
                     guide_cover_frac,
                     args.missing_thres,
                     seq_groups=seq_groups,
-                    is_suitable_fns=[guide_is_suitable],
+                    pre_filter_fns=[guide_is_suitable],
                     required_oligos=required_guides_for_aln,
                     ignored_ranges=ignored_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
@@ -789,7 +790,7 @@ def design_for_id(args):
                     args.penalty_strength,
                     args.missing_thres,
                     algorithm=args.maximization_algorithm,
-                    is_suitable_fns=[guide_is_suitable],
+                    pre_filter_fns=[guide_is_suitable],
                     required_oligos=required_guides_for_aln,
                     ignored_ranges=ignored_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
@@ -812,28 +813,59 @@ def design_for_id(args):
                 primer_gc_content_bounds = None
             else:
                 primer_gc_content_bounds = tuple(args.primer_gc_content_bounds)
-            primer_is_suitable = []
-            # if args.pcr:
-            #     primer_is_suitable = pcr_suitable_filters
-            ps = primer_search.PrimerSearcherMinimizePrimers(aln, args.primer_length,
-                                              args.primer_mismatches,
-                                              primer_cover_frac,
-                                              args.missing_thres,
-                                              seq_groups=seq_groups,
-                                              primer_gc_content_bounds=primer_gc_content_bounds,
-                                              is_suitable_fns=primer_is_suitable)
+            if args.primer_thermo:
+                shared_memo = {}
+                conditions = thermo.Conditions(sodium=args.pcr_sodium_conc,
+                    magnesium=args.pcr_magnesium_conc, dNTP=args.pcr_dntp_conc,
+                    oligo_concentration=args.pcr_oligo_conc,
+                    target_concentration=args.pcr_target_conc)
+                left_primer_predictor = predict_activity.TmPredictor(
+                    args.ideal_primer_melting_temperature +
+                        thermo.CELSIUS_TO_KELVIN,
+                    conditions, False, shared_memo=shared_memo)
+                right_primer_predictor = predict_activity.TmPredictor(
+                    args.ideal_primer_melting_temperature +
+                        thermo.CELSIUS_TO_KELVIN,
+                    conditions, True, shared_memo=shared_memo)
 
-            if args.obj == 'minimize-guides':
-                obj_type = 'min'
-            elif args.obj == 'maximize-activity':
-                obj_type = 'max'
-            ts = target_search.TargetSearcher(ps, gs,
-                obj_type=obj_type,
+                post_filter_primers = [lambda oligo:
+                    thermo.has_no_secondary_structure(oligo, conditions)]
+
+                # Since TmPredictor returns negative values, the algorithm must
+                # be greedy.
+                lps = primer_search.PrimerSearcherMaximizeActivity(
+                    aln, args.primer_length, args.primer_length,
+                    args.soft_primer_constraint, args.hard_primer_constraint,
+                    args.primer_penalty_strength, args.missing_thres,
+                    algorithm='greedy',
+                    primer_gc_content_bounds=primer_gc_content_bounds,
+                    post_filter_fns=post_filter_primers,
+                    predictor=left_primer_predictor)
+                rps = primer_search.PrimerSearcherMaximizeActivity(
+                    aln, args.primer_length, args.primer_length,
+                    args.soft_primer_constraint, args.hard_primer_constraint,
+                    args.primer_penalty_strength, args.missing_thres,
+                    algorithm='greedy',
+                    primer_gc_content_bounds=primer_gc_content_bounds,
+                    post_filter_fns=post_filter_primers,
+                    predictor=right_primer_predictor)
+
+                primer_set_filter_fns = [lambda oligo_set:
+                    thermo.has_no_heterodimers(oligo_set, conditions)]
+            else:
+                lps = primer_search.PrimerSearcherMinimizePrimers(
+                    aln, args.primer_length, args.primer_mismatches,
+                    primer_cover_frac, args.missing_thres, seq_groups=seq_groups,
+                    primer_gc_content_bounds=primer_gc_content_bounds)
+                rps = lps
+
+            ts = target_search.TargetSearcher(lps, rps, gs,
                 max_primers_at_site=args.max_primers_at_site,
                 max_target_length=args.max_target_length,
                 obj_weights=args.obj_fn_weights,
                 only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
-                halt_early=args.halt_search_early, mutator=mutator)
+                halt_early=args.halt_search_early, mutator=mutator,
+                primer_set_filter_fns=[])
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets, no_overlap=args.do_not_overlap,
                 annotations=args.annotations[i])
@@ -1299,6 +1331,86 @@ def argv_to_args(argv):
         type=int, default=0,
         help=("Allow for this number of mismatches when determining "
               "whether a primer hybridizes to a sequence"))
+    # parser_ct_args.add_argument('-ptm', '--primer-terminal-mismatches',
+    #     type=int,
+    #     help=("Allow for this number of mismatches in the BASES_FROM_TERMINAL "
+    #           "bases from the 3' end when determining whether a primer "
+    #           "hybridizes to a sequence. Default is unset (and therefore "
+    #           "unused)."))
+    # parser_ct_args.add_argument('--bases-from-terminal',
+    #     type=int, default=5,
+    #     help=("Allow for PRIMER_TERMINAL_MISMATCHES in this many bases from "
+    #           "the 3' end when determining whether a primer hybridizes to a "
+    #           "sequence. Default is 5 and it is only used if "
+    #           "PRIMER_TERMINAL_MISMATCHES is set."))
+    parser_ct_args.add_argument('-pt', '--primer-thermo',
+        action='store_true',
+        help=("If set, use a thermodynamic model to determine whether primers "
+              "cover a sequence. This is particularly useful for PCR. While "
+              "this method uses the same optimization that the activity "
+              "models use, it is not guaranteed to be submodular."))
+    parser_ct_args.add_argument('--ideal-primer-melting-temperature',
+        type=float, default=60,
+        help=("Minimize the deviation of a primer's melting temperature from "
+              "IDEAL_MELTING_TEMPERATURE°C. Default is 60°C. Only used if "
+              "--primer-thermo is set."))
+
+    # Soft primer constraint
+    base_subparser.add_argument('-spc', '--soft-primer-constraint', type=int,
+        default=1,
+        help=("Soft constraint on the number of primers. There is no "
+              "penalty for a number of primers <= SOFT_PRIMER_CONSTRAINT, "
+              "and having a number of primers beyond this is penalized. "
+              "See --primer-penalty-strength. This value must be <= "
+              "HARD_PRIMER_CONSTRAINT. This is only used if --primer-thermo "
+              "is set."))
+    # Hard primer constraint
+    base_subparser.add_argument('-hpc', '--hard-primer-constraint', type=int,
+        default=5,
+        help=("Hard constraint on the number of primers. The number of "
+              "primers designed for a target will be <= "
+              "HARD_PRIMER_CONSTRAINT. This is only used if --primer-thermo "
+              "is set."))
+    # Penalty strength TODO find reasonable values experimentally
+    base_subparser.add_argument('--primer-penalty-strength', type=float,
+        default=0.25,
+        help=("Importance of the penalty when the number of primer "
+              "exceeds the soft primer constraint. Namely, for a primer "
+              "set G, if the penalty strength is L and the soft "
+              "guide constraint is h, then the penalty in the objective "
+              "function is L*max(0, |G|-h). Must be >= 0. "
+              "Reasonable values are in the range [0.1, 0.5]."))
+
+    # Set thermodynamic conditions
+    parser_ct_args.add_argument('-na', '--pcr-sodium-conc', type=float,
+        default=5e-2,
+        help=("Concentration of sodium (in mol/L). Can be used for the "
+              "concentration of all monovalent cations. Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "0.050 mol/L."))
+    parser_ct_args.add_argument('-mg', '--pcr-magnesium-conc', type=float,
+        default=2.5e-3,
+        help=("Concentration of magnesium (in mol/L). Can be used for the "
+              "concentration of all divalent cations. Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "0.0025 mol/L."))
+    parser_ct_args.add_argument('--pcr-dntp-conc', type=float,
+        default=1.6e-3,
+        help=("Concentration of dNTPs (in mol/L). Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "0.0016 mol/L."))
+    parser_ct_args.add_argument('--pcr-oligo-conc', type=float,
+        default=3e-7,
+        help=("Oligo concentration (in mol/L). Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "3e-7 mol/L."))
+    parser_ct_args.add_argument('--pcr-target-conc', type=float,
+        default=0,
+        help=("Target concentration (in mol/L). Only used if "
+              "--primer-thermo or --guide-thermo is set; only needed if "
+              "target concentration is not significantly less than oligo "
+              "concentration. Defaults to 0."))
+
     parser_ct_args.add_argument('--max-primers-at-site', type=int,
         help=("Only use primer sites that contain at most this number "
               "of primers; if not set, there is no limit"))
@@ -1316,8 +1428,8 @@ def argv_to_args(argv):
               "for a target. These specify weights for penalties on primers "
               "and amplicons relative to the guide objective. There are "
               "2 weights (A B), where the target objective function "
-              "is [(guide objective value) +/- (A*(total number of "
-              "primers) + B*log2(amplicon length)]. It is + when "
+              "is [(guide objective value) +/- (A*(primers "
+              "objective value) + B*log2(amplicon length)]. It is + when "
               "--obj is minimize-guides and - when --obj is "
               "maximize-activity."))
     parser_ct_args.add_argument('--best-n-targets', type=int, default=10,

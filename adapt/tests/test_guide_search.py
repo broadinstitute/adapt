@@ -362,7 +362,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
         # It should be able to find a guide in a window without a gap
         self.i._find_oligos_in_window(10, 10 + self.i_window_size)
 
-    def test_is_suitable_fns(self):
+    def test_pre_filter_fns(self):
         seqs = ['GTATCAAAAAATCGGCTACCCCCTCTAC',
                 'CTACCAAAAAACCTGCTAGGGGGCGTAC',
                 'ATAGCAAAAAAACGTCCTCCCCCTGTAC',
@@ -381,7 +381,7 @@ class TestGuideSearcherMinimizeGuides(unittest.TestCase):
             else:
                 return True
         gs = guide_search.GuideSearcherMinimizeGuides(aln, 5, 0, 1.0, (1, 1, 100),
-            is_suitable_fns=[f])
+            pre_filter_fns=[f])
         self.assertEqual(gs._find_oligos_in_window(0, 28),
                          set(['CCCCC', 'GGGGG']))
 
@@ -621,12 +621,13 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
 
     def make_gs(self, seqs, soft_constraint=1, hard_constraint=3,
             penalty_strength=0.1, algorithm='random-greedy',
-            is_suitable_fns=[]):
+            pre_filter_fns=[]):
         # Predict guides matching target to have activity 1, and
         # starting with 'A' to have activity 2 (otherwise, 0)
         class PredictorTest:
             def __init__(self):
                 self.context_nt = 1
+                self.min_activity = 0
             def compute_activity(self, start_pos, pairs):
                 y = []
                 for target, guide_seq in pairs:
@@ -648,7 +649,7 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
                 soft_constraint, hard_constraint,
                 penalty_strength, (1, 1, 100), algorithm=algorithm,
                 predictor=predictor,
-                is_suitable_fns=is_suitable_fns)
+                pre_filter_fns=pre_filter_fns)
         return gs
 
     def test_obj_value_from_params(self):
@@ -919,7 +920,7 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
     def test_find_oligos_in_window_high_penalty_random_greedy(self):
         self.find_oligos_in_window_high_penalty('random-greedy')
 
-    def find_oligos_in_window_with_is_suitable_fns(self, algo):
+    def find_oligos_in_window_with_pre_filter_fns(self, algo):
         def f(guide):
             if 'AA' in guide:
                 return False
@@ -932,16 +933,16 @@ class TestGuideSearcherMaximizeActivity(unittest.TestCase):
                            'AACGAATTCG'],
                            hard_constraint=1,
                            algorithm=algo,
-                           is_suitable_fns=[f])
+                           pre_filter_fns=[f])
         o = gs._find_oligos_in_window(2, 8)
         self.assertEqual(len(o), 1)
         self.assertIn(list(o)[0], {'CGAA', 'GAAT', 'GGGG', 'CCCC'})
 
-    def test_find_oligos_in_window_with_is_suitable_fns_greedy(self):
-        self.find_oligos_in_window_with_is_suitable_fns('greedy')
+    def test_find_oligos_in_window_with_pre_filter_fns_greedy(self):
+        self.find_oligos_in_window_with_pre_filter_fns('greedy')
 
-    def test_find_oligos_in_window_with_is_suitable_fns_random_greedy(self):
-        self.find_oligos_in_window_with_is_suitable_fns('random-greedy')
+    def test_find_oligos_in_window_with_pre_filter_fns_random_greedy(self):
+        self.find_oligos_in_window_with_pre_filter_fns('random-greedy')
 
     def find_oligos_in_window_with_gaps_and_missing_data(self, algo):
         gs = self.make_gs(['ATCGAATTCG',

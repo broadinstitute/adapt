@@ -16,56 +16,56 @@ class TestPrimerResult(unittest.TestCase):
     """
 
     def test_does_overlap(self):
-        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertTrue(a.overlaps(a))
 
-        b = primer_search.PrimerResult(12, 1, 5, 1.0, {'AAAAA'})
+        b = primer_search.PrimerResult(12, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertTrue(a.overlaps(b))
         self.assertTrue(b.overlaps(a))
 
     def test_does_not_overlap(self):
-        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
-        b = primer_search.PrimerResult(15, 1, 5, 1.0, {'AAAAA'})
-        c = primer_search.PrimerResult(16, 1, 5, 1.0, {'AAAAA'})
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'}, 1)
+        b = primer_search.PrimerResult(15, 1, 5, 1.0, {'AAAAA'}, 1)
+        c = primer_search.PrimerResult(16, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertFalse(a.overlaps(b))
         self.assertFalse(b.overlaps(a))
         self.assertFalse(a.overlaps(c))
         self.assertFalse(c.overlaps(a))
 
     def test_does_overlap_with_expand(self):
-        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertTrue(a.overlaps(a, expand=5))
 
-        b = primer_search.PrimerResult(12, 1, 5, 1.0, {'AAAAA'})
+        b = primer_search.PrimerResult(12, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertTrue(a.overlaps(b, expand=5))
         self.assertTrue(b.overlaps(a, expand=5))
 
-        b = primer_search.PrimerResult(17, 1, 5, 1.0, {'AAAAA'})
+        b = primer_search.PrimerResult(17, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertTrue(a.overlaps(b, expand=5))
         self.assertTrue(b.overlaps(a, expand=5))
 
-        c = primer_search.PrimerResult(2, 1, 5, 1.0, {'AAAAA'})
+        c = primer_search.PrimerResult(2, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertTrue(a.overlaps(c, expand=5))
         self.assertTrue(c.overlaps(a, expand=5))
 
     def test_does_not_overlap_with_expand(self):
-        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
-        b = primer_search.PrimerResult(20, 1, 5, 1.0, {'AAAAA'})
-        c = primer_search.PrimerResult(0, 1, 5, 1.0, {'AAAAA'})
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'}, 1)
+        b = primer_search.PrimerResult(20, 1, 5, 1.0, {'AAAAA'}, 1)
+        c = primer_search.PrimerResult(0, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertFalse(a.overlaps(b, expand=5))
         self.assertFalse(b.overlaps(a, expand=5))
         self.assertFalse(a.overlaps(c, expand=5))
         self.assertFalse(c.overlaps(a, expand=5))
 
     def test_does_overlap_range(self):
-        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertTrue(a.overlaps_range(5, 20))
         self.assertTrue(a.overlaps_range(5, 12))
         self.assertTrue(a.overlaps_range(12, 20))
         self.assertTrue(a.overlaps_range(11, 13))
 
     def test_does_not_overlap_range(self):
-        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'})
+        a = primer_search.PrimerResult(10, 1, 5, 1.0, {'AAAAA'}, 1)
         self.assertFalse(a.overlaps_range(2, 8))
         self.assertFalse(a.overlaps_range(20, 25))
 
@@ -91,10 +91,10 @@ class TestPrimerSearch(unittest.TestCase):
         self.a_gc_bounds = primer_search.PrimerSearcherMinimizePrimers(self.a_aln,
                 4, 0, 1.0, (1, 1, 100), primer_gc_content_bounds=(0.4, 0.6))
 
-    def _pr(self, start, num_primers, frac_bound, primers_in_cover):
+    def _pr(self, start, num_primers, frac_bound, primers_in_set):
         # Construct a PrimerResult object
         return primer_search.PrimerResult(start, num_primers, 4, frac_bound,
-            primers_in_cover)
+            primers_in_set, num_primers)
 
     def test_find_primers_simple(self):
         covers = list(self.a.find_primers())

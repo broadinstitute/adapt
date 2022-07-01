@@ -35,7 +35,7 @@ class TestTargetSearch(unittest.TestCase):
 
         a_min_gs = guide_search.GuideSearcherMinimizeGuides(
             self.a_aln, 6, 0, 1.0, (1, 1, 100))
-        self.a_min = target_search.TargetSearcher(a_ps, a_min_gs, obj_type='min',
+        self.a_min = target_search.TargetSearcher(a_ps, a_ps, a_min_gs,
             max_primers_at_site=2)
 
     def test_find_primer_pairs_simple_minimize(self):
@@ -59,7 +59,7 @@ class TestTargetSearch(unittest.TestCase):
             # Verify that the primer sequences are in the alignment
             # at their given locations
             for p in (p1, p2):
-                for primer in p.primers_in_cover:
+                for primer in p.primers_in_set:
                     in_aln = False
                     for seq in self.a_seqs:
                         if primer == seq[p.start:(p.start + 4)]:
@@ -173,7 +173,7 @@ class TestTargetSearch(unittest.TestCase):
             b_aln, 4, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
         b_gs = guide_search.GuideSearcherMinimizeGuides(
             b_aln, 6, 0, cover_frac, (1, 1, 100), seq_groups=seq_groups)
-        b = target_search.TargetSearcher(b_ps, b_gs, obj_type='min',
+        b = target_search.TargetSearcher(b_ps, b_ps, b_gs,
             max_primers_at_site=2)
 
         for best_n in [1, 2, 3, 4, 5, 6]:
@@ -208,6 +208,7 @@ class TestTargetSearch(unittest.TestCase):
             def __init__(self):
                 self.context_nt = 1
                 self.rough_max_activity = 3
+                self.min_activity = 0
             def compute_activity(self, start_pos, pairs):
                 y = []
                 for target, guide in pairs:
@@ -241,7 +242,7 @@ class TestTargetSearch(unittest.TestCase):
         a_max_gs.guide_clusterer = alignment.SequenceClusterer(
                 lsh.HammingDistanceFamily(6), k=6)
 
-        a_max = target_search.TargetSearcher(a_ps, a_max_gs, obj_type='max',
+        a_max = target_search.TargetSearcher(a_ps, a_ps, a_max_gs,
             max_primers_at_site=2)
 
         for best_n in [1, 2, 3, 4, 5, 6]:
@@ -348,8 +349,8 @@ class TestTargetSearch(unittest.TestCase):
         c_gs = guide_search.GuideSearcherMaximizeActivity(
                     self.a_aln, 6, 1, 5, 0.05, (1, 1, 100), algorithm='greedy',
                     predictor=predictor)
-        c = target_search.TargetSearcher(c_ps, c_gs, max_primers_at_site=2,
-                                         obj_type='max', mutator=mutator)
+        c = target_search.TargetSearcher(c_ps, c_ps, c_gs,
+                max_primers_at_site=2, mutator=mutator)
         for best_n in [1, 2, 3, 4, 5, 6]:
             targets = c.find_targets(best_n=best_n, no_overlap='none')
             mut_activities = c._find_mutated_activity(targets)
