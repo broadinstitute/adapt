@@ -7,15 +7,16 @@ import copy
 import tempfile
 import unittest
 import logging
+import math
 
 from collections import OrderedDict
 from argparse import Namespace
 from adapt import alignment
 from adapt.prepare import align, prepare_alignment, cluster
-from adapt.utils import seq_io
+from adapt.utils import seq_io, thermo
 from bin import design
 
-__author__ = 'Priya Pillai <ppillai@broadinstitute.org>'
+__author__ = 'Priya P. Pillai <ppillai@broadinstitute.org>'
 
 # Default args: window size 3, guide size 2, allow GU pairing
 # GU pairing allows AA to match GG in 1st window, and AC to
@@ -32,6 +33,54 @@ SEQS["MZ008356.1"] = "GGCTT"
 SP_SEQS = OrderedDict()
 SP_SEQS["genome_X"] = "AA---"
 
+FAKE_DNA_DNA_INSIDE ={
+    'A': {
+        'A': (1, 0.005),
+        'T': (10, 0.05),
+        'C': (1, 0.005),
+        'G': (1, 0.005),
+    },
+    'T': {
+        'A': (10, 0.05),
+        'T': (1, 0.005),
+        'C': (1, 0.005),
+        'G': (1, 0.005),
+    },
+    'C': {
+        'A': (1, 0.005),
+        'T': (1, 0.005),
+        'C': (1, 0.005),
+        'G': (10, 0.05),
+    },
+    'G': {
+        'A': (1, 0.005),
+        'T': (1, 0.005),
+        'C': (10, 0.05),
+        'G': (1, 0.005),
+    }
+}
+
+FAKE_DNA_DNA_INTERNAL = {
+    'A': FAKE_DNA_DNA_INSIDE,
+    'T': FAKE_DNA_DNA_INSIDE,
+    'C': FAKE_DNA_DNA_INSIDE,
+    'G': FAKE_DNA_DNA_INSIDE,
+}
+
+FAKE_DNA_DNA_TERMINAL = FAKE_DNA_DNA_INTERNAL
+
+FAKE_DNA_DNA_TERM_GC = (0, 0)
+
+FAKE_DNA_DNA_SYM = (0, 0)
+
+FAKE_DNA_DNA_TERM_AT = (0, 0)
+
+# With 2 bp matching, delta H is 20 and delta S is 0.1. With the thermodynamic
+# conditions set to not interfere, the melting temperature is delta H/delta S,
+# which is 200K (Note: this doesn't actually make sense in practice, as Tm
+# can't go below 0°C; this is a toy example to make testing easier)
+PERFECT_TM = 200 - thermo.CELSIUS_TO_KELVIN
+
 
 class TestDesign(object):
     """General class for testing design.py
@@ -43,6 +92,19 @@ class TestDesign(object):
         def setUp(self):
             # Disable logging
             logging.disable(logging.INFO)
+
+            # Temporarily set constants to fake values
+            self.DNA_DNA_INTERNAL = thermo.DNA_DNA_INTERNAL
+            self.DNA_DNA_TERMINAL = thermo.DNA_DNA_TERMINAL
+            self.DNA_DNA_TERM_GC = thermo.DNA_DNA_TERM_GC
+            self.DNA_DNA_SYM = thermo.DNA_DNA_SYM
+            self.DNA_DNA_TERM_AT = thermo.DNA_DNA_TERM_AT
+
+            thermo.DNA_DNA_INTERNAL = FAKE_DNA_DNA_INTERNAL
+            thermo.DNA_DNA_TERMINAL = FAKE_DNA_DNA_TERMINAL
+            thermo.DNA_DNA_TERM_GC = FAKE_DNA_DNA_TERM_GC
+            thermo.DNA_DNA_SYM = FAKE_DNA_DNA_SYM
+            thermo.DNA_DNA_TERM_AT = FAKE_DNA_DNA_TERM_AT
 
             # Create a temporary input file
             self.input_file = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -83,20 +145,23 @@ class TestDesign(object):
                     ei = expected[i-1]
                     if not isinstance(ei, set):
                         ei = {tuple(ei)}
-                    guide_line = line[:-1].split('\t')[col_loc]
-                    guides = guide_line.split(' ')
+                    val_line = line[:-1].split('\t')[col_loc].strip('[]')
+                    vals = val_line.split(' ')
                     an_option_is_ok = False
                     for eij in ei:
-                        is_correct = True
-                        for guide in guides:
-                            if guide not in eij:
-                                is_correct = False
-                        if len(guides) != len(eij):
+                        is_correct = False
+                        comp_fn = lambda a,b: a==b if isinstance(eij[0], str) \
+                            else lambda a,b: math.isclose(float(a.strip(',')),b)
+                        for val in vals:
+                            for eijk in eij:
+                                if comp_fn(val, eijk):
+                                    is_correct = True
+                        if len(vals) != len(eij):
                             is_correct = False
                         if is_correct:
                             an_option_is_ok = True
                     self.assertTrue(an_option_is_ok,
-                            msg=(f"The design with guides {guides} does "
+                            msg=(f"The design with {header} {vals} does "
                                 f"not match any expected solution "
                                 f"({ei})"))
                 self.assertEqual(i, len(expected))
@@ -104,7 +169,8 @@ class TestDesign(object):
         def baseArgv(self, search_type='sliding-window', input_type='fasta',
                      objective='minimize-guides', model=False, specific=None,
                      specificity_file=None, output_loc=None, unaligned=False,
-                     gp=0.75, weighted=False, allow_gu_pairing=True):
+                     gp=0.75, weighted=False, allow_gu_pairing=True,
+                     primer_thermo=False):
             """Get arguments for tests
 
             Produces the correct arguments for a test case given details of
@@ -159,10 +225,18 @@ class TestDesign(object):
                 argv.extend(['--sample-seqs', '1', '--mafft-path', 'fake_path'])
 
             if search_type == 'sliding-window':
-                argv.extend(['-w', '3'])
-            if search_type == 'complete-targets':
-                argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl', '1',
-                             '--max-primers-at-site', '2'])
+                argv.extend(['-w', '3', '-gl', '2'])
+            elif search_type == 'complete-targets':
+                if primer_thermo:
+                    argv.extend(['-na', '1', '-mg', '0', '--pcr-dntp-conc',
+                                 '0', '--pcr-oligo-conc', '1', '-pl', '2',
+                                 '--primer-thermo', '-gl', '1',
+                                 '--ideal-primer-melting-temperature',
+                                 str(PERFECT_TM)])
+                else:
+                    argv.extend(['--best-n-targets', '2', '-pp', '.75', '-pl',
+                                 '1', '--max-primers-at-site', '2',
+                                 '-gl', '2'])
 
             if objective == 'minimize-guides':
                 argv.extend(['-gm', '0', '-gp', str(gp)])
@@ -181,7 +255,7 @@ class TestDesign(object):
             elif objective =='maximize-activity':
                 argv.extend(['--use-simple-binary-activity-prediction', '-gm', '0'])
 
-            argv.extend(['--obj', objective, '--seed', '0', '-gl', '2'])
+            argv.extend(['--obj', objective, '--seed', '0'])
 
             return argv
 
@@ -191,6 +265,13 @@ class TestDesign(object):
                     os.unlink(file)
             # Re-enable logging
             logging.disable(logging.NOTSET)
+
+            # Fix modified constants and functions
+            thermo.DNA_DNA_INTERNAL = self.DNA_DNA_INTERNAL
+            thermo.DNA_DNA_TERMINAL = self.DNA_DNA_TERMINAL
+            thermo.DNA_DNA_TERM_GC = self.DNA_DNA_TERM_GC
+            thermo.DNA_DNA_SYM = self.DNA_DNA_SYM
+            thermo.DNA_DNA_TERM_AT = self.DNA_DNA_TERM_AT
 
 
 class TestDesignFasta(TestDesign.TestDesignCase):
@@ -250,6 +331,27 @@ class TestDesignFasta(TestDesign.TestDesignCase):
         # so 1st window changes
         expected = [{("AC", "GG"), ("AC",)}, {("CT",), ("AC",)}, ["CT"]]
         self.check_results(self.real_output_file, expected)
+
+    def test_primer_thermo(self):
+        argv = super().baseArgv(search_type='complete-targets',
+            primer_thermo=True)
+        args = design.argv_to_args(argv)
+        design.run(args)
+        expected = [{("C",)}]
+        self.check_results(self.real_output_file, expected,
+            header='guide-target-sequences')
+        expected = [{("AA", "GG")}]
+        self.check_results(self.real_output_file, expected,
+            header='left-primer-target-sequences')
+        expected = [{("CT", "TA")}]
+        self.check_results(self.real_output_file, expected,
+            header='right-primer-target-sequences')
+        expected = [{(PERFECT_TM, PERFECT_TM)}]
+        self.check_results(self.real_output_file, expected,
+            header='left-primer-ideal-melting-temperature')
+        expected = [{(PERFECT_TM, PERFECT_TM)}]
+        self.check_results(self.real_output_file, expected,
+            header='right-primer-ideal-melting-temperature')
 
 
 class TestDesignFastaUnaligned(TestDesign.TestDesignCase):

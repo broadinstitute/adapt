@@ -27,6 +27,7 @@ from adapt.utils import seq_io
 from adapt.utils import year_cover
 from adapt.utils import mutate
 from adapt.utils import weight
+from adapt.utils import thermo
 from adapt.utils.version import get_project_path, get_latest_model_version
 
 try:
@@ -171,18 +172,18 @@ def seqs_grouped_by_year(seqs, args, sequence_weights=None):
     return aln, years_idx, cover_frac
 
 
-def parse_required_guides_and_blacklist(args):
-    """Parse files giving required guides and blacklisted sequence.
+def parse_required_guides_and_ignore(args):
+    """Parse files giving required guides and ignored sequences.
 
     Args:
         args: namespace of arguments provided to this executable
 
     Returns:
-        tuple (required_guides, blacklisted_ranges) where required_guides
-        is a representation of data in the args.required_guides file;
-        blacklisted_ranges is a representation of data in the
-        args.blacklisted_ranges file; and blacklisted_kmers is a
-        representation of data in the args.blacklisted_kmers file
+        tuple (required_guides, ignored_ranges, disallowed_kmers) where
+        required_guides is a representation of data in the args.required_guides
+        file; ignored_ranges is a representation of data in the
+        args.ignored_ranges file; and disallowed_kmers is a
+        representation of data in the args.disallowed_kmers file
     """
     num_aln = len(args.in_fasta)
 
@@ -193,23 +194,23 @@ def parse_required_guides_and_blacklist(args):
     else:
         required_guides = [{} for _ in range(num_aln)]
 
-    # Read blacklisted ranges, if provided
-    if args.blacklisted_ranges:
-        blacklisted_ranges = seq_io.read_blacklisted_ranges(
-            args.blacklisted_ranges, num_aln)
+    # Read ignored ranges, if provided
+    if args.ignored_ranges:
+        ignored_ranges = seq_io.read_ignored_ranges(
+            args.ignored_ranges, num_aln)
     else:
-        blacklisted_ranges = [set() for _ in range(num_aln)]
+        ignored_ranges = [set() for _ in range(num_aln)]
 
-    # Read blacklisted kmers, if provided
-    if args.blacklisted_kmers:
-        blacklisted_kmers = seq_io.read_blacklisted_kmers(
-            args.blacklisted_kmers,
+    # Read disallowed kmers, if provided
+    if args.disallowed_kmers:
+        disallowed_kmers = seq_io.read_disallowed_kmers(
+            args.disallowed_kmers,
             min_len_warning=5,
             max_len_warning=args.guide_length)
     else:
-        blacklisted_kmers = set()
+        disallowed_kmers = set()
 
-    return required_guides, blacklisted_ranges, blacklisted_kmers
+    return required_guides, ignored_ranges, disallowed_kmers
 
 
 def prepare_alignments(args):
@@ -578,8 +579,8 @@ def design_for_id(args):
             args.specific_against_taxa is not None) or
             (specific_against_metadata_end - specific_against_metadata_start) > 0)
 
-    required_guides, blacklisted_ranges, blacklisted_kmers = \
-        parse_required_guides_and_blacklist(args)
+    required_guides, ignored_ranges, disallowed_kmers = \
+        parse_required_guides_and_ignore(args)
     required_flanking_seqs = (args.require_flanking5, args.require_flanking3)
 
     # Allow G-U base pairing, unless it is explicitly disallowed
@@ -638,7 +639,7 @@ def design_for_id(args):
         guide_cover_frac = guide_cover_frac_per_input[i]
         primer_cover_frac = primer_cover_frac_per_input[i]
         required_guides_for_aln = required_guides[i]
-        blacklisted_ranges_for_aln = blacklisted_ranges[i]
+        ignored_ranges_for_aln = ignored_ranges[i]
         alns_in_same_taxon = aln_with_taxid[taxid]
         # For metadata filtering, we only want to be specific against the
         # accessions in alns[specific_against_metadata_index]
@@ -648,17 +649,17 @@ def design_for_id(args):
         if aq is not None:
             guide_is_specific = aq.guide_is_specific_to_alns_fn(
                     alns_in_same_taxon, args.diff_id_frac,
-                    do_not_memoize=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
         else:
             # No specificity to check
             guide_is_specific = lambda guide: True
 
         def guide_is_suitable(guide):
-            # Return True iff the guide does not contain a blacklisted
+            # Return True iff the guide does not contain a disallowed
             # k-mer and is specific to aln
 
-            # Return False if the guide contains a blacklisted k-mer
-            for kmer in blacklisted_kmers:
+            # Return False if the guide contains a disallowed k-mer
+            for kmer in disallowed_kmers:
                 if kmer in guide:
                     return False
 
@@ -773,13 +774,13 @@ def design_for_id(args):
                     guide_cover_frac,
                     args.missing_thres,
                     seq_groups=seq_groups,
-                    guide_is_suitable_fn=guide_is_suitable,
-                    required_guides=required_guides_for_aln,
-                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    pre_filter_fns=[guide_is_suitable],
+                    required_oligos=required_guides_for_aln,
+                    ignored_ranges=ignored_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
         elif args.obj == 'maximize-activity':
             gs = guide_search.GuideSearcherMaximizeActivity(
                     aln,
@@ -789,13 +790,13 @@ def design_for_id(args):
                     args.penalty_strength,
                     args.missing_thres,
                     algorithm=args.maximization_algorithm,
-                    guide_is_suitable_fn=guide_is_suitable,
-                    required_guides=required_guides_for_aln,
-                    blacklisted_ranges=blacklisted_ranges_for_aln,
+                    pre_filter_fns=[guide_is_suitable],
+                    required_oligos=required_guides_for_aln,
+                    ignored_ranges=ignored_ranges_for_aln,
                     allow_gu_pairs=allow_gu_pairs,
                     required_flanking_seqs=required_flanking_seqs,
                     predictor=predictor,
-                    do_not_memoize_guides=args.do_not_memoize_guide_computations)
+                    do_not_memoize=args.do_not_memoize_oligo_computations)
 
         if args.search_cmd == 'sliding-window':
             # Find an optimal set of guides for each window in the genome,
@@ -812,24 +813,59 @@ def design_for_id(args):
                 primer_gc_content_bounds = None
             else:
                 primer_gc_content_bounds = tuple(args.primer_gc_content_bounds)
-            ps = primer_search.PrimerSearcher(aln, args.primer_length,
-                                              args.primer_mismatches,
-                                              primer_cover_frac,
-                                              args.missing_thres,
-                                              seq_groups=seq_groups,
-                                              primer_gc_content_bounds=primer_gc_content_bounds)
+            if args.primer_thermo:
+                shared_memo = {}
+                conditions = thermo.Conditions(sodium=args.pcr_sodium_conc,
+                    magnesium=args.pcr_magnesium_conc, dNTP=args.pcr_dntp_conc,
+                    oligo_concentration=args.pcr_oligo_conc,
+                    target_concentration=args.pcr_target_conc)
+                left_primer_predictor = predict_activity.TmPredictor(
+                    args.ideal_primer_melting_temperature +
+                        thermo.CELSIUS_TO_KELVIN,
+                    conditions, False, shared_memo=shared_memo)
+                right_primer_predictor = predict_activity.TmPredictor(
+                    args.ideal_primer_melting_temperature +
+                        thermo.CELSIUS_TO_KELVIN,
+                    conditions, True, shared_memo=shared_memo)
 
-            if args.obj == 'minimize-guides':
-                obj_type = 'min'
-            elif args.obj == 'maximize-activity':
-                obj_type = 'max'
-            ts = target_search.TargetSearcher(ps, gs,
-                obj_type=obj_type,
+                post_filter_primers = [lambda oligo:
+                    thermo.has_no_secondary_structure(oligo, conditions)]
+
+                # Since TmPredictor returns negative values, the algorithm must
+                # be greedy.
+                lps = primer_search.PrimerSearcherMaximizeActivity(
+                    aln, args.primer_length, args.primer_length,
+                    args.soft_primer_constraint, args.hard_primer_constraint,
+                    args.primer_penalty_strength, args.missing_thres,
+                    algorithm='greedy',
+                    primer_gc_content_bounds=primer_gc_content_bounds,
+                    post_filter_fns=post_filter_primers,
+                    predictor=left_primer_predictor)
+                rps = primer_search.PrimerSearcherMaximizeActivity(
+                    aln, args.primer_length, args.primer_length,
+                    args.soft_primer_constraint, args.hard_primer_constraint,
+                    args.primer_penalty_strength, args.missing_thres,
+                    algorithm='greedy',
+                    primer_gc_content_bounds=primer_gc_content_bounds,
+                    post_filter_fns=post_filter_primers,
+                    predictor=right_primer_predictor)
+
+                primer_set_filter_fns = [lambda oligo_set:
+                    thermo.has_no_heterodimers(oligo_set, conditions)]
+            else:
+                lps = primer_search.PrimerSearcherMinimizePrimers(
+                    aln, args.primer_length, args.primer_mismatches,
+                    primer_cover_frac, args.missing_thres, seq_groups=seq_groups,
+                    primer_gc_content_bounds=primer_gc_content_bounds)
+                rps = lps
+
+            ts = target_search.TargetSearcher(lps, rps, gs,
                 max_primers_at_site=args.max_primers_at_site,
                 max_target_length=args.max_target_length,
                 obj_weights=args.obj_fn_weights,
                 only_account_for_amplified_seqs=args.only_account_for_amplified_seqs,
-                halt_early=args.halt_search_early, mutator=mutator)
+                halt_early=args.halt_search_early, mutator=mutator,
+                primer_set_filter_fns=[])
             ts.find_and_write_targets(args.out_tsv[i],
                 best_n=args.best_n_targets, no_overlap=args.do_not_overlap,
                 annotations=args.annotations[i])
@@ -1102,7 +1138,7 @@ def argv_to_args(argv):
               "in the target (since the synthesized guide is the reverse "
               "complement of the output guide sequence)"))
 
-    # Requiring guides in the cover, and blacklisting ranges and/or k-mers
+    # Requiring guides in the cover, and ignoring ranges and/or k-mers
     base_subparser.add_argument('--required-guides',
         help=("Path to a file that gives guide sequences that will be "
               "included in the guide cover and output for the windows "
@@ -1113,7 +1149,7 @@ def argv_to_args(argv):
               "FASTA given as input (0-based); col 2 gives a guide sequence; "
               "col 3 gives the start position of the guide (0-based) in "
               "the alignment"))
-    base_subparser.add_argument('--blacklisted-ranges',
+    base_subparser.add_argument('--ignored-ranges',
         help=("Path to a file that gives ranges in alignments from which "
               "guides will not be constructed. The file must have 3 columns: "
               "col 1 gives an identifier for the alignment that the range "
@@ -1121,8 +1157,8 @@ def argv_to_args(argv):
               "given as input (0-based); col 2 gives the start position of "
               "the range (inclusive); col 3 gives the end position of the "
               "range (exclusive)"))
-    base_subparser.add_argument('--blacklisted-kmers',
-        help=("Path to a FASTA file that gives k-mers to blacklisted from "
+    base_subparser.add_argument('--disallowed-kmers',
+        help=("Path to a FASTA file that gives k-mers to disallow from "
               "guide sequences. No guide sequences will be constructed that "
               "contain these k-mers. The k-mers make up the sequences in "
               "the FASTA file; the sequence names are ignored. k-mers "
@@ -1164,8 +1200,8 @@ def argv_to_args(argv):
               "predict guide-target activity. If neither this nor "
               "predict-activity-model-path is set, ADAPT does not predict "
               "activities to use during design. Optionally, two arguments can "
-              "be included to indicate version number, in the format 'v1_0' or "
-              "'latest'. Versions will default to latest."))
+              "be included to indicate version number, each in the format "
+              "'v1_0' or 'latest'. Versions will default to latest."))
     base_subparser.add_argument('--predict-activity-thres',
         type=float,
         nargs=2,
@@ -1228,10 +1264,10 @@ def argv_to_args(argv):
                "clusters")))
 
     # Technical options
-    base_subparser.add_argument('--do-not-memoize-guide-computations',
+    base_subparser.add_argument('--do-not-memoize-oligo-computations',
         action='store_true',
         help=("If set, do not memoize computations during the search, "
-              "including of guides identified at each site and of "
+              "including of oligos identified at each site and of "
               "specificity queries. This can be helpful for benchmarking "
               "the improvement of memoization, or if there is reason "
               "to believe memoization will slow the search (e.g., "
@@ -1295,6 +1331,86 @@ def argv_to_args(argv):
         type=int, default=0,
         help=("Allow for this number of mismatches when determining "
               "whether a primer hybridizes to a sequence"))
+    # parser_ct_args.add_argument('-ptm', '--primer-terminal-mismatches',
+    #     type=int,
+    #     help=("Allow for this number of mismatches in the BASES_FROM_TERMINAL "
+    #           "bases from the 3' end when determining whether a primer "
+    #           "hybridizes to a sequence. Default is unset (and therefore "
+    #           "unused)."))
+    # parser_ct_args.add_argument('--bases-from-terminal',
+    #     type=int, default=5,
+    #     help=("Allow for PRIMER_TERMINAL_MISMATCHES in this many bases from "
+    #           "the 3' end when determining whether a primer hybridizes to a "
+    #           "sequence. Default is 5 and it is only used if "
+    #           "PRIMER_TERMINAL_MISMATCHES is set."))
+    parser_ct_args.add_argument('-pt', '--primer-thermo',
+        action='store_true',
+        help=("If set, use a thermodynamic model to determine whether primers "
+              "cover a sequence. This is particularly useful for PCR. While "
+              "this method uses the same optimization that the activity "
+              "models use, it is not guaranteed to be submodular."))
+    parser_ct_args.add_argument('--ideal-primer-melting-temperature',
+        type=float, default=60,
+        help=("Minimize the deviation of a primer's melting temperature from "
+              "IDEAL_MELTING_TEMPERATURE°C. Default is 60°C. Only used if "
+              "--primer-thermo is set."))
+
+    # Soft primer constraint
+    base_subparser.add_argument('-spc', '--soft-primer-constraint', type=int,
+        default=1,
+        help=("Soft constraint on the number of primers. There is no "
+              "penalty for a number of primers <= SOFT_PRIMER_CONSTRAINT, "
+              "and having a number of primers beyond this is penalized. "
+              "See --primer-penalty-strength. This value must be <= "
+              "HARD_PRIMER_CONSTRAINT. This is only used if --primer-thermo "
+              "is set."))
+    # Hard primer constraint
+    base_subparser.add_argument('-hpc', '--hard-primer-constraint', type=int,
+        default=5,
+        help=("Hard constraint on the number of primers. The number of "
+              "primers designed for a target will be <= "
+              "HARD_PRIMER_CONSTRAINT. This is only used if --primer-thermo "
+              "is set."))
+    # Penalty strength TODO find reasonable values experimentally
+    base_subparser.add_argument('--primer-penalty-strength', type=float,
+        default=0.25,
+        help=("Importance of the penalty when the number of primer "
+              "exceeds the soft primer constraint. Namely, for a primer "
+              "set G, if the penalty strength is L and the soft "
+              "guide constraint is h, then the penalty in the objective "
+              "function is L*max(0, |G|-h). Must be >= 0. "
+              "Reasonable values are in the range [0.1, 0.5]."))
+
+    # Set thermodynamic conditions
+    parser_ct_args.add_argument('-na', '--pcr-sodium-conc', type=float,
+        default=5e-2,
+        help=("Concentration of sodium (in mol/L). Can be used for the "
+              "concentration of all monovalent cations. Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "0.050 mol/L."))
+    parser_ct_args.add_argument('-mg', '--pcr-magnesium-conc', type=float,
+        default=2.5e-3,
+        help=("Concentration of magnesium (in mol/L). Can be used for the "
+              "concentration of all divalent cations. Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "0.0025 mol/L."))
+    parser_ct_args.add_argument('--pcr-dntp-conc', type=float,
+        default=1.6e-3,
+        help=("Concentration of dNTPs (in mol/L). Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "0.0016 mol/L."))
+    parser_ct_args.add_argument('--pcr-oligo-conc', type=float,
+        default=3e-7,
+        help=("Oligo concentration (in mol/L). Only used if "
+              "--primer-thermo or --guide-thermo is set. Defaults to "
+              "3e-7 mol/L."))
+    parser_ct_args.add_argument('--pcr-target-conc', type=float,
+        default=0,
+        help=("Target concentration (in mol/L). Only used if "
+              "--primer-thermo or --guide-thermo is set; only needed if "
+              "target concentration is not significantly less than oligo "
+              "concentration. Defaults to 0."))
+
     parser_ct_args.add_argument('--max-primers-at-site', type=int,
         help=("Only use primer sites that contain at most this number "
               "of primers; if not set, there is no limit"))
@@ -1312,8 +1428,8 @@ def argv_to_args(argv):
               "for a target. These specify weights for penalties on primers "
               "and amplicons relative to the guide objective. There are "
               "2 weights (A B), where the target objective function "
-              "is [(guide objective value) +/- (A*(total number of "
-              "primers) + B*log2(amplicon length)]. It is + when "
+              "is [(guide objective value) +/- (A*(primers "
+              "objective value) + B*log2(amplicon length)]. It is + when "
               "--obj is minimize-guides and - when --obj is "
               "maximize-activity."))
     parser_ct_args.add_argument('--best-n-targets', type=int, default=10,

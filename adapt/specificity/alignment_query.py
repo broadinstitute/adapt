@@ -6,7 +6,7 @@ from collections import defaultdict
 import logging
 
 from adapt.specificity import kmer_shard
-from adapt.utils import guide
+from adapt.utils import oligo
 from adapt.utils import lsh
 
 __author__ = 'Hayden Metsky <hayden@mit.edu>'
@@ -19,7 +19,7 @@ class AlignmentQuerier(metaclass=ABCMeta):
     """
 
     def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs,
-                do_not_memoize=False):
+            do_not_memoize=False):
         """
         Args:
             alns: list of Alignment objects
@@ -27,8 +27,8 @@ class AlignmentQuerier(metaclass=ABCMeta):
             dist_thres: detect a queried guide sequence as hitting a
                 sequence in an alignment if it is within a distance
                 of dist_thres (where the distance is measured with
-                guide.seq_mismatches if G-U base pairing is disabled, and
-                guide.seq_mismatches_with_gu_pairs if G-U base pairing
+                oligo.seq_mismatches if G-U base pairing is disabled, and
+                oligo.seq_mismatches_with_gu_pairs if G-U base pairing
                 is enabled; effectively these are Hamming distance either
                 tolerating or not tolerating G-U base pairing)
             allow_gu_pairs: if True, tolerate G-U base pairs when computing
@@ -148,7 +148,7 @@ class AlignmentQuerierWithLSHNearNeighbor(AlignmentQuerier):
     """
 
     def __init__(self, alns, guide_length, dist_thres, allow_gu_pairs, k=22,
-                 reporting_prob=0.95):
+            reporting_prob=0.95):
         """
         Args:
             [See AlignmentQuerier.__init__()]
@@ -174,12 +174,12 @@ class AlignmentQuerierWithLSHNearNeighbor(AlignmentQuerier):
             # as dist_fn(q, possible-hit); here, q always represents a
             # potential guide sequence and possible-hit is always a
             # potential target sequence
-            dist_fn = guide.seq_mismatches_with_gu_pairs
+            dist_fn = oligo.seq_mismatches_with_gu_pairs
             family = lsh.HammingWithGUPairsDistanceFamily(guide_length)
         else:
             # Do not tolerate G-U base pairing when measure distance,
             # and use a standard Hamming distance LSH family
-            dist_fn = guide.seq_mismatches
+            dist_fn = oligo.seq_mismatches
             family = lsh.HammingDistanceFamily(guide_length)
         self.nnr = lsh.NearNeighborLookup(family, k, dist_thres, dist_fn,
             reporting_prob, hash_idx=0, join_concat_as_str=True)

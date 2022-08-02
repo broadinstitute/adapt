@@ -36,5 +36,6 @@ jobs:
 # all three OSes agree about 'pip3'
 install:
   - pip3 install --upgrade pip
-  - pip3 install -r requirements.txt
+  - pip3 install --upgrade protobuf==3.20.0
+  - pip3 install -r requirements-with-thermo.txt
   - pip3 install .
