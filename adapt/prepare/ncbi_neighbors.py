@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 # Global variable for API key
 ncbi_api_key = None
+DEFAULT_REQS_PER_SEC = 2
+def set_ncbi_api_key(key):
+    global ncbi_api_key
+    ncbi_api_key = key
+    # Using an API keys allows more requests per second (up to 10)
+    DEFAULT_REQS_PER_SEC = 8
 
 
 def urlopen_with_tries(url, initial_wait=5, rand_wait_range=(1, 60),
@@ -356,7 +362,7 @@ def ncbi_fasta_download_url(accessions):
     return url
 
 
-def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
+def fetch_fastas(accessions, batch_size=100, reqs_per_sec=None):
     """Download sequences for accessions.
 
     Entrez enforces a limit of ~3 requests per second (or else it
@@ -367,16 +373,16 @@ def fetch_fastas(accessions, batch_size=100, reqs_per_sec=2):
     Args:
         accessions: collection of accessions to download sequences for
         batch_size: number of accessions to download in each batch
-        reqs_per_sec: number of requests per second to allow
+        reqs_per_sec: number of requests per second to allow (if None, use
+            default)
 
     Returns:
         tempfile object containing the sequences in fasta format
     """
     logger.debug(("Fetching fasta files for %d accessions") % len(accessions))
 
-    if ncbi_api_key is not None:
-        # Using an API keys allows more requests per second (up to 10)
-        reqs_per_sec = 7
+    if reqs_per_sec is None:
+        reqs_per_sec = DEFAULT_REQS_PER_SEC
 
     # Make temp file
     fp = tempfile.NamedTemporaryFile(delete=False)
@@ -415,7 +421,7 @@ def ncbi_xml_download_url(accessions):
     return url
 
 
-def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
+def fetch_xml(accessions, batch_size=100, reqs_per_sec=None):
     """Download XML for accessions.
 
     Entrez enforces a limit of ~3 requests per second (or else it
@@ -426,11 +432,15 @@ def fetch_xml(accessions, batch_size=100, reqs_per_sec=2):
     Args:
         accessions: collection of accessions to download XML for
         batch_size: number of accessions to download in each batch
-        reqs_per_sec: number of requests per second to allow
+        reqs_per_sec: number of requests per second to allow (if None, use
+            default)
 
     Returns:
         tempfile object containing the downloaded XML data
     """
+    if reqs_per_sec is None:
+        reqs_per_sec = DEFAULT_REQS_PER_SEC
+
     # Make temp file
     fp = tempfile.NamedTemporaryFile(delete=False)
 

@@ -854,7 +854,7 @@ def run(args):
 
     if args.input_type in ['auto-from-file', 'auto-from-args']:
         if args.ncbi_api_key:
-            ncbi_neighbors.ncbi_api_key = args.ncbi_api_key
+            ncbi_neighbors.set_ncbi_api_key(args.ncbi_api_key)
         if args.input_type == 'auto-from-file':
             if not os.path.isdir(args.out_tsv_dir):
                 raise Exception(("Output directory '%s' does not exist") %
