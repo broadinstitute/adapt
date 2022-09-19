@@ -26,6 +26,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import logging
 import random
 import unittest
 
@@ -204,6 +205,9 @@ class TestMinHashFamilySignatures(unittest.TestCase):
     """
 
     def setUp(self):
+        # Disable logging
+        logging.disable(logging.WARNING)
+        
         # Set a random seed so hash functions are always the same
         random.seed(0)
 
@@ -219,6 +223,30 @@ class TestMinHashFamilySignatures(unittest.TestCase):
             h = self.family.make_h()
             self.assertEqual(h(a), h(b))
             self.assertEqual(self.family.estimate_jaccard_dist(h(a), h(b)), 0.0)
+
+    def test_identical_with_short_sequences(self):
+        a = 'ATCGA'
+        b = str(a)
+
+        # Identical strings should yield the same signature, for the same
+        # hash function
+        for i in range(10):
+            h = self.family.make_h()
+            self.assertEqual(h(a), h(b))
+            self.assertEqual(self.family.estimate_jaccard_dist(h(a), h(b)), 0.0)
+
+    def test_identical_with_short_sequences_fast_hash(self):
+        family_1 = lsh.MinHashFamily(4, N=10, use_fast_str_hash=True)
+
+        a = 'ATCGA'
+        b = str(a)
+
+        # Identical strings should yield the same signature, for the same
+        # hash function
+        for i in range(10):
+            h = self.family.make_h()
+            self.assertEqual(h(a), h(b))
+            self.assertEqual(family_1.estimate_jaccard_dist(h(a), h(b)), 0.0)
 
     def test_jaccard_dist_similar(self):
         a = 'ATCGATATGGGCACTGCTATGTAGCGCAAATACGATCGCTAATGCGGATCGGATCGAATG'
