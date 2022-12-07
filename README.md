@@ -401,10 +401,11 @@ The distance is average nucleotide dissimilarity (1-ANI); higher values result i
 * `--use-accessions USE_ACCESSIONS`: Use the specified NCBI GenBank accessions, in a file at the path USE_ACCESSIONS, for generating input.
 ADAPT uses these accessions instead of fetching neighbors from NCBI, but it will still download the sequences for these accessions.
 See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the format of the file.
-* `--metadata-filter [FILTERS]`: Filter sequences from the specified taxonomic ID to only those that match this metadata in their NCBI GenBank entries.
+* `--metadata-filter FILTERS`: Filter sequences from the specified taxonomic ID to only those that match this metadata in their NCBI GenBank entries.
 The format is `metadata=value` or `metadata!=value`.
+`metadata` can be 'year', 'taxid', or 'country'.
 Separate multiple values with commas and different filters with spaces (e.g., `--metadata-filter year!=2020,2019 taxid=11060`).
-This argument can allow designing for only a specified subspecies: the corresponding species taxonomic ID can be provided in the input argument for `[taxid]`, while the desired subspecies ID can be provided as a metadata filter.
+This argument can allow designing for only a specified subspecies: the corresponding species taxonomic ID can be provided in the input argument for `[taxid]`, while the desired subspecies ID can be provided in FILTERS as a 'taxid'.
 There is a related argument, `--specific-against-metadata-filter`, to filter the sequences used in the specificity constraint.
 These arguments are only available when INPUT-TYPE is `auto-from-args`.
 
