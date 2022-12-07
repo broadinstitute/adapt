@@ -261,7 +261,6 @@ def prepare_alignments(args):
         sequences_to_use = {}
         taxs = []
         args.sample_seqs = None
-        args.prep_influenza = False
         args.write_annotation = False
         args.write_input_seqs = False
         args.write_weights = False
@@ -380,7 +379,6 @@ def prepare_alignments(args):
                 tax_id, segment, ref_accs,
                 aln_file_dir.name, aln_memoizer=am, aln_stat_memoizer=asm,
                 sample_seqs=args.sample_seqs,
-                prep_influenza=args.prep_influenza,
                 years_tsv=years_tsv_tmp_name,
                 annotation_tsv=annotation_tsv,
                 cluster_threshold=args.cluster_threshold,
@@ -1530,10 +1528,6 @@ def argv_to_args(argv):
               "measuring output growth as input size grows, as well as "
               "assessing the dispersion in output associated with some "
               "input sample."))
-    input_auto_common_subparser.add_argument('--prep-influenza',
-        action='store_true',
-        help=("If set, fetch sequences using the NCBI Influenza database; "
-              "should only be used for Influenza A or B virus taxonomies"))
     input_auto_common_subparser.add_argument('--cover-by-year-decay', nargs=2,
         action=ParseCoverDecayByGeneratingYearsFile,
         help=("<A> <B>; if set, group input sequences by year and set a "

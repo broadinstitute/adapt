@@ -20,11 +20,13 @@ __author__ = 'Hayden Metsky <hayden@mit.edu>'
 
 logger = logging.getLogger(__name__)
 
+FLU_TAXIDS = [11320, 11520, 11552]
+
 
 def prepare_for(taxid, segment, ref_accs, out,
         aln_memoizer=None, aln_stat_memoizer=None, 
         sample_seqs=None, filter_warn=0.25, min_seq_len=150,
-        min_cluster_size=2, prep_influenza=False, years_tsv=None,
+        min_cluster_size=2, years_tsv=None,
         annotation_tsv=None, cluster_threshold=0.1, accessions_to_use=None,
         sequences_to_use=None, meta_filt=None, meta_filt_against=None,
         subtaxa_weight=None):
@@ -64,13 +66,8 @@ def prepare_for(taxid, segment, ref_accs, out,
         min_cluster_size: toss all sequences from any clusters with
             less than this number of sequences; in other words, ignore
             clusters less than this size
-        prep_influenza: if True, assume taxid represents an Influenza
-            A or B virus taxonomy, and fetch sequences using NCBI's
-            Influenza database
         years_tsv: if set, a path to a TSV file to which this will write
-            a year (column 2) for each sequence written to out (column 1);
-            this is only done for influenza sequences (if prep_influenza
-            is True)
+            a year (column 2) for each sequence written to out (column 1)
         annotation_tsv: if set, a prefix to a TSV file to which this will write
             genomic annotations on a per cluster basis, if there is a reference
             sequence in that cluster
@@ -112,9 +109,8 @@ def prepare_for(taxid, segment, ref_accs, out,
 
     specific_against_metadata_acc = set()
 
-    if taxid in [11320, 11520, 11552]:
-        # Represents influenza
-        prep_influenza = True
+    # Check if taxid represents influenza
+    use_influenza_db = taxid in FLU_TAXIDS
 
     if sequences_to_use is not None:
         seqs_unaligned = sequences_to_use
@@ -126,7 +122,7 @@ def prepare_for(taxid, segment, ref_accs, out,
                 segment) for acc in accessions_to_use]
         else:
             # Download neighbors for taxid
-            if prep_influenza:
+            if use_influenza_db:
                 neighbors = ncbi_neighbors.construct_influenza_genome_neighbors(taxid)
             else:
                 neighbors = ncbi_neighbors.construct_neighbors(taxid)
@@ -397,14 +393,11 @@ def fetch_sequences_for_taxonomy(taxid, segment):
     Returns:
         dict mapping sequence header to sequence string
     """
-    if taxid in [11320, 11520, 11552]:
-        # Represents influenza
-        prep_influenza = True
-    else:
-        prep_influenza = False
+    # Check if taxid represents influenza
+    use_influenza_db = taxid in FLU_TAXIDS
 
     # Download neighbors for taxid
-    if prep_influenza:
+    if use_influenza_db:
         neighbors = ncbi_neighbors.construct_influenza_genome_neighbors(taxid)
     else:
         neighbors = ncbi_neighbors.construct_neighbors(taxid)
