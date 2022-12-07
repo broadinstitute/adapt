@@ -393,8 +393,6 @@ If repeatedly re-running on the same taxonomies, using this argument can signifi
 ADAPT can save the memoized information to an AWS S3 bucket by using the syntax `s3://BUCKET/PATH`, though this requires the AWS cloud installation mentioned in [Downloading and installing](#downloading-and-installing) and setting access key information.
 Access key information can either be set using AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY (details below) or by installing and configuring [AWS CLI](https://aws.amazon.com/cli/).
 If not set (default), do not memoize information across runs.
-* `--prep-influenza`: If set, use NCBI's influenza database for fetching data.
-This should be specified if design is for influenza A/B/C viruses.
 * `--sample-seqs SAMPLE_SEQS`: Randomly sample SAMPLE_SEQS accessions with replacement from each taxonomy, and move forward with the design using this sample.
 This can be useful for measuring some properties of the design, or for faster runtime when debugging.
 * `--cluster-threshold CLUSTER_THRESHOLD`: Use CLUSTER_THRESHOLD as the maximum inter-cluster distance when clustering sequences prior to alignment.
@@ -403,6 +401,12 @@ The distance is average nucleotide dissimilarity (1-ANI); higher values result i
 * `--use-accessions USE_ACCESSIONS`: Use the specified NCBI GenBank accessions, in a file at the path USE_ACCESSIONS, for generating input.
 ADAPT uses these accessions instead of fetching neighbors from NCBI, but it will still download the sequences for these accessions.
 See `design.py [SEARCH-TYPE] auto-from-{file,args} --help` for details on the format of the file.
+* `--metadata-filter [FILTERS]`: Filter sequences from the specified taxonomic ID to only those that match this metadata in their NCBI GenBank entries.
+The format is `metadata=value` or `metadata!=value`.
+Separate multiple values with commas and different filters with spaces (e.g., `--metadata-filter year!=2020,2019 taxid=11060`).
+This argument can allow designing for only a specified subspecies: the corresponding species taxonomic ID can be provided in the input argument for `[taxid]`, while the desired subspecies ID can be provided as a metadata filter.
+There is a related argument, `--specific-against-metadata-filter`, to filter the sequences used in the specificity constraint.
+These arguments are only available when INPUT-TYPE is `auto-from-args`.
 
 When using AWS S3 to memoize information across runs (`--prep-memoize-dir`), the following arguments are also important:
 
