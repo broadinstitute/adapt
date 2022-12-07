@@ -82,6 +82,19 @@ def check_obj_args(args):
         if args.use_simple_binary_activity_prediction:
             raise Exception(("Cannot use --use-simple-binary-activity-prediction "
                 "when --obj is 'minimize-guides'"))
+        if ((args.predict_activity_model_path or
+                args.predict_cas13a_activity_model is not None) and
+                args.guide_mismatches is None):
+            logger.critical(("When --obj is 'minimize-guides', the argument "
+                "-gm/--guide-mismatches is used even when a predictive "
+                "model is provided. The argument improves runtime by lowering "
+                "the number of calls to the model: to detect a sequence, a "
+                "guide must satisfy --guide-mismatches *and* the predicted "
+                "activity threshold. This argument has not been provided and "
+                "the default value (%d) might be too restrictive; to ignore "
+                "a requirement on mismatches, consider setting "
+                "--guide-mismatches to a sufficiently high value."),
+                OBJ_PARAM_DEFAULTS['minimize-guides']['guide_mismatches'])
         for arg in OBJ_PARAM_DEFAULTS['minimize-guides'].keys():
             if vars(args)[arg] is None:
                 vars(args)[arg] = OBJ_PARAM_DEFAULTS['minimize-guides'][arg]
