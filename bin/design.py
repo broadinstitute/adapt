@@ -755,8 +755,10 @@ def design_for_id(args):
             if args.obj == 'maximize-activity':
                 raise Exception(("Either --predict-activity-model-path or "
                     "--predict-cas13a-activity-model must be specified if "
-                    "--obj is 'maximize-activity' (unless "
-                    "--use-simple-binary-activity-prediction is set)"))
+                    "--obj is 'maximize-activity'. Alternatively, if you "
+                    "cannot use our pre-trained Cas13a model nor another "
+                    "model, you can set "
+                    "--use-simple-binary-activity-prediction"))
             if args.predict_activity_degradation:
                 raise Exception(("--predict-activity-model-path must be "
                     "specified if --predict-activity-degradation is set "
@@ -990,7 +992,7 @@ def argv_to_args(argv):
     # Objective function
     base_subparser.add_argument('--obj',
         choices=['maximize-activity', 'minimize-guides'],
-        default='minimize-guides',
+        default='maximize-activity',
         help=(("Objective function to solve. 'maximize-activity' maximizes "
                "the expected activity of the guide set of the target genomes "
                "subject to soft and hard constraints on the size of the guide "

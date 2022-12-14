@@ -45,7 +45,7 @@ For more information, see our [publication](https://www.nature.com/articles/s415
   * [Miscellaneous key arguments](#miscellaneous-key-arguments)
   * [Output](#output)
 * [Examples](#examples)
-  * [Basic: designing within sliding window](#basic-designing-within-sliding-window)
+  * [Basic: designing within sliding window](#basic-designing-within-sliding-window-without-predictive-model)
   * [Designing end-to-end with predictive model](#designing-end-to-end-with-predictive-model)
 * [Support and contributing](#support-and-contributing)
   * [Questions](#questions)
@@ -538,16 +538,16 @@ Likewise, synthesized primer sequences should account for this.
 
 # Examples
 
-## Basic: designing within sliding window
+## Basic: designing within sliding window without predictive model
 
 This is the most simple example.
-**It does not download genomes, search for genomic regions to target, or use a predictive model of activity; for these features, see the next example.**
+**It does not download genomes nor search for genomic regions to target. It also does not use a predictive model of activity, and it seeks to minimize assay complexity rather than maximize activity, which is our usual objective. For these features, see the next example.**
 
 The repository includes an alignment of Lassa virus sequences (S segment) from Sierra Leone in `examples/SLE_S.aligned.fasta`.
 If you have installed ADAPT via Bioconda or PyPI, you'll need to download the alignment from [`here`](https://raw.githubusercontent.com/broadinstitute/adapt/main/examples/SLE_S.aligned.fasta).
 Run:
 ```bash
-design.py sliding-window fasta FASTA_PATH -o probes -w 200 -gl 28 -gm 1 -gp 0.95
+design.py sliding-window fasta FASTA_PATH -o probes --obj minimize-guides -w 200 -gl 28 -gm 1 -gp 0.95
 ```
 
 From this alignment, ADAPT scans each 200 nt window (`-w 200`) to find the smallest collection of probes that:
@@ -560,12 +560,12 @@ See [Output](#output) above for a description of this file.
 
 ## Designing end-to-end with predictive model
 
-ADAPT can automatically download and curate sequences for its design, and search efficiently over possible genomic regions to find primers/amplicons as well as Cas13a guides.
+ADAPT can automatically download and curate sequences for its design, and search efficiently across the genome to find primers/amplicons as well as Cas13a guides.
 It identifies Cas13a guides using a pre-trained predictive model of activity.
 
 Run:
 ```bash
-design.py complete-targets auto-from-args 64320 None guides -gl 28 --obj maximize-activity -pl 30 -pm 1 -pp 0.95 --predict-cas13a-activity-model --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
+design.py complete-targets auto-from-args 64320 None guides --obj maximize-activity -gl 28 -pl 30 -pm 1 -pp 0.95 --predict-cas13a-activity-model --best-n-targets 5 --mafft-path MAFFT_PATH --sample-seqs 50 --verbose
 ```
 This downloads and designs assays to detect genomes of Zika virus (NCBI taxonomy ID [64320](https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=64320)).
 You must fill in `MAFFT_PATH` with an executable of MAFFT.
@@ -578,13 +578,13 @@ ADAPT designs primers and Cas13a guides within the amplicons, such that:
 ADAPT outputs a file, `guides.0.tsv`, that contains the best 5 design options (`--best-n-targets 5`) as measured by ADAPT's default objective function.
 See [Output](#output) above for a description of this file.
 
-This example randomly selects 50 sequences (`--sample-seqs 50`) prior to design to speed the runtime in this example; the command should take about 20 minutes to run in full.
+This example randomly selects 50 sequences (`--sample-seqs 50`) prior to design to speed the runtime in this example; the command should take about 10 minutes to run in full.
 Using `--verbose` provides detailed output and is usually recommended, but the output can be extensive.
 
 Note that this example does not enforce specificity.
 
-To find minimal guide sets, use `--obj minimize-guides` instead and set `-gm` and `-gp`.
-With this objective, Cas13a guides are determined to detect a sequence if they (i) satisfy the number of mismatches specified with `-gm` and (ii) are predicted by the model to be highly active in detecting the sequence; `-gm` can be sufficiently high to rely entirely on the predictive model.
+To instead find minimal guide sets, use `--obj minimize-guides` instead of `--obj maximize-activity` and set `-gm` and `-gp`.
+With that alternative objective, Cas13a guides are determined to detect a sequence if they (i) satisfy the number of mismatches specified with `-gm` and (ii) are predicted by the model to be highly active in detecting the sequence; `-gm` can be sufficiently high to rely entirely on the predictive model.
 The output guides will detect a desired fraction of all genomes, as specified by `-gp`.
 
 # Support and contributing
