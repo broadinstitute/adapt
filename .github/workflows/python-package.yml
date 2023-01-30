@@ -38,13 +38,11 @@ jobs:
       run: |
         pytest --cov=./ --cov-report=xml
     - name: Upload coverage to Codecov
+      if: ${{ runner.os == 'Linux' }}
       uses: codecov/codecov-action@v3
       with:
-        directory: ./coverage/reports/
         env_vars: OS,PYTHON
         fail_ci_if_error: false
-        files: ./coverage1.xml,./coverage2.xml
         flags: unittests
         name: codecov-umbrella
-        path_to_write_report: ./coverage/codecov_report.txt
         verbose: true
