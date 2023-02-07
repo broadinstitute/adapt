@@ -1,5 +1,5 @@
 .git
 .gitignore
-.travis.yml
+.github/
 adapt_diagnostics.egg-info
 **/tests/
